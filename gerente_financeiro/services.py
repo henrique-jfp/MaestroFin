@@ -283,14 +283,20 @@ def detectar_intencao_e_topico(pergunta: str) -> Optional[tuple[str, str]]:
     for topico_base, padrao in INTENT_PATTERNS.items():
         if re.search(padrao, pergunta_lower, re.I):
             flag = topico_base
-            if flag == 'dólar': flag = 'usd'
+            if flag == 'dólar': 
+                flag = 'usd'
             
             nome_topico = topico_base.capitalize()
-            if nome_topico == 'Dólar': nome_topico = "Cotação do Dólar"
-            if nome_topico == 'Euro': nome_topico = "Cotação do Euro"
-            if nome_topico == 'Gasolina': nome_topico = "Preço da Gasolina"
-            if nome_topico == 'Ipca': nome_topico = "Taxa IPCA"
-            if nome_topico == 'Selic': nome_topico = "Taxa Selic"
+            if nome_topico == 'Dólar': 
+                nome_topico = "Cotação do Dólar"
+            elif nome_topico == 'Euro': 
+                nome_topico = "Cotação do Euro"
+            elif nome_topico == 'Gasolina': 
+                nome_topico = "Preço da Gasolina"
+            elif nome_topico == 'Ipca': 
+                nome_topico = "Taxa IPCA"
+            elif nome_topico == 'Selic': 
+                nome_topico = "Taxa Selic"
             
             return flag, nome_topico
     return None, None
