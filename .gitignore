@@ -1,0 +1,19 @@
+# Arquivo: .gitignore
+
+# Ambientes virtuais
+venv/
+/venv/
+__pycache__/
+
+# Arquivo de variáveis de ambiente
+.env
+
+# Arquivos de credenciais locais
+/credenciais/
+googlevision.json
+
+# Arquivos de log
+*.log
+
+# Arquivos de banco de dados SQLite (se usar no futuro)
+*.sqlite3
