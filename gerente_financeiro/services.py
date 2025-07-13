@@ -17,6 +17,7 @@ import asyncio
 import hashlib  # <-- Para gerar chaves de cache
 import json  # <-- Para serialização de dados
 from functools import lru_cache  # <-- Cache em memória
+import time  # <-- Para timestamps do cache
 import google.generativeai as genai
 from .prompts import PROMPT_ANALISE_RELATORIO
 from database.database import listar_objetivos_usuario
@@ -30,6 +31,7 @@ from scipy.interpolate import make_interp_spline
 # --- SISTEMA DE CACHE INTELIGENTE ---
 _cache_financeiro = {}
 _cache_tempo = {}
+_cache_memoria = {}  # <-- Cache principal em memória
 CACHE_TTL = 300  # 5 minutos em segundos
 
 def _gerar_chave_cache(user_id: int, tipo: str, **parametros) -> str:
@@ -995,24 +997,27 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
     # Limpeza automática de cache
     _limpar_cache_expirado()
     
-    # Verifica cache primeiro
-    chave_cache = _gerar_chave_cache(
-        usuario.id, 
-        'contexto_completo',
-        timestamp=datetime.now().replace(minute=0, second=0, microsecond=0).timestamp()  # Cache por hora
-    )
-    
-    dados_cache = _obter_do_cache(chave_cache)
-    if dados_cache:
-        logger.info(f"Contexto financeiro obtido do cache para usuário {usuario.id}")
-        return dados_cache
-    
+    # Busca lançamentos primeiro para gerar chave estável
     lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id).options(
         joinedload(Lancamento.categoria)
     ).order_by(Lancamento.data_transacao.asc()).all()
     
     if not lancamentos:
         return json.dumps({"resumo": "Nenhum dado financeiro encontrado."}, indent=2, ensure_ascii=False)
+
+    # Gera chave de cache baseada na data do último lançamento (mais estável)
+    ultima_data = lancamentos[-1].data_transacao.strftime('%Y-%m-%d')
+    chave_cache = _gerar_chave_cache(
+        usuario.id, 
+        'contexto_completo',
+        ultima_data=ultima_data,
+        total_lancamentos=len(lancamentos)
+    )
+    
+    dados_cache = _obter_do_cache(chave_cache)
+    if dados_cache:
+        logger.info(f"Contexto financeiro obtido do cache para usuário {usuario.id}")
+        return dados_cache
 
     # Análise comportamental completa
     analise_comportamental = analisar_comportamento_financeiro(lancamentos)
@@ -1088,138 +1093,33 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
     
     return resultado
 
-# === SISTEMA DE INTEGRAÇÃO DE DADOS EXTERNOS ===
+# --- CACHE ESPECÍFICO PARA RESPOSTAS DA IA ---
+_cache_respostas_ia = {}  # Cache para respostas da IA
+_cache_respostas_tempo = {}  # Timestamps das respostas
 
-async def _obter_dados_mercado_financeiro() -> Dict[str, Any]:
+def _gerar_chave_resposta_ia(user_id: int, pergunta: str, hash_dados: str) -> str:
     """
-    Obtém dados de mercado financeiro para contextualizar investimentos
-    Retorna dados mock para demonstração
+    Gera chave de cache baseada na pergunta e no hash dos dados financeiros
+    Isso garante que respostas idênticas sejam cacheadas
     """
-    try:
-        # Dados mockados para demonstração - em produção, conectar com APIs reais
-        return {
-            "selic": 11.75,
-            "ipca_acumulado_12m": 4.62,
-            "cdi": 11.65,
-            "dollar_rate": 5.12,
-            "bitcoin_brl": 180000,
-            "recomendacoes": [
-                "Com a Selic alta, renda fixa está atrativa",
-                "Inflação controlada favorece investimentos de longo prazo",
-                "Diversificação é essencial no cenário atual"
-            ],
-            "data_atualizacao": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-    except Exception as e:
-        logger.error(f"Erro ao obter dados de mercado: {e}")
-        return {}
+    chave_base = f"ia_{user_id}_{pergunta.lower().strip()}_{hash_dados}"
+    return hashlib.md5(chave_base.encode()).hexdigest()
 
-async def _obter_dados_economicos_contexto() -> Dict[str, Any]:
-    """
-    Obtém dados econômicos para contextualizar análises
-    """
-    try:
-        # Dados econômicos mockados
-        return {
-            "pib_crescimento": 2.3,
-            "desemprego": 8.7,
-            "salario_minimo": 1412.00,
-            "renda_media_nacional": 2850.00,
-            "alertas_economicos": [
-                "PIB em crescimento moderado",
-                "Taxa de desemprego em queda gradual",
-                "Poder de compra estável"
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Erro ao obter dados econômicos: {e}")
-        return {}
+def _obter_resposta_ia_cache(chave: str) -> Optional[str]:
+    """Obtém resposta da IA do cache se válida"""
+    if chave in _cache_respostas_tempo:
+        tempo_cache = _cache_respostas_tempo[chave]
+        tempo_atual = time.time()
+        if (tempo_atual - tempo_cache) < CACHE_TTL:
+            return _cache_respostas_ia.get(chave)
+    return None
 
-async def _classificar_situacao_comparativa(economia_mensal: float, gastos_mensais: float) -> Dict[str, Any]:
-    """
-    Classifica a situação financeira do usuário comparando com dados nacionais
-    """
-    try:
-        dados_economicos = await _obter_dados_economicos_contexto()
-        renda_media = dados_economicos.get('renda_media_nacional', 2850)
-        salario_minimo = dados_economicos.get('salario_minimo', 1412)
-        
-        # Calculações comparativas
-        renda_estimada = gastos_mensais + economia_mensal
-        percentil_renda = (renda_estimada / renda_media) * 100
-        multiplos_salario_minimo = renda_estimada / salario_minimo
-        
-        # Classificação da situação
-        if percentil_renda >= 150:
-            situacao = "Acima da média nacional"
-        elif percentil_renda >= 80:
-            situacao = "Próximo à média nacional"
-        elif percentil_renda >= 50:
-            situacao = "Abaixo da média nacional"
-        else:
-            situacao = "Bem abaixo da média nacional"
-        
-        return {
-            "situacao_comparativa": situacao,
-            "percentil_renda": min(200, percentil_renda),
-            "multiplos_salario_minimo": round(multiplos_salario_minimo, 1),
-            "renda_estimada": renda_estimada,
-            "benchmarks": {
-                "renda_media_nacional": renda_media,
-                "salario_minimo": salario_minimo
-            }
-        }
-    except Exception as e:
-        logger.error(f"Erro na classificação comparativa: {e}")
-        return {}
+def _salvar_resposta_ia_cache(chave: str, resposta: str) -> None:
+    """Salva resposta da IA no cache"""
+    _cache_respostas_ia[chave] = resposta
+    _cache_respostas_tempo[chave] = time.time()
+    logger.info(f"Resposta da IA salva no cache: {chave[:16]}...")
 
-# === SISTEMA DE LIMPEZA DE CACHE ===
-
-def _limpar_cache_expirado():
-    """
-    Remove entradas expiradas do cache para otimizar memória
-    """
-    try:
-        chaves_para_remover = []
-        agora = time.time()
-        
-        for chave, dados in _cache_memoria.items():
-            if dados['timestamp'] + dados['ttl'] < agora:
-                chaves_para_remover.append(chave)
-        
-        for chave in chaves_para_remover:
-            del _cache_memoria[chave]
-        
-        if chaves_para_remover:
-            logger.info(f"Cache limpo: {len(chaves_para_remover)} entradas removidas")
-            
-    except Exception as e:
-        logger.error(f"Erro na limpeza de cache: {e}")
-
-def _obter_estatisticas_cache() -> Dict[str, Any]:
-    """
-    Retorna estatísticas do sistema de cache para monitoramento
-    """
-    try:
-        total_entradas = len(_cache_memoria)
-        agora = time.time()
-        entradas_validas = 0
-        entradas_expiradas = 0
-        
-        for dados in _cache_memoria.values():
-            if dados['timestamp'] + dados['ttl'] >= agora:
-                entradas_validas += 1
-            else:
-                entradas_expiradas += 1
-        
-        return {
-            "total_entradas": total_entradas,
-            "entradas_validas": entradas_validas,
-            "entradas_expiradas": entradas_expiradas,
-            "eficiencia": (entradas_validas / total_entradas * 100) if total_entradas > 0 else 0
-        }
-    except Exception as e:
-        logger.error(f"Erro ao obter estatísticas de cache: {e}")
-        return {"erro": str(e)}
-
-# === MELHORIAS NO SISTEMA DE CONTEXTO FINANCEIRO ===
+def _gerar_hash_dados_financeiros(contexto_financeiro: str) -> str:
+    """Gera hash dos dados financeiros para detectar mudanças"""
+    return hashlib.md5(contexto_financeiro.encode()).hexdigest()[:16]

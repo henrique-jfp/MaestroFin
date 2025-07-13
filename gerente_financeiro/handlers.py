@@ -164,9 +164,17 @@ class AnalisadorIntencao:
 # --- FUNÇÕES UTILITÁRIAS MELHORADAS ---
 
 async def enviar_texto_em_blocos(bot, chat_id, texto: str, reply_markup=None):
+    """
+    Envia texto em blocos, com tratamento robusto de HTML malformado
+    """
+    # Limpeza básica
     texto_limpo = texto.strip().replace('<br>', '\n').replace('<br/>', '\n')
     
+    # Remove HTML malformado antes de enviar
+    texto_limpo = _limpar_resposta_ia(texto_limpo)
+    
     if len(texto_limpo) <= 4096:
+        # Tenta enviar com HTML primeiro
         try:
             await bot.send_message(
                 chat_id=chat_id, 
@@ -177,10 +185,22 @@ async def enviar_texto_em_blocos(bot, chat_id, texto: str, reply_markup=None):
             )
             return
         except Exception as e:
-            logger.error(f"Erro ao enviar mensagem: {e}")
-            await bot.send_message(chat_id=chat_id, text=re.sub('<[^<]+?>', '', texto_limpo), reply_markup=reply_markup)
-            return
+            logger.error(f"Erro ao enviar mensagem HTML: {e}")
+            # Fallback: remove todas as tags HTML e envia como texto simples
+            try:
+                texto_sem_html = re.sub('<[^<]+?>', '', texto_limpo)
+                await bot.send_message(
+                    chat_id=chat_id, 
+                    text=texto_sem_html, 
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=True
+                )
+                return
+            except Exception as e2:
+                logger.error(f"Erro ao enviar mensagem sem HTML: {e2}")
+                return
     
+    # Para mensagens longas, divide em partes
     partes = []
     while len(texto_limpo) > 0:
         if len(texto_limpo) <= 4096:
@@ -206,11 +226,24 @@ async def enviar_texto_em_blocos(bot, chat_id, texto: str, reply_markup=None):
             )
         except Exception as e:
             logger.error(f"Erro ao enviar parte {i}: {e}")
-            await bot.send_message(
-                chat_id=chat_id, 
-                text=re.sub('<[^<]+?>', '', parte),
-                reply_markup=reply_markup if is_last_part else None
-            )
+            # Fallback para parte sem HTML
+            try:
+                parte_sem_html = re.sub('<[^<]+?>', '', parte)
+                await bot.send_message(
+                    chat_id=chat_id, 
+                    text=parte_sem_html,
+                    reply_markup=reply_markup if is_last_part else None,
+                    disable_web_page_preview=True
+                )
+            except Exception as e2:
+                logger.error(f"Erro fatal ao enviar parte {i}: {e2}")
+                # Em último caso, envia mensagem de erro
+                if i == 0:  # Só envia erro na primeira tentativa para não spammar
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="Ops! Houve um problema na formatação da resposta. Pode tentar novamente?",
+                        reply_markup=reply_markup if is_last_part else None
+                    )
 
 def parse_action_buttons(text: str) -> tuple[str, InlineKeyboardMarkup | None]:
     match = re.search(r'\[ACTION_BUTTONS:\s*(.*?)\]', text, re.DOTALL | re.IGNORECASE)
@@ -247,18 +280,29 @@ def parse_action_buttons(text: str) -> tuple[str, InlineKeyboardMarkup | None]:
 
 def formatar_lancamento_detalhado(lanc: Lancamento) -> str:
     """
-    Formata um lançamento no modelo de card "bonito" e padronizado.
+    Formata um lançamento no modelo de card limpo e profissional - VERSÃO 2.0
     """
-    tipo_emoji = "🟢" if lanc.tipo == 'Entrada' else "🔴"
+    # Emojis por tipo
+    tipo_emoji = "�" if lanc.tipo == 'Entrada' else "�"
+    tipo_cor = "🟢" if lanc.tipo == 'Entrada' else "🔴"
     
+    # Formatação da data
+    data_formatada = lanc.data_transacao.strftime('%d/%m/%Y')
+    hora_formatada = lanc.data_transacao.strftime('%H:%M')
+    
+    # Descrição limpa (máximo 50 caracteres)
+    descricao = lanc.descricao or 'Transação'
+    if len(descricao) > 50:
+        descricao = descricao[:47] + "..."
+    
+    # Card limpo e profissional
     card = (
-        f"🧾 <b>{lanc.descricao or 'Lançamento'}</b> <i>(ID: {lanc.id})</i>\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"📅 <b>Data:</b> {lanc.data_transacao.strftime('%d/%m/%Y às %H:%M')}\n"
-        f"🏷️ <b>Tipo:</b> {tipo_emoji} {lanc.tipo}\n"
-        f"💰 <b>Valor:</b> <code>R$ {lanc.valor:.2f}</code>\n"
-        f"💳 <b>Pagamento:</b> {lanc.forma_pagamento or 'N/D'}\n"
-        f"📂 <b>Categoria:</b> {lanc.categoria.nome if lanc.categoria else 'N/A'}"
+        f"{tipo_emoji} <b>{descricao}</b>\n\n"
+        f"<b>💰 Valor:</b> <code>R$ {lanc.valor:.2f}</code>\n"
+        f"<b>📅 Data:</b> {data_formatada} às {hora_formatada}\n"
+        f"<b>📂 Categoria:</b> {lanc.categoria.nome if lanc.categoria else 'Sem categoria'}\n"
+        f"<b>💳 Pagamento:</b> {lanc.forma_pagamento or 'Não informado'}\n"
+        f"<b>🏷️ Tipo:</b> {tipo_cor} {lanc.tipo}"
     )
     return card
 
@@ -278,12 +322,23 @@ async def handle_lista_lancamentos(chat_id: int, context: ContextTypes.DEFAULT_T
         lancamentos = buscar_lancamentos_usuario(telegram_user_id=chat_id, **parametros)
         
         if not lancamentos:
-            await context.bot.send_message(chat_id, "Não encontrei nenhum lançamento com os critérios que você pediu. Tente outros filtros!")
+            await context.bot.send_message(chat_id, "🔍 Nenhum lançamento encontrado com esses critérios. Tente outros filtros!")
             return
 
-        resposta_final = f"Encontrei {len(lancamentos)} lançamento(s) com os critérios que você pediu:\n\n"
+        # Cabeçalho profissional
+        total_valor = sum(float(l.valor) for l in lancamentos)
+        sinal = "+" if any(l.tipo == 'Entrada' for l in lancamentos) and len([l for l in lancamentos if l.tipo == 'Entrada']) == len(lancamentos) else ""
+        
+        cabecalho = (
+            f"📋 <b>Seus Lançamentos</b>\n\n"
+            f"<b>📊 Resumo:</b>\n"
+            f"• <b>Total encontrado:</b> {len(lancamentos)} lançamento(s)\n"
+            f"• <b>Valor total:</b> <code>{sinal}R$ {total_valor:.2f}</code>\n\n"
+            f"<b>🗂️ Detalhes:</b>\n"
+        )
+        
         cards_formatados = [formatar_lancamento_detalhado(lanc) for lanc in lancamentos]
-        resposta_final += "\n\n".join(cards_formatados)
+        resposta_final = cabecalho + "\n━━━━━━━━━━━━━━━━━━\n\n".join(cards_formatados)
 
         await enviar_texto_em_blocos(context.bot, chat_id, resposta_final)
     finally:
@@ -492,14 +547,30 @@ async def start_gerente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         contexto = obter_contexto_usuario(context)
         
         if contexto.historico:
-            mensagem = f"E aí, {user_name}! 😊 O que vamos analisar hoje?"
+            mensagem = f"Oi de novo, {user_name}! 😊 No que posso te ajudar hoje?"
         else:
+            # Saudação épica e profissional
             mensagem = f"""
-E aí, {user_name}! Tudo tranquilo? 🚀✨  
-Sou o <b>Maestro Financeiro</b> 🎩, seu super parceiro na aventura de organizar as finanças! 💰  
-Sinta-se à vontade para perguntar o que quiser: <i>"Quanto gastei no cartão?", "Qual é o saldo das minhas contas?", "O que está por vir?"</i>  
-Estou aqui para transformar sua vida financeira em uma experiência leve e inteligente! 🌟  
-<b>Pronto para desbravar o mundo das suas finanças hoje?</b>
+🎩 <b>Olá, {user_name}!</b>
+
+Sou seu <b>Maestro Financeiro</b> - um analista sênior especializado em transformar seus dados em decisões inteligentes. 
+
+<b>💡 O que posso fazer por você:</b>
+• Analisar padrões nos seus gastos
+• Calcular seu score de saúde financeira
+• Comparar períodos e detectar tendências
+• Sugerir estratégias personalizadas
+• Projetar cenários futuros
+
+<b>🎯 Exemplos do que você pode perguntar:</b>
+<i>"Qual meu score de saúde financeira?"</i>
+<i>"Compare meus gastos de abril com março"</i>
+<i>"Onde posso economizar este mês?"</i>
+<i>"Como está minha maior meta?"</i>
+
+Estou aqui para ser muito mais que um consultor - sou seu parceiro estratégico rumo à prosperidade! 
+
+<b>Por onde começamos?</b> 🚀
 """
                         
         await update.message.reply_html(mensagem)
@@ -546,16 +617,31 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
         contexto_financeiro_str = await preparar_contexto_financeiro_completo(db, usuario_db)
         historico_conversa_str = contexto_conversa.get_contexto_formatado()
 
-        prompt_final = PROMPT_GERENTE_VDM.format(
-            user_name=usuario_db.nome_completo.split(' ')[0] if usuario_db.nome_completo else "você",
-            pergunta_usuario=user_question,
-            contexto_financeiro_completo=contexto_financeiro_str,
-            contexto_conversa=historico_conversa_str
-        )
+        # --- NOVO: VERIFICAR CACHE DE RESPOSTA DA IA ---
+        from .services import _gerar_chave_resposta_ia, _obter_resposta_ia_cache, _salvar_resposta_ia_cache, _gerar_hash_dados_financeiros
         
-        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        response = await model.generate_content_async(prompt_final)
-        resposta_ia = _limpar_resposta_ia(response.text) # Limpa a resposta
+        hash_dados = _gerar_hash_dados_financeiros(contexto_financeiro_str)
+        chave_cache_ia = _gerar_chave_resposta_ia(usuario_db.id, user_question, hash_dados)
+        
+        resposta_cache = _obter_resposta_ia_cache(chave_cache_ia)
+        if resposta_cache:
+            logger.info(f"Resposta da IA obtida do cache para usuário {usuario_db.id}")
+            resposta_ia = resposta_cache
+        else:
+            # Gera nova resposta
+            prompt_final = PROMPT_GERENTE_VDM.format(
+                user_name=usuario_db.nome_completo.split(' ')[0] if usuario_db.nome_completo else "você",
+                pergunta_usuario=user_question,
+                contexto_financeiro_completo=contexto_financeiro_str,
+                contexto_conversa=historico_conversa_str
+            )
+            
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            response = await model.generate_content_async(prompt_final)
+            resposta_ia = _limpar_resposta_ia(response.text)
+            
+            # Salva no cache
+            _salvar_resposta_ia_cache(chave_cache_ia, resposta_ia)
         
         # --- Lógica de Decisão: É uma chamada de função (JSON) ou uma análise (texto)? ---
         try:
@@ -672,10 +758,26 @@ def _parse_filtros_lancamento(texto: str, db: Session, user_id: int) -> dict:
     return filtros
 
 def _limpar_resposta_ia(texto: str) -> str:
-    """Remove os blocos de código markdown que a IA às vezes adiciona."""
+    """Remove os blocos de código markdown e HTML malformado que a IA às vezes adiciona."""
     # Remove ```html, ```json, ```
     texto_limpo = re.sub(r'^```(html|json)?\n', '', texto, flags=re.MULTILINE)
     texto_limpo = re.sub(r'```$', '', texto_limpo, flags=re.MULTILINE)
+    
+    # Remove DOCTYPE e outras tags HTML problemáticas
+    texto_limpo = re.sub(r'<!DOCTYPE[^>]*>', '', texto_limpo, flags=re.IGNORECASE)
+    texto_limpo = re.sub(r'<html[^>]*>', '', texto_limpo, flags=re.IGNORECASE)
+    texto_limpo = re.sub(r'</html>', '', texto_limpo, flags=re.IGNORECASE)
+    texto_limpo = re.sub(r'<head[^>]*>.*?</head>', '', texto_limpo, flags=re.IGNORECASE | re.DOTALL)
+    texto_limpo = re.sub(r'<body[^>]*>', '', texto_limpo, flags=re.IGNORECASE)
+    texto_limpo = re.sub(r'</body>', '', texto_limpo, flags=re.IGNORECASE)
+    
+    # Remove tags <p> abertas sem fechamento
+    texto_limpo = re.sub(r'<p\s*>', '\n', texto_limpo, flags=re.IGNORECASE)
+    texto_limpo = re.sub(r'</p>', '\n', texto_limpo, flags=re.IGNORECASE)
+    
+    # Remove quebras de linha excessivas
+    texto_limpo = re.sub(r'\n{3,}', '\n\n', texto_limpo)
+    
     return texto_limpo.strip()
 
 async def enviar_resposta_erro(bot, user_id):
