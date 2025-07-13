@@ -262,6 +262,34 @@ def formatar_lancamento_detalhado(lanc: Lancamento) -> str:
     )
     return card
 
+async def handle_lista_lancamentos(chat_id: int, context: ContextTypes.DEFAULT_TYPE, parametros: dict):
+    """
+    Busca e exibe lançamentos com base nos parâmetros da IA, incluindo data.
+    """
+    logger.info(f"Executando handle_lista_lancamentos com parâmetros: {parametros}")
+    db = next(get_db())
+    try:
+        # Converte datas de string para objeto datetime, se existirem
+        if 'data_inicio' in parametros:
+            parametros['data_inicio'] = datetime.strptime(parametros['data_inicio'], '%Y-%m-%d')
+        if 'data_fim' in parametros:
+            parametros['data_fim'] = datetime.strptime(parametros['data_fim'], '%Y-%m-%d')
+
+        lancamentos = buscar_lancamentos_usuario(telegram_user_id=chat_id, **parametros)
+        
+        if not lancamentos:
+            await context.bot.send_message(chat_id, "Não encontrei nenhum lançamento com os critérios que você pediu. Tente outros filtros!")
+            return
+
+        resposta_final = f"Encontrei {len(lancamentos)} lançamento(s) com os critérios que você pediu:\n\n"
+        cards_formatados = [formatar_lancamento_detalhado(lanc) for lanc in lancamentos]
+        resposta_final += "\n\n".join(cards_formatados)
+
+        await enviar_texto_em_blocos(context.bot, chat_id, resposta_final)
+    finally:
+        db.close()
+
+
 def criar_teclado_colunas(botoes: list, colunas: int):
     if not botoes: return []
     return [botoes[i:i + colunas] for i in range(0, len(botoes), colunas)]
@@ -515,7 +543,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
     try:
         usuario_db = get_or_create_user(db, chat_id, effective_user.full_name)
         
-        contexto_financeiro_str = preparar_contexto_financeiro_completo(db, usuario_db)
+        contexto_financeiro_str = await preparar_contexto_financeiro_completo(db, usuario_db)
         historico_conversa_str = contexto_conversa.get_contexto_formatado()
 
         prompt_final = PROMPT_GERENTE_VDM.format(

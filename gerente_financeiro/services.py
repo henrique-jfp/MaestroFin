@@ -14,7 +14,9 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, extract
 import asyncio
-import json # <-- Importação necessária para a nova função
+import hashlib  # <-- Para gerar chaves de cache
+import json  # <-- Para serialização de dados
+from functools import lru_cache  # <-- Cache em memória
 import google.generativeai as genai
 from .prompts import PROMPT_ANALISE_RELATORIO
 from database.database import listar_objetivos_usuario
@@ -24,6 +26,50 @@ from . import external_data
 from dateutil.relativedelta import relativedelta
 import numpy as np 
 from scipy.interpolate import make_interp_spline
+
+# --- SISTEMA DE CACHE INTELIGENTE ---
+_cache_financeiro = {}
+_cache_tempo = {}
+CACHE_TTL = 300  # 5 minutos em segundos
+
+def _gerar_chave_cache(user_id: int, tipo: str, **parametros) -> str:
+    """Gera uma chave única para cache baseada nos parâmetros"""
+    dados_chave = {
+        'user_id': user_id,
+        'tipo': tipo,
+        **parametros
+    }
+    texto_chave = json.dumps(dados_chave, sort_keys=True)
+    return hashlib.md5(texto_chave.encode()).hexdigest()
+
+def _cache_valido(chave: str) -> bool:
+    """Verifica se o cache ainda é válido"""
+    if chave not in _cache_tempo:
+        return False
+    tempo_cache = _cache_tempo[chave]
+    tempo_atual = datetime.now().timestamp()
+    return (tempo_atual - tempo_cache) < CACHE_TTL
+
+def _obter_do_cache(chave: str) -> Any:
+    """Obtém dados do cache se válido"""
+    if _cache_valido(chave):
+        return _cache_financeiro.get(chave)
+    return None
+
+def _salvar_no_cache(chave: str, dados: Any) -> None:
+    """Salva dados no cache com timestamp"""
+    _cache_financeiro[chave] = dados
+    _cache_tempo[chave] = datetime.now().timestamp()
+    
+def limpar_cache_usuario(user_id: int) -> None:
+    """Limpa todo o cache de um usuário específico"""
+    chaves_para_remover = [
+        chave for chave in _cache_financeiro.keys() 
+        if str(user_id) in chave
+    ]
+    for chave in chaves_para_remover:
+        _cache_financeiro.pop(chave, None)
+        _cache_tempo.pop(chave, None)
 
 logger = logging.getLogger(__name__)
 
@@ -388,54 +434,142 @@ def buscar_lancamentos_com_relacionamentos(db: Session, telegram_id: int) -> Lis
     return lancamentos
 
 def analisar_comportamento_financeiro(lancamentos: List[Lancamento]) -> Dict[str, Any]:
+    """
+    Análise comportamental financeira avançada - VERSÃO 2.0
+    Inclui detecção de anomalias, padrões sazonais e projeções
+    """
     if not lancamentos:
         return {"has_data": False}
+    
+    # Preparação de dados com mais informações
     dados_lancamentos = []
     for l in lancamentos:
         dados_lancamentos.append({
             'valor': float(l.valor),
             'tipo': l.tipo,
             'data_transacao': l.data_transacao,
-            'categoria_nome': l.categoria.nome if l.categoria else 'Sem Categoria'
+            'categoria_nome': l.categoria.nome if l.categoria else 'Sem Categoria',
+            'dia_semana': l.data_transacao.weekday(),
+            'hora': l.data_transacao.hour
         })
+    
     df = pd.DataFrame(dados_lancamentos)
     df['data_transacao'] = pd.to_datetime(df['data_transacao']).dt.tz_localize(None)
+    
     despesas_df = df[df['tipo'] == 'Saída'].copy()
     receitas_df = df[df['tipo'] == 'Entrada'].copy()
+    
     if despesas_df.empty:
         return {"has_data": False, "total_receitas_90d": float(receitas_df['valor'].sum())}
+    
+    # === ANÁLISES BÁSICAS (mantidas) ===
     total_despesas = despesas_df['valor'].sum()
+    total_receitas = receitas_df['valor'].sum()
+    
     top_categoria = despesas_df.groupby('categoria_nome')['valor'].sum().nlargest(1)
+    
     hoje = datetime.now()
     ultimos_30_dias = despesas_df[despesas_df['data_transacao'] > (hoje - timedelta(days=30))]
-    periodo_anterior = despesas_df[(despesas_df['data_transacao'] <= (hoje - timedelta(days=30))) & (despesas_df['data_transacao'] > (hoje - timedelta(days=60)))]
+    periodo_anterior = despesas_df[(despesas_df['data_transacao'] <= (hoje - timedelta(days=30))) & 
+                                   (despesas_df['data_transacao'] > (hoje - timedelta(days=60)))]
+    
     gasto_recente = ultimos_30_dias['valor'].sum()
     gasto_anterior = periodo_anterior['valor'].sum()
+    
     tendencia = "estável"
+    percentual_mudanca = 0
     if gasto_anterior > 0:
         percentual_mudanca = ((gasto_recente - gasto_anterior) / gasto_anterior) * 100
         if percentual_mudanca > 10:
             tendencia = f"aumento de {percentual_mudanca:.0f}%"
         elif percentual_mudanca < -10:
             tendencia = f"redução de {abs(percentual_mudanca):.0f}%"
-    total_receitas = receitas_df['valor'].sum()
+    
+    # === ANÁLISES AVANÇADAS (novas) ===
+    
+    # 1. Análise por dia da semana
+    gastos_por_dia_semana = despesas_df.groupby('dia_semana')['valor'].sum()
+    dia_mais_gasto = gastos_por_dia_semana.idxmax() if not gastos_por_dia_semana.empty else None
+    dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+    
+    # 2. Análise por período do dia
+    despesas_df['periodo_dia'] = despesas_df['hora'].apply(lambda h: 
+        'Manhã' if 6 <= h < 12 else
+        'Tarde' if 12 <= h < 18 else
+        'Noite' if 18 <= h < 24 else
+        'Madrugada'
+    )
+    gastos_por_periodo = despesas_df.groupby('periodo_dia')['valor'].sum()
+    periodo_mais_gasto = gastos_por_periodo.idxmax() if not gastos_por_periodo.empty else None
+    
+    # 3. Detecção de anomalias (gastos muito acima da média)
+    if len(despesas_df) > 5:
+        Q1 = despesas_df['valor'].quantile(0.25)
+        Q3 = despesas_df['valor'].quantile(0.75)
+        IQR = Q3 - Q1
+        limite_superior = Q3 + 1.5 * IQR
+        anomalias = despesas_df[despesas_df['valor'] > limite_superior]
+        num_anomalias = len(anomalias)
+        valor_anomalias = anomalias['valor'].sum() if not anomalias.empty else 0
+    else:
+        num_anomalias = 0
+        valor_anomalias = 0
+    
+    # 4. Análise de frequência de categorias
+    freq_categorias = despesas_df['categoria_nome'].value_counts()
+    categoria_mais_frequente = freq_categorias.index[0] if not freq_categorias.empty else "N/A"
+    
+    # 5. Cálculos de projeção melhorados
     economia_total_periodo = total_receitas - total_despesas
     dias_de_dados = (df['data_transacao'].max() - df['data_transacao'].min()).days + 1
     meses_de_dados = max(1, dias_de_dados / 30.0)
     economia_media_mensal = economia_total_periodo / meses_de_dados
+    
     valor_maior_gasto = float(top_categoria.iloc[0]) if not top_categoria.empty else 0.0
     valor_reducao_sugerida = valor_maior_gasto * 0.15
+    
     meses_para_meta_base = (5000 / economia_media_mensal) if economia_media_mensal > 0 else float('inf')
     meses_para_meta_otimizada = (5000 / (economia_media_mensal + valor_reducao_sugerida)) if (economia_media_mensal + valor_reducao_sugerida) > 0 else float('inf')
+    
+    # 6. Score de saúde financeira (0-100)
+    score_saude = 50  # Base
+    if economia_media_mensal > 0: score_saude += 20
+    if tendencia.startswith("redução"): score_saude += 15
+    if num_anomalias == 0: score_saude += 10
+    if abs(percentual_mudanca) < 5: score_saude += 5  # Estabilidade
+    score_saude = min(100, max(0, score_saude))
+    
     return {
-        "has_data": True, "total_despesas_90d": float(total_despesas),
+        "has_data": True,
+        # === DADOS BÁSICOS ===
+        "total_despesas_90d": float(total_despesas),
         "total_receitas_90d": float(total_receitas),
         "categoria_maior_gasto": top_categoria.index[0] if not top_categoria.empty else "N/A",
-        "valor_maior_gasto": valor_maior_gasto, "tendencia_gastos_30d": tendencia,
+        "valor_maior_gasto": valor_maior_gasto,
+        "tendencia_gastos_30d": tendencia,
+        "percentual_mudanca": percentual_mudanca,
         "economia_media_mensal": float(economia_media_mensal),
         "valor_reducao_sugerida": float(valor_reducao_sugerida),
         "meses_para_meta_base": meses_para_meta_base,
         "meses_para_meta_otimizada": meses_para_meta_otimizada,
+        
+        # === DADOS AVANÇADOS ===
+        "dia_semana_mais_gasto": dias_semana[dia_mais_gasto] if dia_mais_gasto is not None else "N/A",
+        "periodo_dia_mais_gasto": periodo_mais_gasto or "N/A",
+        "numero_anomalias": num_anomalias,
+        "valor_anomalias": float(valor_anomalias),
+        "categoria_mais_frequente": categoria_mais_frequente,
+        "frequencia_categoria_top": int(freq_categorias.iloc[0]) if not freq_categorias.empty else 0,
+        "score_saude_financeira": score_saude,
+        "periodo_analise_dias": dias_de_dados,
+        
+        # === INSIGHTS ACIONÁVEIS ===
+        "insights": [
+            f"Você gasta mais às {dias_semana[dia_mais_gasto] if dia_mais_gasto is not None else 'N/A'}",
+            f"Período do dia com mais gastos: {periodo_mais_gasto or 'N/A'}",
+            f"Score de saúde financeira: {score_saude}/100",
+            f"Detectadas {num_anomalias} transações atípicas" if num_anomalias > 0 else "Nenhuma transação atípica detectada"
+        ]
     }
 
 def definir_perfil_investidor(respostas: dict) -> str:
@@ -742,11 +876,137 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
         plt.close('all') # Fecha todas as figuras em caso de erro
         return None
     
-def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -> str:
+# --- SISTEMA DE INSIGHTS PROATIVOS ---
+def _gerar_insights_automaticos(lancamentos: List[Lancamento]) -> List[Dict[str, Any]]:
+    """Gera insights automáticos baseados nos padrões dos lançamentos"""
+    if not lancamentos:
+        return []
+    
+    insights = []
+    agora = datetime.now()
+    
+    # Análise de gastos dos últimos 30 dias
+    ultimos_30_dias = [l for l in lancamentos if (agora - l.data_transacao).days <= 30]
+    
+    if ultimos_30_dias:
+        # Insight 1: Maior categoria de gasto
+        gastos_por_categoria = {}
+        for l in ultimos_30_dias:
+            if l.tipo == 'Saída' and l.categoria:
+                cat = l.categoria.nome
+                gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + float(l.valor)
+        
+        if gastos_por_categoria:
+            maior_categoria = max(gastos_por_categoria.items(), key=lambda x: x[1])
+            insights.append({
+                "tipo": "categoria_dominante",
+                "titulo": f"🔍 Categoria que mais consome seu orçamento",
+                "descricao": f"Nos últimos 30 dias, '{maior_categoria[0]}' representa R$ {maior_categoria[1]:.2f} dos seus gastos",
+                "valor": maior_categoria[1],
+                "categoria": maior_categoria[0]
+            })
+        
+        # Insight 2: Frequência de transações
+        frequencia_semanal = len(ultimos_30_dias) / 4.3  # 30 dias ÷ semanas
+        if frequencia_semanal > 15:
+            insights.append({
+                "tipo": "alta_frequencia",
+                "titulo": "⚡ Alta atividade financeira detectada",
+                "descricao": f"Você fez {len(ultimos_30_dias)} transações em 30 dias ({frequencia_semanal:.1f} por semana)",
+                "valor": len(ultimos_30_dias)
+            })
+        
+        # Insight 3: Padrão de fins de semana
+        gastos_weekend = [l for l in ultimos_30_dias if l.data_transacao.weekday() >= 5 and l.tipo == 'Saída']
+        total_weekend = sum(float(l.valor) for l in gastos_weekend)
+        total_geral = sum(float(l.valor) for l in ultimos_30_dias if l.tipo == 'Saída')
+        
+        if total_geral > 0:
+            percentual_weekend = (total_weekend / total_geral) * 100
+            if percentual_weekend > 35:
+                insights.append({
+                    "tipo": "gastos_weekend",
+                    "titulo": "🎉 Perfil de gastos: fins de semana ativos",
+                    "descricao": f"{percentual_weekend:.1f}% dos seus gastos acontecem nos fins de semana",
+                    "valor": percentual_weekend
+                })
+    
+    return insights
+
+def _detectar_padroes_comportamentais(lancamentos: List[Lancamento]) -> List[Dict[str, Any]]:
+    """Detecta padrões comportamentais avançados"""
+    if not lancamentos:
+        return []
+    
+    padroes = []
+    
+    # Agrupa por mês para análise temporal
+    gastos_mensais = {}
+    for l in lancamentos:
+        if l.tipo == 'Saída':
+            mes_ano = l.data_transacao.strftime('%Y-%m')
+            gastos_mensais[mes_ano] = gastos_mensais.get(mes_ano, 0) + float(l.valor)
+    
+    if len(gastos_mensais) >= 2:
+        valores = list(gastos_mensais.values())
+        
+        # Padrão 1: Tendência de crescimento/decrescimento
+        if len(valores) >= 3:
+            ultimos_3 = valores[-3:]
+            if all(ultimos_3[i] > ultimos_3[i-1] for i in range(1, len(ultimos_3))):
+                padroes.append({
+                    "tipo": "tendencia_crescimento",
+                    "descricao": "Gastos mensais em tendência de crescimento",
+                    "detalhes": f"Últimos 3 meses: {[f'R$ {v:.2f}' for v in ultimos_3]}"
+                })
+            elif all(ultimos_3[i] < ultimos_3[i-1] for i in range(1, len(ultimos_3))):
+                padroes.append({
+                    "tipo": "tendencia_economia",
+                    "descricao": "Gastos mensais em tendência de redução - Parabéns! 📉✅",
+                    "detalhes": f"Últimos 3 meses: {[f'R$ {v:.2f}' for v in ultimos_3]}"
+                })
+        
+        # Padrão 2: Variabilidade dos gastos
+        if len(valores) >= 2:
+            media = sum(valores) / len(valores)
+            desvio = sum((v - media) ** 2 for v in valores) / len(valores)
+            coef_variacao = (desvio ** 0.5) / media if media > 0 else 0
+            
+            if coef_variacao > 0.3:
+                padroes.append({
+                    "tipo": "alta_variabilidade",
+                    "descricao": "Gastos mensais com alta variabilidade",
+                    "detalhes": f"Coeficiente de variação: {coef_variacao:.2f} (>0.3 indica irregularidade)"
+                })
+            elif coef_variacao < 0.15:
+                padroes.append({
+                    "tipo": "gastos_estables",
+                    "descricao": "Padrão de gastos muito estável - Excelente controle! 🎯",
+                    "detalhes": f"Variação baixa entre os meses ({coef_variacao:.2f})"
+                })
+    
+    return padroes
+
+async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -> str:
     """
     Coleta e formata um resumo completo do ecossistema financeiro do usuário.
-    VERSÃO 3.0 - Inclui a lista COMPLETA de transações para cálculos detalhados.
+    VERSÃO 5.0 - Com cache inteligente, análise comportamental avançada e dados externos.
     """
+    # Limpeza automática de cache
+    _limpar_cache_expirado()
+    
+    # Verifica cache primeiro
+    chave_cache = _gerar_chave_cache(
+        usuario.id, 
+        'contexto_completo',
+        timestamp=datetime.now().replace(minute=0, second=0, microsecond=0).timestamp()  # Cache por hora
+    )
+    
+    dados_cache = _obter_do_cache(chave_cache)
+    if dados_cache:
+        logger.info(f"Contexto financeiro obtido do cache para usuário {usuario.id}")
+        return dados_cache
+    
     lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id).options(
         joinedload(Lancamento.categoria)
     ).order_by(Lancamento.data_transacao.asc()).all()
@@ -754,7 +1014,18 @@ def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -> str:
     if not lancamentos:
         return json.dumps({"resumo": "Nenhum dado financeiro encontrado."}, indent=2, ensure_ascii=False)
 
-    # ... (A lógica de resumo mensal e metadados continua a mesma) ...
+    # Análise comportamental completa
+    analise_comportamental = analisar_comportamento_financeiro(lancamentos)
+    
+    # Dados de mercado e econômicos
+    dados_mercado = await _obter_dados_mercado_financeiro()
+    dados_economicos = await _obter_dados_economicos_contexto()
+    
+    # Classificação comparativa
+    economia_mensal = analise_comportamental.get('economia_media_mensal', 0)
+    gastos_mensais = abs(analise_comportamental.get('total_despesas_90d', 0)) / 3  # Aproximação mensal
+    situacao_comparativa = await _classificar_situacao_comparativa(economia_mensal, gastos_mensais)
+    
     data_minima = lancamentos[0].data_transacao.strftime('%d/%m/%Y')
     data_maxima = lancamentos[-1].data_transacao.strftime('%d/%m/%Y')
     resumo_mensal = {}
@@ -777,25 +1048,178 @@ def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -> str:
         for o in metas_db
     ]
     
-    # --- MUDANÇA CRUCIAL: Adicionamos a lista completa de lançamentos ---
+    # Contexto completo com todas as melhorias da Fase 2
     contexto_completo = {
         "informacoes_gerais": {
             "data_atual": datetime.now().strftime('%d/%m/%Y'),
             "periodo_disponivel": f"{data_minima} a {data_maxima}",
             "contas_cadastradas": [c.nome for c in contas_db],
-            "metas_financeiras": metas_financeiras
+            "metas_financeiras": metas_financeiras,
+            "insights_automaticos": _gerar_insights_automaticos(lancamentos),
+            "padroes_detectados": _detectar_padroes_comportamentais(lancamentos),
+            "estatisticas_cache": _obter_estatisticas_cache()
+        },
+        "analise_comportamental_avancada": analise_comportamental,
+        "contexto_economico": {
+            "dados_mercado": dados_mercado,
+            "indicadores_economicos": dados_economicos,
+            "situacao_comparativa": situacao_comparativa
         },
         "resumo_por_mes": resumo_mensal,
-        "todos_lancamentos": [ # A IA agora tem a lista completa para cálculos
+        "todos_lancamentos": [
             {
-                "data": l.data_transacao.strftime('%Y-%m-%d'), # Formato ISO para facilitar o parse
+                "data": l.data_transacao.strftime('%Y-%m-%d'),
                 "descricao": l.descricao,
                 "valor": float(l.valor),
                 "tipo": l.tipo,
                 "categoria": l.categoria.nome if l.categoria else "Sem Categoria",
-                "conta": l.forma_pagamento
+                "conta": l.forma_pagamento,
+                "dia_semana": l.data_transacao.weekday(),
+                "hora": l.data_transacao.hour
             } for l in lancamentos
         ]
     }
 
-    return json.dumps(contexto_completo, indent=2, ensure_ascii=False)
+    resultado = json.dumps(contexto_completo, indent=2, ensure_ascii=False)
+    
+    # Salva no cache
+    _salvar_no_cache(chave_cache, resultado)
+    logger.info(f"Contexto financeiro completo v5.0 calculado e salvo no cache para usuário {usuario.id}")
+    
+    return resultado
+
+# === SISTEMA DE INTEGRAÇÃO DE DADOS EXTERNOS ===
+
+async def _obter_dados_mercado_financeiro() -> Dict[str, Any]:
+    """
+    Obtém dados de mercado financeiro para contextualizar investimentos
+    Retorna dados mock para demonstração
+    """
+    try:
+        # Dados mockados para demonstração - em produção, conectar com APIs reais
+        return {
+            "selic": 11.75,
+            "ipca_acumulado_12m": 4.62,
+            "cdi": 11.65,
+            "dollar_rate": 5.12,
+            "bitcoin_brl": 180000,
+            "recomendacoes": [
+                "Com a Selic alta, renda fixa está atrativa",
+                "Inflação controlada favorece investimentos de longo prazo",
+                "Diversificação é essencial no cenário atual"
+            ],
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+    except Exception as e:
+        logger.error(f"Erro ao obter dados de mercado: {e}")
+        return {}
+
+async def _obter_dados_economicos_contexto() -> Dict[str, Any]:
+    """
+    Obtém dados econômicos para contextualizar análises
+    """
+    try:
+        # Dados econômicos mockados
+        return {
+            "pib_crescimento": 2.3,
+            "desemprego": 8.7,
+            "salario_minimo": 1412.00,
+            "renda_media_nacional": 2850.00,
+            "alertas_economicos": [
+                "PIB em crescimento moderado",
+                "Taxa de desemprego em queda gradual",
+                "Poder de compra estável"
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Erro ao obter dados econômicos: {e}")
+        return {}
+
+async def _classificar_situacao_comparativa(economia_mensal: float, gastos_mensais: float) -> Dict[str, Any]:
+    """
+    Classifica a situação financeira do usuário comparando com dados nacionais
+    """
+    try:
+        dados_economicos = await _obter_dados_economicos_contexto()
+        renda_media = dados_economicos.get('renda_media_nacional', 2850)
+        salario_minimo = dados_economicos.get('salario_minimo', 1412)
+        
+        # Calculações comparativas
+        renda_estimada = gastos_mensais + economia_mensal
+        percentil_renda = (renda_estimada / renda_media) * 100
+        multiplos_salario_minimo = renda_estimada / salario_minimo
+        
+        # Classificação da situação
+        if percentil_renda >= 150:
+            situacao = "Acima da média nacional"
+        elif percentil_renda >= 80:
+            situacao = "Próximo à média nacional"
+        elif percentil_renda >= 50:
+            situacao = "Abaixo da média nacional"
+        else:
+            situacao = "Bem abaixo da média nacional"
+        
+        return {
+            "situacao_comparativa": situacao,
+            "percentil_renda": min(200, percentil_renda),
+            "multiplos_salario_minimo": round(multiplos_salario_minimo, 1),
+            "renda_estimada": renda_estimada,
+            "benchmarks": {
+                "renda_media_nacional": renda_media,
+                "salario_minimo": salario_minimo
+            }
+        }
+    except Exception as e:
+        logger.error(f"Erro na classificação comparativa: {e}")
+        return {}
+
+# === SISTEMA DE LIMPEZA DE CACHE ===
+
+def _limpar_cache_expirado():
+    """
+    Remove entradas expiradas do cache para otimizar memória
+    """
+    try:
+        chaves_para_remover = []
+        agora = time.time()
+        
+        for chave, dados in _cache_memoria.items():
+            if dados['timestamp'] + dados['ttl'] < agora:
+                chaves_para_remover.append(chave)
+        
+        for chave in chaves_para_remover:
+            del _cache_memoria[chave]
+        
+        if chaves_para_remover:
+            logger.info(f"Cache limpo: {len(chaves_para_remover)} entradas removidas")
+            
+    except Exception as e:
+        logger.error(f"Erro na limpeza de cache: {e}")
+
+def _obter_estatisticas_cache() -> Dict[str, Any]:
+    """
+    Retorna estatísticas do sistema de cache para monitoramento
+    """
+    try:
+        total_entradas = len(_cache_memoria)
+        agora = time.time()
+        entradas_validas = 0
+        entradas_expiradas = 0
+        
+        for dados in _cache_memoria.values():
+            if dados['timestamp'] + dados['ttl'] >= agora:
+                entradas_validas += 1
+            else:
+                entradas_expiradas += 1
+        
+        return {
+            "total_entradas": total_entradas,
+            "entradas_validas": entradas_validas,
+            "entradas_expiradas": entradas_expiradas,
+            "eficiencia": (entradas_validas / total_entradas * 100) if total_entradas > 0 else 0
+        }
+    except Exception as e:
+        logger.error(f"Erro ao obter estatísticas de cache: {e}")
+        return {"erro": str(e)}
+
+# === MELHORIAS NO SISTEMA DE CONTEXTO FINANCEIRO ===
