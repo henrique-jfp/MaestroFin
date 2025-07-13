@@ -17,3 +17,14 @@ googlevision.json
 
 # Arquivos de banco de dados SQLite (se usar no futuro)
 *.sqlite3
+
+# Testes automaticos
+/Testes/
+/testes/
+testes/
+
+# Arquivos de debugging
+debug_*.json
+debug_diferenca_*.json
+teste_*.py
+*_teste.py
