@@ -26,7 +26,8 @@ from gerente_financeiro.handlers import (
     handle_analise_impacto_callback,  
     help_callback, 
     help_command,
-    cancel 
+    cancel,
+    add_ml_handlers  # <-- Import da função dos handlers ML
 )
 from gerente_financeiro.agendamentos_handler import (
     agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
@@ -119,6 +120,9 @@ def main() -> None:
     application.add_handler(CommandHandler("alerta", schedule_alerts))
     application.add_handler(CommandHandler("metas", listar_metas_command))
     application.add_handler(CommandHandler("agendar", agendamento_start))
+    
+    # === HANDLERS DE MACHINE LEARNING ===
+    add_ml_handlers(application)
     
     # Handlers de Callback (CallbackQueryHandler) para menus e botões
     application.add_handler(CallbackQueryHandler(help_callback, pattern="^help_"))

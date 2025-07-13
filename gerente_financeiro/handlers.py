@@ -411,6 +411,21 @@ HELP_TEXTS = {
         "   • <b>Exclui permanentemente todos os seus dados</b> do bot. Use com extrema cautela!\n\n"
         "↩️  <code>/cancelar</code>\n"
         "   • Use a qualquer momento para interromper uma operação em andamento."
+    ),
+    "ml": (
+        "<b>🧠 Machine Learning (NOVO!)</b>\n\n"
+        "Análise financeira avançada com Inteligência Artificial.\n\n"
+        "🤖  <code>/ml</code>\n"
+        "   • <b>Análise completa com Machine Learning</b> - Score de saúde, anomalias, previsões e padrões comportamentais.\n\n"
+        "🔮  <code>/previsao [meses]</code>\n"
+        "   • <b>Prevê seus gastos futuros</b> usando algoritmos avançados (ex: <code>/previsao 6</code>).\n\n"
+        "⚠️  <code>/anomalias</code>\n"
+        "   • <b>Detecta gastos suspeitos</b> e fora do seu padrão normal usando Isolation Forest.\n\n"
+        "🎯  <code>/clusters</code>\n"
+        "   • <b>Analisa seus padrões de comportamento</b> financeiro e agrupa gastos similares.\n\n"
+        "🤖  <code>/treinar</code>\n"
+        "   • <b>Treina um modelo personalizado</b> para classificar automaticamente suas transações futuras.\n\n"
+        "<i>💡 Dica: Use /treinar primeiro para melhorar a precisão de todas as análises!</i>"
     )
 }
 
@@ -427,6 +442,9 @@ def get_help_keyboard(current_section: str = "main") -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("🎯 Planejamento", callback_data="help_planejamento"),
             InlineKeyboardButton("⚙️ Ferramentas", callback_data="help_config"),
+        ],
+        [
+            InlineKeyboardButton("🤖 Machine Learning", callback_data="help_ml"),
         ]
     ]
     
@@ -489,8 +507,17 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
             keyboard = get_help_keyboard(section)
             
-            # Edita a mensagem original com o novo texto e teclado
-            await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+            # Verifica se o conteúdo realmente mudou antes de editar
+            try:
+                # Edita a mensagem original com o novo texto e teclado
+                await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+            except Exception as edit_error:
+                # Se der erro de "Message is not modified", apenas ignora
+                if "Message is not modified" in str(edit_error):
+                    logger.debug("Mensagem de ajuda não foi modificada (conteúdo idêntico)")
+                    await query.answer()
+                else:
+                    raise edit_error
             
     except (IndexError, KeyError) as e:
         logger.error(f"Erro no help_callback: Seção não encontrada. query.data: {query.data}. Erro: {e}")
@@ -1104,29 +1131,358 @@ async def handle_analise_impacto_callback(update: Update, context: ContextTypes.
         db.close()
 
 
-        
+# === HANDLERS DE MACHINE LEARNING ===
 
-# --- FUNÇÕES CRIADORAS DE CONVERSATION HANDLER ---
+async def ml_analise_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Comando /ml - Análise completa com Machine Learning
+    """
+    try:
+        user_id = update.effective_user.id
+        
+        # Mensagem inicial
+        await update.message.reply_text(
+            "🧠 <b>Análise ML Iniciada</b>\n\n"
+            "Analisando seus dados financeiros com algoritmos avançados...",
+            parse_mode='HTML'
+        )
+        
+        db = next(get_db())
+        try:
+            resultado = services.analisar_financas_com_ml(db, user_id)
+            
+            if "erro" in resultado:
+                await update.message.reply_text(
+                    f"❌ <b>Erro:</b> {resultado['erro']}",
+                    parse_mode='HTML'
+                )
+                return
+            
+            # Formatar resultado
+            resposta = "🧠 <b>ANÁLISE MACHINE LEARNING</b>\n\n"
+            
+            # Score de Saúde
+            score_info = resultado.get("score_saude", {})
+            if score_info:
+                emoji = score_info.get("emoji", "📊")
+                nivel = score_info.get("nivel", "")
+                score = score_info.get("score", 0)
+                
+                resposta += f"{emoji} <b>Saúde Financeira:</b> {nivel}\n"
+                resposta += f"📈 <b>Score:</b> {score}/100\n\n"
+                
+                # Detalhes do score
+                detalhes = score_info.get("detalhes", {})
+                if detalhes:
+                    resposta += "<b>Componentes do Score:</b>\n"
+                    resposta += f"💰 Poupança: {detalhes.get('taxa_poupanca', 0):.1f}%\n"
+                    resposta += f"📊 Consistência: {detalhes.get('consistencia', 0):.1f}%\n"
+                    resposta += f"🎯 Diversificação: {detalhes.get('diversificacao', 0):.1f}%\n"
+                    resposta += f"🔍 Controle: {detalhes.get('controle_gastos', 0):.1f}%\n\n"
+            
+            # Anomalias
+            anomalias = resultado.get("anomalias", {})
+            if anomalias.get("total_anomalias", 0) > 0:
+                total = anomalias["total_anomalias"]
+                percentual = anomalias.get("percentual_anomalias", 0)
+                resposta += f"⚠️ <b>Anomalias Detectadas:</b> {total} ({percentual:.1f}%)\n\n"
+            
+            # Previsões
+            previsoes = resultado.get("previsoes", {})
+            if "previsoes" in previsoes and previsoes["previsoes"]:
+                resposta += "<b>🔮 Previsões:</b>\n"
+                for prev in previsoes["previsoes"][:2]:  # Máximo 2
+                    mes = prev["mes"]
+                    valor = prev["previsao_gasto"]
+                    confianca = prev["confianca"]
+                    resposta += f"📅 {mes}: R$ {valor:.2f} (Conf: {confianca})\n"
+                resposta += "\n"
+            
+            # Clusters
+            clustering = resultado.get("clustering", {})
+            if "clusters" in clustering:
+                clusters = clustering["clusters"]
+                if clusters:
+                    resposta += f"🎯 <b>Padrões Identificados:</b> {len(clusters)} grupos\n"
+                    # Mostrar principal cluster
+                    cluster_principal = max(clusters, key=lambda x: x.get("tamanho", 0))
+                    resposta += f"📌 Principal: {cluster_principal.get('descricao_comportamento', 'N/A')}\n\n"
+            
+            # Informações técnicas
+            resposta += f"📊 <b>Dados:</b> {resultado.get('total_transacoes', 0)} transações em {resultado.get('periodo_analise', 90)} dias"
+            
+            await update.message.reply_text(resposta, parse_mode='HTML')
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Erro no comando ML: {str(e)}")
+        await update.message.reply_text(
+            "❌ Erro na análise ML. Tente novamente mais tarde.",
+            parse_mode='HTML'
+        )
+
+async def previsao_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Comando /previsao - Previsão de gastos futuros
+    """
+    try:
+        user_id = update.effective_user.id
+        
+        # Parâmetros
+        meses = 3
+        if context.args and context.args[0].isdigit():
+            meses = min(int(context.args[0]), 6)  # Máximo 6 meses
+        
+        db = next(get_db())
+        try:
+            resultado = services.prever_gastos_futuros(db, user_id, meses)
+            
+            if "erro" in resultado:
+                await update.message.reply_text(
+                    f"❌ <b>Erro:</b> {resultado['erro']}",
+                    parse_mode='HTML'
+                )
+                return
+            
+            resposta = "🔮 <b>PREVISÃO DE GASTOS</b>\n\n"
+            
+            # Tendência geral
+            tendencia = resultado.get("tendencia", "estável")
+            if tendencia == "crescente":
+                emoji_tend = "📈"
+            elif tendencia == "decrescente":
+                emoji_tend = "📉"
+            else:
+                emoji_tend = "➡️"
+            
+            resposta += f"{emoji_tend} <b>Tendência:</b> {tendencia.title()}\n\n"
+            
+            # Previsões detalhadas
+            previsoes = resultado.get("previsoes", [])
+            if previsoes:
+                resposta += "<b>📅 Previsões Mensais:</b>\n"
+                for prev in previsoes:
+                    mes = prev["mes"]
+                    valor = prev["previsao_gasto"]
+                    confianca = prev["confianca"]
+                    
+                    # Emoji para confiança
+                    if confianca == "Alta":
+                        emoji_conf = "🟢"
+                    elif confianca == "Média":
+                        emoji_conf = "🟡"
+                    else:
+                        emoji_conf = "🔴"
+                    
+                    resposta += f"{emoji_conf} <b>{mes}:</b> R$ {valor:.2f} ({confianca})\n"
+            
+            # Informações adicionais
+            variacao = resultado.get("variacao_media_mensal", 0)
+            if variacao != 0:
+                resposta += f"\n📊 <b>Variação Média:</b> R$ {variacao:.2f}/mês\n"
+            
+            r2_score = resultado.get("r2_score", 0)
+            resposta += f"🎯 <b>Precisão do Modelo:</b> {r2_score*100:.1f}%\n"
+            resposta += f"📈 <b>Dados Históricos:</b> {resultado.get('dados_historicos', 0)} meses"
+            
+            await update.message.reply_text(resposta, parse_mode='HTML')
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Erro no comando previsão: {str(e)}")
+        await update.message.reply_text(
+            "❌ Erro na previsão. Tente novamente mais tarde.",
+            parse_mode='HTML'
+        )
+
+async def anomalias_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Comando /anomalias - Detecta gastos anômalos
+    """
+    try:
+        user_id = update.effective_user.id
+        
+        db = next(get_db())
+        try:
+            resultado = services.detectar_anomalias_financeiras(db, user_id)
+            
+            if "erro" in resultado:
+                await update.message.reply_text(
+                    f"❌ <b>Erro:</b> {resultado['erro']}",
+                    parse_mode='HTML'
+                )
+                return
+            
+            anomalias = resultado.get("anomalias", [])
+            total_anomalias = resultado.get("total_anomalias", 0)
+            percentual = resultado.get("percentual_anomalias", 0)
+            
+            resposta = "⚠️ <b>ANOMALIAS DETECTADAS</b>\n\n"
+            resposta += f"Total de anomalias encontradas: {total_anomalias} ({percentual:.1f}%)\n\n"
+            
+            for anomalia in anomalias:
+                descricao = anomalia.get("descricao", "Descrição não disponível")
+                valor = anomalia.get("valor", 0.0)
+                data = anomalia.get("data", "Data não disponível")
+                
+                resposta += f"🔍 <b>Descrição:</b> {descricao}\n"
+                resposta += f"💰 <b>Valor:</b> R$ {valor:.2f}\n"
+                resposta += f"📅 <b>Data:</b> {data}\n\n"
+            
+            await update.message.reply_text(resposta, parse_mode='HTML')
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Erro no comando anomalias: {str(e)}")
+        await update.message.reply_text(
+            "❌ Erro na detecção de anomalias. Tente novamente mais tarde.",
+            parse_mode='HTML'
+        )
+
+async def treinar_modelo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Comando /treinar - Treina um modelo personalizado para o usuário
+    """
+    try:
+        user_id = update.effective_user.id
+        
+        await update.message.reply_text(
+            "🤖 <b>Treinamento Iniciado</b>\n\n"
+            "Analisando seus dados para criar um modelo personalizado...",
+            parse_mode='HTML'
+        )
+        
+        db = next(get_db())
+        try:
+            resultado = services.treinar_modelo_categorias(db, user_id)
+            
+            if "erro" in resultado:
+                await update.message.reply_text(
+                    f"❌ <b>Erro:</b> {resultado['erro']}\n\n"
+                    "💡 <b>Dica:</b> Categorize mais transações para melhorar o treinamento!",
+                    parse_mode='HTML'
+                )
+                return
+            
+            accuracy = resultado.get("accuracy", 0)
+            categorias = resultado.get("categorias_unicas", 0)
+            amostras = resultado.get("total_amostras", 0)
+            features = resultado.get("features_importantes", [])
+            
+            resposta = "🤖 <b>MODELO TREINADO</b>\n\n"
+            resposta += f"🎯 <b>Precisão:</b> {accuracy*100:.1f}%\n"
+            resposta += f"📊 <b>Categorias:</b> {categorias}\n"
+            resposta += f"💾 <b>Amostras:</b> {amostras}\n\n"
+            
+            if features:
+                resposta += "<b>🔍 Features Importantes:</b>\n"
+                for feature, importancia in features[:3]:  # Top 3
+                    resposta += f"• {feature}: {importancia*100:.1f}%\n"
+            
+            resposta += "\n✅ <b>Modelo personalizado criado!</b>\n"
+            resposta += "Agora as próximas transações serão classificadas automaticamente."
+            
+            await update.message.reply_text(resposta, parse_mode='HTML')
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Erro no treinamento: {str(e)}")
+        await update.message.reply_text(
+            "❌ Erro no treinamento do modelo. Tente novamente mais tarde.",
+            parse_mode='HTML'
+        )
+
+async def clusters_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Comando /clusters - Análise de padrões de comportamento
+    """
+    try:
+        user_id = update.effective_user.id
+        
+        db = next(get_db())
+        try:
+            resultado = services.analisar_comportamento_clusters(db, user_id)
+            
+            if "erro" in resultado:
+                await update.message.reply_text(
+                    f"❌ <b>Erro:</b> {resultado['erro']}",
+                    parse_mode='HTML'
+                )
+                return
+            
+            clusters = resultado.get("clusters", [])
+            numero_clusters = resultado.get("numero_clusters", 0)
+            
+            resposta = "🎯 <b>ANÁLISE DE COMPORTAMENTO</b>\n\n"
+            resposta += f"📊 <b>Padrões Identificados:</b> {numero_clusters}\n\n"
+            
+            # Ordenar clusters por tamanho
+            clusters_ordenados = sorted(clusters, key=lambda x: x.get("tamanho", 0), reverse=True)
+            
+            for i, cluster in enumerate(clusters_ordenados):
+                cluster_id = cluster.get("cluster_id", i)
+                tamanho = cluster.get("tamanho", 0)
+                valor_medio = cluster.get("valor_medio", 0)
+                descricao = cluster.get("descricao_comportamento", "")
+                categorias = cluster.get("categorias_principais", {})
+                
+                resposta += f"🔸 <b>Padrão {cluster_id + 1}</b> ({tamanho} transações)\n"
+                resposta += f"💰 Valor médio: R$ {valor_medio:.2f}\n"
+                resposta += f"📝 {descricao}\n"
+                
+                # Principal categoria
+                if categorias:
+                    principal_cat = list(categorias.keys())[0]
+                    resposta += f"🏷️ Principal: {principal_cat}\n"
+                
+                resposta += "\n"
+            
+            resposta += "💡 <b>Use esses insights para otimizar seus gastos!</b>"
+            
+            await update.message.reply_text(resposta, parse_mode='HTML')
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Erro no comando clusters: {str(e)}")
+        await update.message.reply_text(
+            "❌ Erro na análise de clusters. Tente novamente mais tarde.",
+            parse_mode='HTML'
+        )
+
+# === FUNÇÃO PARA ADICIONAR HANDLERS DE ML AO BOT ===
+
+def add_ml_handlers(application):
+    """
+    Adiciona todos os handlers de Machine Learning ao bot
+    """
+    application.add_handler(CommandHandler("ml", ml_analise_command))
+    application.add_handler(CommandHandler("previsao", previsao_command))
+    application.add_handler(CommandHandler("anomalias", anomalias_command))
+    application.add_handler(CommandHandler("treinar", treinar_modelo_command))
+    application.add_handler(CommandHandler("clusters", clusters_command))
+    
+    logger.info("Handlers de Machine Learning adicionados ao bot")
+
+# === CONVERSATION HANDLERS ===
 
 def create_gerente_conversation_handler():
+    """
+    Cria o conversation handler para o /gerente (chat com IA)
+    """
     return ConversationHandler(
         entry_points=[CommandHandler("gerente", start_gerente)],
         states={
             AWAIT_GERENTE_QUESTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_language),
-                
-                # Handler antigo para os botões de análise de impacto
-                CallbackQueryHandler(handle_analise_impacto_callback, pattern=r"^analise_"),
-                
-                # --- NOVA LINHA ADICIONADA ---
-                # Handler novo e mais genérico para os botões de ação da IA
-                # Ele vai capturar qualquer callback que NÃO comece com "analise_"
-                CallbackQueryHandler(handle_action_button_callback, pattern=r"^(?!analise_).+")
-            ],
+                CallbackQueryHandler(handle_action_button_callback, pattern="^(.*(?<!help).*)$")
+            ]
         },
-        fallbacks=[
-            CommandHandler("cancelar", cancel)
-        ],
+        fallbacks=[CommandHandler("cancelar", cancel)],
         per_chat=True,
         allow_reentry=True
     )

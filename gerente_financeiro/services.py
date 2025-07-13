@@ -27,6 +27,7 @@ from . import external_data
 from dateutil.relativedelta import relativedelta
 import numpy as np 
 from scipy.interpolate import make_interp_spline
+from .ml_engine import maestro_ml  # <-- Import do sistema ML
 
 # --- SISTEMA DE CACHE INTELIGENTE ---
 _cache_financeiro = {}
@@ -1084,6 +1085,9 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
     # Análise comportamental completa
     analise_comportamental = analisar_comportamento_financeiro(lancamentos)
     
+    # === ANÁLISE AVANÇADA COM MACHINE LEARNING ===
+    insights_ml = gerar_insights_ml_inteligentes(db, usuario.id)
+    
     # Dados de mercado e econômicos
     dados_mercado = await _obter_dados_mercado_financeiro()
     dados_economicos = await _obter_dados_economicos_contexto()
@@ -1123,6 +1127,7 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
             "contas_cadastradas": [c.nome for c in contas_db],
             "metas_financeiras": metas_financeiras,
             "insights_automaticos": _gerar_insights_automaticos(lancamentos),
+            "insights_machine_learning": insights_ml,
             "padroes_detectados": _detectar_padroes_comportamentais(lancamentos),
             "estatisticas_cache": _obter_estatisticas_cache()
         },
@@ -1214,3 +1219,340 @@ def _limpar_cache_expirado() -> None:
 def _gerar_hash_dados_financeiros(contexto_financeiro: str) -> str:
     """Gera hash dos dados financeiros para detectar mudanças"""
     return hashlib.md5(contexto_financeiro.encode()).hexdigest()[:16]
+
+# === FUNÇÕES AVANÇADAS DE MACHINE LEARNING ===
+
+def analisar_financas_com_ml(db: Session, user_id: int, periodo_dias: int = 90) -> Dict[str, Any]:
+    """
+    Análise completa das finanças usando Machine Learning
+    """
+    chave_cache = _gerar_chave_cache(user_id, "ml_analise", periodo=periodo_dias)
+    
+    if _cache_valido(chave_cache):
+        return _cache_memoria[chave_cache]
+    
+    try:
+        # Buscar dados
+        data_inicio = datetime.now() - timedelta(days=periodo_dias)
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == user_id,
+            Lancamento.data_transacao >= data_inicio
+        ).all()
+        
+        if not lancamentos:
+            return {"erro": "Não há dados suficientes para análise ML"}
+        
+        # Preparar dados para ML
+        df = maestro_ml.preparar_dados_ml(lancamentos)
+        
+        # Executar análises ML
+        resultado = {
+            "score_saude": maestro_ml.gerar_score_saude_financeira(df),
+            "anomalias": maestro_ml.detectar_anomalias_avancadas(df),
+            "padroes_sazonais": maestro_ml.analisar_padroes_sazonais(df),
+            "previsoes": maestro_ml.prever_gastos_proximos_meses(df),
+            "clustering": maestro_ml.clustering_comportamento_financeiro(df),
+            "periodo_analise": periodo_dias,
+            "total_transacoes": len(lancamentos)
+        }
+        
+        # Cache do resultado
+        _cache_memoria[chave_cache] = resultado
+        _cache_tempo[chave_cache] = time.time()
+        
+        return resultado
+        
+    except Exception as e:
+        logger.error(f"Erro na análise ML: {str(e)}")
+        return {"erro": f"Erro na análise: {str(e)}"}
+
+def classificar_transacao_automatica(valor: float, descricao: str, data: datetime = None) -> str:
+    """
+    Classifica uma transação automaticamente usando ML
+    """
+    if data is None:
+        data = datetime.now()
+    
+    try:
+        categoria_predita = maestro_ml.classificar_transacao(valor, descricao, data)
+        return categoria_predita
+    except Exception as e:
+        logger.error(f"Erro na classificação automática: {str(e)}")
+        return "Outros"
+
+def treinar_modelo_categorias(db: Session, user_id: int) -> Dict[str, Any]:
+    """
+    Treina o modelo de classificação de categorias para o usuário
+    """
+    try:
+        # Buscar dados históricos (6 meses)
+        data_inicio = datetime.now() - timedelta(days=180)
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == user_id,
+            Lancamento.data_transacao >= data_inicio,
+            Lancamento.id_categoria.isnot(None)
+        ).all()
+        
+        if len(lancamentos) < 20:
+            return {"erro": "Necessário pelo menos 20 transações categorizadas para treinar o modelo"}
+        
+        # Preparar dados
+        df = maestro_ml.preparar_dados_ml(lancamentos)
+        
+        # Treinar modelo
+        resultado_treino = maestro_ml.treinar_classificador_categorias(df)
+        
+        return resultado_treino
+        
+    except Exception as e:
+        logger.error(f"Erro no treinamento do modelo: {str(e)}")
+        return {"erro": f"Erro no treinamento: {str(e)}"}
+
+def detectar_anomalias_financeiras(db: Session, user_id: int, periodo_dias: int = 60) -> Dict[str, Any]:
+    """
+    Detecta anomalias nas transações financeiras usando ML
+    """
+    chave_cache = _gerar_chave_cache(user_id, "anomalias_ml", periodo=periodo_dias)
+    
+    if _cache_valido(chave_cache):
+        return _cache_memoria[chave_cache]
+    
+    try:
+        data_inicio = datetime.now() - timedelta(days=periodo_dias)
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == user_id,
+            Lancamento.data_transacao >= data_inicio
+        ).all()
+        
+        if len(lancamentos) < 10:
+            return {"erro": "Dados insuficientes para detecção de anomalias"}
+        
+        df = maestro_ml.preparar_dados_ml(lancamentos)
+        resultado = maestro_ml.detectar_anomalias_avancadas(df)
+        
+        # Cache do resultado
+        _cache_memoria[chave_cache] = resultado
+        _cache_tempo[chave_cache] = time.time()
+        
+        return resultado
+        
+    except Exception as e:
+        logger.error(f"Erro na detecção de anomalias: {str(e)}")
+        return {"erro": f"Erro na detecção: {str(e)}"}
+
+def prever_gastos_futuros(db: Session, user_id: int, meses_previsao: int = 3) -> Dict[str, Any]:
+    """
+    Prevê gastos futuros usando modelos de ML
+    """
+    chave_cache = _gerar_chave_cache(user_id, "previsao_gastos", meses=meses_previsao)
+    
+    if _cache_valido(chave_cache):
+        return _cache_memoria[chave_cache]
+    
+    try:
+        # Buscar dados históricos (12 meses)
+        data_inicio = datetime.now() - timedelta(days=365)
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == user_id,
+            Lancamento.data_transacao >= data_inicio
+        ).all()
+        
+        if len(lancamentos) < 30:
+            return {"erro": "Necessário pelo menos 30 transações para previsão"}
+        
+        df = maestro_ml.preparar_dados_ml(lancamentos)
+        resultado = maestro_ml.prever_gastos_proximos_meses(df, meses_previsao)
+        
+        # Cache do resultado
+        _cache_memoria[chave_cache] = resultado
+        _cache_tempo[chave_cache] = time.time()
+        
+        return resultado
+        
+    except Exception as e:
+        logger.error(f"Erro na previsão de gastos: {str(e)}")
+        return {"erro": f"Erro na previsão: {str(e)}"}
+
+def analisar_comportamento_clusters(db: Session, user_id: int) -> Dict[str, Any]:
+    """
+    Analisa comportamento financeiro usando clustering
+    """
+    chave_cache = _gerar_chave_cache(user_id, "clustering_comportamento")
+    
+    if _cache_valido(chave_cache):
+        return _cache_memoria[chave_cache]
+    
+    try:
+        # Buscar dados (90 dias)
+        data_inicio = datetime.now() - timedelta(days=90)
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == user_id,
+            Lancamento.data_transacao >= data_inicio
+        ).all()
+        
+        if len(lancamentos) < 20:
+            return {"erro": "Dados insuficientes para análise de clusters"}
+        
+        df = maestro_ml.preparar_dados_ml(lancamentos)
+        resultado = maestro_ml.clustering_comportamento_financeiro(df)
+        
+        # Cache do resultado
+        _cache_memoria[chave_cache] = resultado
+        _cache_tempo[chave_cache] = time.time()
+        
+        return resultado
+        
+    except Exception as e:
+        logger.error(f"Erro na análise de clusters: {str(e)}")
+        return {"erro": f"Erro na análise: {str(e)}"}
+
+def gerar_insights_ml_inteligentes(db: Session, user_id: int) -> List[str]:
+    """
+    Gera insights inteligentes baseados em análises de ML
+    """
+    insights = []
+    
+    try:
+        # Análise completa com ML
+        analise_ml = analisar_financas_com_ml(db, user_id)
+        
+        if "erro" in analise_ml:
+            return ["📊 Dados insuficientes para análise avançada com ML"]
+        
+        # Insights do Score de Saúde
+        score_info = analise_ml.get("score_saude", {})
+        if score_info:
+            score = score_info.get("score", 0)
+            nivel = score_info.get("nivel", "")
+            emoji = score_info.get("emoji", "📊")
+            
+            insights.append(f"{emoji} <b>Saúde Financeira:</b> {nivel} ({score}/100)")
+            
+            # Adicionar recomendações
+            recomendacoes = score_info.get("recomendacoes", [])
+            for rec in recomendacoes[:2]:  # Máximo 2 recomendações
+                insights.append(f"💡 {rec}")
+        
+        # Insights de Anomalias
+        anomalias_info = analise_ml.get("anomalias", {})
+        if anomalias_info.get("total_anomalias", 0) > 0:
+            total_anomalias = anomalias_info["total_anomalias"]
+            percentual = anomalias_info.get("percentual_anomalias", 0)
+            
+            if percentual > 15:
+                insights.append(f"⚠️ <b>Atenção:</b> {total_anomalias} gastos atípicos detectados ({percentual:.1f}%)")
+            elif total_anomalias > 0:
+                insights.append(f"🔍 {total_anomalias} gastos fora do padrão identificados")
+        
+        # Insights de Previsões
+        previsoes_info = analise_ml.get("previsoes", {})
+        if "previsoes" in previsoes_info:
+            tendencia = previsoes_info.get("tendencia", "")
+            if tendencia == "crescente":
+                insights.append("📈 <b>Tendência:</b> Gastos em crescimento - monitore de perto")
+            elif tendencia == "decrescente":
+                insights.append("📉 <b>Tendência:</b> Gastos em redução - continue assim!")
+        
+        # Insights de Padrões Sazonais
+        padroes_info = analise_ml.get("padroes_sazonais", {})
+        padroes = padroes_info.get("padroes", {})
+        
+        if "sazonalidade_mensal" in padroes:
+            mes_maior = padroes["sazonalidade_mensal"]["mes_maior_gasto"]
+            meses = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+            insights.append(f"📅 <b>Padrão Sazonal:</b> Maiores gastos em {meses[mes_maior]}")
+        
+        # Insights de Clustering
+        clustering_info = analise_ml.get("clustering", {})
+        if "clusters" in clustering_info:
+            clusters = clustering_info["clusters"]
+            if len(clusters) > 1:
+                # Encontrar cluster de maior valor
+                cluster_maior = max(clusters, key=lambda x: x.get("valor_medio", 0))
+                insights.append(f"🎯 <b>Padrão Principal:</b> {cluster_maior.get('descricao_comportamento', 'Diversos gastos')}")
+        
+        # Limitar a 5 insights para não sobrecarregar
+        return insights[:5]
+        
+    except Exception as e:
+        logger.error(f"Erro ao gerar insights ML: {str(e)}")
+        return ["📊 Análise ML em desenvolvimento - em breve mais insights!"]
+
+def sugerir_categoria_inteligente(valor: float, descricao: str, data: datetime = None) -> Dict[str, Any]:
+    """
+    Sugere categoria para uma transação usando ML e análise de texto
+    """
+    if data is None:
+        data = datetime.now()
+    
+    try:
+        # Classificação ML
+        categoria_ml = classificar_transacao_automatica(valor, descricao, data)
+        
+        # Análise por palavras-chave (fallback)
+        categoria_keywords = _classificar_por_keywords(descricao)
+        
+        # Análise por valor
+        categoria_valor = _classificar_por_valor(valor)
+        
+        # Confiança baseada na consistência
+        categorias = [categoria_ml, categoria_keywords, categoria_valor]
+        categoria_final = max(set(categorias), key=categorias.count)
+        
+        confianca = categorias.count(categoria_final) / len(categorias)
+        
+        return {
+            "categoria_sugerida": categoria_final,
+            "confianca": round(confianca * 100, 1),
+            "metodo": "ML + Keywords + Valor",
+            "alternativas": list(set(categorias) - {categoria_final})
+        }
+        
+    except Exception as e:
+        logger.error(f"Erro na sugestão de categoria: {str(e)}")
+        return {
+            "categoria_sugerida": "Outros",
+            "confianca": 50.0,
+            "metodo": "Fallback",
+            "erro": str(e)
+        }
+
+def _classificar_por_keywords(descricao: str) -> str:
+    """
+    Classificação simples por palavras-chave
+    """
+    descricao_lower = descricao.lower()
+    
+    categorias_keywords = {
+        "Alimentação": ["restaurante", "lanchonete", "padaria", "supermercado", "mercado", "comida", "pizza", "hamburguer"],
+        "Transporte": ["uber", "taxi", "combustivel", "posto", "onibus", "metro", "transporte", "estacionamento"],
+        "Saúde": ["farmacia", "medico", "hospital", "clinica", "exame", "medicamento", "consulta"],
+        "Moradia": ["aluguel", "condominio", "energia", "agua", "gas", "internet", "telefone"],
+        "Educação": ["escola", "faculdade", "curso", "livro", "material escolar"],
+        "Lazer": ["cinema", "teatro", "show", "festa", "bar", "diversao", "streaming"],
+        "Vestuário": ["roupa", "sapato", "calca", "camisa", "vestido", "moda"],
+        "Tecnologia": ["celular", "computador", "software", "app", "tecnologia"]
+    }
+    
+    for categoria, keywords in categorias_keywords.items():
+        for keyword in keywords:
+            if keyword in descricao_lower:
+                return categoria
+    
+    return "Outros"
+
+def _classificar_por_valor(valor: float) -> str:
+    """
+    Classificação baseada em faixas de valor típicas
+    """
+    valor_abs = abs(valor)
+    
+    if valor_abs > 1000:
+        return "Moradia"  # Valores altos geralmente são moradia
+    elif valor_abs > 500:
+        return "Compras"
+    elif valor_abs > 100:
+        return "Alimentação"
+    else:
+        return "Diversos"
