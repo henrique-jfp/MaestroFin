@@ -805,6 +805,32 @@ def _limpar_resposta_ia(texto: str) -> str:
     # CORREÇÃO: Converte asteriscos duplos em tags HTML <b>
     texto_limpo = re.sub(r'\*\*([^*]+?)\*\*', r'<b>\1</b>', texto_limpo)
     
+    # NOVO: Remove asteriscos simples que sobram
+    texto_limpo = re.sub(r'(?<!\*)\*(?!\*)', '', texto_limpo)
+    
+    # NOVO: Remove vazamentos de JSON (versão recursiva para JSON aninhado)
+    import json as json_lib
+    # Primeiro, tenta encontrar e remover JSONs válidos completos
+    while True:
+        json_match = re.search(r'\{[^{}]*"funcao"[^{}]*\}|\{[^{}]*"titulo_resposta"[^{}]*\}', texto_limpo, re.DOTALL)
+        if not json_match:
+            break
+        try:
+            # Verificar se é um JSON válido antes de remover
+            json_lib.loads(json_match.group(0))
+            texto_limpo = texto_limpo.replace(json_match.group(0), '')
+        except:
+            # Se não for JSON válido, remover mesmo assim
+            texto_limpo = texto_limpo.replace(json_match.group(0), '')
+    
+    # Fallback: remove qualquer coisa que pareça JSON de função
+    texto_limpo = re.sub(r'\{[^}]*"funcao"[^}]*\}', '', texto_limpo)
+    texto_limpo = re.sub(r'\{[^}]*"parametros"[^}]*\}', '', texto_limpo)
+    
+    # NOVO: Remove quebras de linha no início e fim de tags HTML
+    texto_limpo = re.sub(r'<b>\s*\n\s*', '<b>', texto_limpo)
+    texto_limpo = re.sub(r'\s*\n\s*</b>', '</b>', texto_limpo)
+    
     # Remove quebras de linha excessivas
     texto_limpo = re.sub(r'\n{3,}', '\n\n', texto_limpo)
     
@@ -989,82 +1015,91 @@ async def gerar_resposta_ia(update, context, prompt, user_question, usuario_db, 
         model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
         response = await model.generate_content_async(prompt)
         
-        # --- NOVA LÓGICA DE PROCESSAMENTO JSON (MAIS SEGURA) ---
+        # Limpar a resposta inicial
+        resposta_bruta = response.text.strip()
         
-        # 1. Tenta encontrar o bloco JSON na resposta da IA
-        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        # --- DETECÇÃO DE CHAMADAS DE FUNÇÃO JSON ---
+        json_pattern = r'\{.*?"funcao".*?\}'
+        json_match = re.search(json_pattern, resposta_bruta, re.DOTALL)
         
-        # 2. Se NÃO encontrar um JSON, trata o erro elegantemente
-        if not json_match:
-            logger.error(f"A IA não retornou um JSON válido. Resposta recebida: {response.text}")
-            # Usa a resposta em texto livre da IA como um fallback, se fizer sentido
-            # ou envia uma mensagem de erro padrão.
-            await update.message.reply_text(
-                "Hmm, não consegui estruturar a resposta. Aqui está o que a IA disse:\n\n"
-                f"<i>{response.text}</i>",
-                parse_mode='HTML'
-            )
-            # Adiciona ao contexto para não perder o histórico
-            contexto.adicionar_interacao(user_question, response.text, tipo_interacao)
-            return # Sai da função
-
-        # 3. Se encontrou um JSON, tenta decodificá-lo
-        try:
-            dados_ia = json.loads(json_match.group(0))
-        except json.JSONDecodeError as e:
-            logger.error(f"Erro ao decodificar JSON da IA: {e}\nString Tentada: {json_match.group(0)}")
-            await enviar_resposta_erro(context.bot, usuario_db.telegram_id)
-            return
-
-        # 4. Se o JSON foi decodificado, monta a mensagem formatada
-        # (O código de formatação que fizemos antes continua aqui, sem alterações)
-        titulo = dados_ia.get("titulo_resposta", "Análise Rápida")
-        valor_total = dados_ia.get("valor_total", 0.0)
-        comentario = dados_ia.get("comentario_maestro", "Aqui está o que encontrei.")
-        detalhamento = dados_ia.get("detalhamento", [])
-        proximo_passo = dados_ia.get("proximo_passo", {})
-
-        mensagem_formatada = f"<b>{titulo}</b>\n"
-        mensagem_formatada += f"━━━━━━━━━━━━━━━━━━\n\n"
+        if json_match:
+            # Se detectou JSON de função, processar como chamada de função
+            try:
+                dados_funcao = json.loads(json_match.group(0))
+                funcao = dados_funcao.get("funcao")
+                parametros = dados_funcao.get("parametros", {})
+                
+                if funcao == "listar_lancamentos":
+                    await handle_lista_lancamentos(usuario_db.telegram_id, context, parametros)
+                    contexto.adicionar_interacao(user_question, f"Listou lançamentos: {parametros}", tipo_interacao)
+                    return
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Erro ao processar JSON de função: {e}")
+                # Fallback: tratar como resposta de texto
         
-        # Adiciona o valor total apenas se for maior que zero
-        if valor_total > 0:
-            mensagem_formatada += f"O valor total foi de <code>R$ {valor_total:.2f}</code>.\n\n"
+        # --- PROCESSAMENTO COMO RESPOSTA DE ANÁLISE ---
+        # Verificar se é uma análise estruturada (com JSON de dados)
+        json_analise_match = re.search(r'\{.*?"titulo_resposta".*?\}', resposta_bruta, re.DOTALL)
         
-        if detalhamento:
-            mensagem_formatada += "Aqui está o detalhamento:\n"
-            for item in detalhamento:
-                emoji = item.get("emoji", "🔹")
-                nome_item = item.get("item", "N/A")
-                valor_item = item.get("valor", 0.0)
-                mensagem_formatada += f"{emoji} <b>{nome_item}:</b> <code>R$ {valor_item:.2f}</code>\n"
-            mensagem_formatada += "\n"
-
-        mensagem_formatada += f"<i>{comentario}</i>\n"
-
-        keyboard = None
-        if proximo_passo and proximo_passo.get("botao_texto"):
-            mensagem_formatada += f"\n💡 <b>Próximo Passo:</b> {proximo_passo.get('texto', '')}"
-            keyboard = [[
-                InlineKeyboardButton(
-                    proximo_passo["botao_texto"], 
-                    callback_data=proximo_passo["botao_callback"]
-                )
-            ]]
+        if json_analise_match:
+            # Resposta estruturada - processar JSON de análise
+            try:
+                dados_ia = json.loads(json_analise_match.group(0))
+                mensagem_formatada = _formatar_resposta_estruturada(dados_ia)
+                
+                # Remover o JSON da resposta original e manter texto adicional
+                texto_sem_json = re.sub(r'\{[^{}]*"titulo_resposta"[^{}]*\}', '', resposta_bruta, flags=re.DOTALL)
+                texto_sem_json = _limpar_resposta_ia(texto_sem_json)
+                
+                if texto_sem_json.strip():
+                    mensagem_formatada += f"\n\n{texto_sem_json}"
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Erro ao processar JSON de análise: {e}")
+                mensagem_formatada = _limpar_resposta_ia(resposta_bruta)
+        else:
+            # Resposta de texto livre - apenas limpar formatação
+            mensagem_formatada = _limpar_resposta_ia(resposta_bruta)
         
-        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-
-        await enviar_texto_em_blocos(
-            context.bot, 
-            usuario_db.telegram_id, 
-            mensagem_formatada, 
-            reply_markup=reply_markup
-        )
+        # Enviar resposta final
+        await enviar_texto_em_blocos(context.bot, usuario_db.telegram_id, mensagem_formatada)
         contexto.adicionar_interacao(user_question, mensagem_formatada, tipo_interacao)
         
     except Exception as e:
-        logger.error(f"Erro geral e inesperado em gerar_resposta_ia: {e}", exc_info=True)
+        logger.error(f"Erro geral em gerar_resposta_ia: {e}", exc_info=True)
         await enviar_resposta_erro(context.bot, usuario_db.telegram_id)
+
+def _formatar_resposta_estruturada(dados_ia: dict) -> str:
+    """Formata uma resposta estruturada da IA"""
+    titulo = dados_ia.get("titulo_resposta", "Análise Rápida")
+    valor_total = dados_ia.get("valor_total", 0.0)
+    comentario = dados_ia.get("comentario_maestro", "Aqui está o que encontrei.")
+    detalhamento = dados_ia.get("detalhamento", [])
+    proximo_passo = dados_ia.get("proximo_passo", {})
+
+    mensagem_formatada = f"<b>{titulo}</b>\n"
+    mensagem_formatada += f"━━━━━━━━━━━━━━━━━━\n\n"
+    
+    # Adiciona o valor total apenas se for maior que zero
+    if valor_total > 0:
+        mensagem_formatada += f"💰 <b>Valor total:</b> <code>R$ {valor_total:.2f}</code>\n\n"
+    
+    if detalhamento:
+        mensagem_formatada += "<b>📊 Detalhamento:</b>\n"
+        for item in detalhamento:
+            emoji = item.get("emoji", "🔹")
+            nome_item = item.get("item", "N/A")
+            valor_item = item.get("valor", 0.0)
+            mensagem_formatada += f"{emoji} <b>{nome_item}:</b> <code>R$ {valor_item:.2f}</code>\n"
+        mensagem_formatada += "\n"
+
+    mensagem_formatada += f"<i>{comentario}</i>"
+
+    if proximo_passo and proximo_passo.get("texto"):
+        mensagem_formatada += f"\n\n💡 <b>Próximo Passo:</b> {proximo_passo['texto']}"
+    
+    return mensagem_formatada
 
 # --- HANDLER PARA CALLBACK DE ANÁLISE DE IMPACTO ---
 

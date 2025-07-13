@@ -1,37 +1,77 @@
 {
   "tipo": "Entrada",
-  "total_real": 1559.74,
-  "total_extraido": 1559.74,
-  "diferenca": 0.0,
+  "total_real": 586.48,
+  "total_extraido": 510.48,
+  "diferenca": 76.0,
   "transacoes": [
     {
-      "data": "02/04/2025",
-      "descricao": "Transferência recebida pelo Pix NATASHA GABRIELLE ANDRADE SANTOS - . 60,00\n535.417- - BCO BRADESCO S.A. (0237) Agência:\n6246 Conta: 4572-1",
-      "valor": 60.0,
+      "data": "07/05/2025",
+      "descricao": "Transferência recebida pelo Pix KAIZEN GAMING BRASIL LTDA - 46.786.961/0001-",
+      "valor": 70.0,
       "tipo_transacao": "Entrada",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Recebido (Terceiros)"
     },
     {
-      "data": "04/04/2025",
-      "descricao": "Transferência Recebida HENRIQUE DE JESUS FREITAS PERE - .819.117- - 1.446,04",
-      "valor": 1446.04,
+      "data": "15/05/2025",
+      "descricao": "Transferência recebida pelo Pix HENRIQUE JESUS FREITAS PEREIRA - .819.117- - ITAÚ UNIBANCO S.A. (0341) Agência: 4515 Conta: 20787-8",
+      "valor": 96.48,
       "tipo_transacao": "Entrada",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Recebido (Terceiros)"
     },
     {
-      "data": "20/04/2025",
-      "descricao": "Transferência recebida pelo Pix HENRIQUE DE JESUS FREITAS PEREIRA - .819.117- 25,00\n - BANCO INTER (0077) Agência: 1 Conta: 2691153-",
+      "data": "15/05/2025",
+      "descricao": "Transferência recebida pelo Pix KAIZEN GAMING BRASIL LTDA - 46.786.961/0001-74 - BANCO BTG PACTUAL S.A. (0208) Agência: 30",
+      "valor": 59.0,
+      "tipo_transacao": "Entrada",
+      "categoria_sugerida": "Transferências",
+      "subcategoria_sugerida": "PIX Recebido (Terceiros)"
+    },
+    {
+      "data": "15/05/2025",
+      "descricao": "Estorno - Transferência enviada pelo HS DO BRASIL LTDA - 47.123.407/0001-70 - Pix PAGSEGURO INTERNET IP S.A. (0290) Agência: 1 Conta: 78418804-7",
+      "valor": 80.0,
+      "tipo_transacao": "Entrada",
+      "categoria_sugerida": "Transferências",
+      "subcategoria_sugerida": "PIX Recebido (Terceiros)"
+    },
+    {
+      "data": "18/05/2025",
+      "descricao": "Transferência recebida pelo Pix HENRIQUE DE JESUS FREITAS PEREIRA - .819.117- 122,00\n - 99PAY IP S.A. Agência: 1 Conta: 17097261-5",
+      "valor": 122.0,
+      "tipo_transacao": "Entrada",
+      "categoria_sugerida": "Transferências",
+      "subcategoria_sugerida": "PIX Recebido (Terceiros)"
+    },
+    {
+      "data": "19/05/2025",
+      "descricao": "Valor adicionado na conta por cartão de crédito",
+      "valor": 4.0,
+      "tipo_transacao": "Entrada",
+      "categoria_sugerida": "Receitas",
+      "subcategoria_sugerida": "Outras Receitas"
+    },
+    {
+      "data": "19/05/2025",
+      "descricao": "Valor adicionado para Pix no Crédito",
+      "valor": 4.0,
+      "tipo_transacao": "Entrada",
+      "categoria_sugerida": "Receitas",
+      "subcategoria_sugerida": "Outras Receitas"
+    },
+    {
+      "data": "24/05/2025",
+      "descricao": "Transferência recebida pelo Pix HENRIQUE DE JESUS FREITAS PEREIRA - .819.117- 25,00\n - 99PAY IP S.A. Agência: 1 Conta: 17097261-5",
       "valor": 25.0,
       "tipo_transacao": "Entrada",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Recebido (Terceiros)"
     },
     {
-      "data": "22/04/2025",
-      "descricao": "Transferência recebida pelo Pix Eu Entrego Sistemas SA - 23.859.513/0001-58 - 28,70",
-      "valor": 28.7,
+      "data": "31/05/2025",
+      "descricao": "Transferência recebida pelo Pix HENRIQUE JESUS FREITAS PEREIRA - .819.117-",
+      "valor": 50.0,
       "tipo_transacao": "Entrada",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Recebido (Terceiros)"

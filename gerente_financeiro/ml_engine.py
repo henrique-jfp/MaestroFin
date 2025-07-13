@@ -59,16 +59,16 @@ class MaestroFinML:
         dados = []
         for lanc in lancamentos:
             dados.append({
-                'data': lanc.data,
+                'data': lanc.data_transacao,
                 'valor': float(lanc.valor),
                 'categoria': lanc.categoria,
                 'descricao': lanc.descricao,
                 'tipo': lanc.tipo,
-                'dia_semana': lanc.data.weekday(),
-                'dia_mes': lanc.data.day,
-                'mes': lanc.data.month,
-                'ano': lanc.data.year,
-                'fim_semana': 1 if lanc.data.weekday() >= 5 else 0
+                'dia_semana': lanc.data_transacao.weekday(),
+                'dia_mes': lanc.data_transacao.day,
+                'mes': lanc.data_transacao.month,
+                'ano': lanc.data_transacao.year,
+                'fim_semana': 1 if lanc.data_transacao.weekday() >= 5 else 0
             })
         
         df = pd.DataFrame(dados)

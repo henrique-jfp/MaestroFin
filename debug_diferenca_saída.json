@@ -1,200 +1,72 @@
 {
   "tipo": "Saída",
-  "total_real": 1589.14,
-  "total_extraido": 1579.1399999999999,
-  "diferenca": 10.000000000000227,
+  "total_real": 589.49,
+  "total_extraido": 429.49,
+  "diferenca": 160.0,
   "transacoes": [
     {
-      "data": "03/04/2025",
-      "descricao": "Transferência enviada pelo Pix MARINESE BATISTA DIAS - .428.693- - STONE IP S.A. (0197) Agência: 1 Conta: 4342807-7",
-      "valor": 6.0,
+      "data": "07/05/2025",
+      "descricao": "Transferência enviada pelo Pix Henrique Jesus Freitas Pereira - .819.117-",
+      "valor": 70.0,
       "tipo_transacao": "Saída",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Enviado (Terceiros)"
     },
     {
-      "data": "03/04/2025",
-      "descricao": "Transferência enviada pelo Pix Adail Feitosa Dos Santos 04176325330 - 45.326.166/0001-30 - STONE IP S.A. (0197) Agência: 1 Conta: 54305243-5",
-      "valor": 8.5,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "03/04/2025",
-      "descricao": "Transferência enviada pelo Pix JOAO BOSCO TAVARES DANIEL JUNIOR 04223758454 - 45.983.841/0001-02 - STONE IP S.A. (0197) Agência: 1 Conta: 7237307-9",
-      "valor": 7.5,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "03/04/2025",
-      "descricao": "Transferência enviada pelo Pix 57.758.469 CELMA DA SILVA ANDRADE FERREIRA - 57.758.469/0001-01 - Nubank (0260) Agência: 1 Conta: 564062499-0",
-      "valor": 11.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "05/04/2025",
-      "descricao": "Transferência enviada pelo Pix Michel souza da silva - .469.597- - CLOUDWALK IP LTDA (0542) Agência: 1 Conta: 11032352-5",
-      "valor": 16.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "05/04/2025",
-      "descricao": "Transferência enviada pelo Pix RIO INGRESSOS LTDA - 38.152.482/0001-78 - STONE IP S.A. (0197) Agência: 1 Conta: 734131-6",
-      "valor": 22.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Lazer e Entretenimento",
-      "subcategoria_sugerida": "Eventos e Shows"
-    },
-    {
-      "data": "05/04/2025",
-      "descricao": "Transferência enviada pelo Pix Jose Fernandes da Silva - .695.477- - MERCADO PAGO IP LTDA. (0323) Agência: 1 Conta: 2722536672-4",
-      "valor": 10.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "06/04/2025",
-      "descricao": "Transferência enviada pelo Pix PARENTINHO DISTRIBUIDORA DE ALIMENTOS E BEBIDAS LTDA - 10.512.584/0001-38 - STONE IP S.A. (0197) Agência: 1 Conta: 56331029-1",
+      "data": "08/05/2025",
+      "descricao": "Transferência enviada pelo Pix MARIA DEUSINHA FEITOSA RIBEIRO 09269558703 - 34.595.290/0001-85 - STONE IP S.A. (0197) Agência: 1 Conta: 5107666-9",
       "valor": 3.0,
       "tipo_transacao": "Saída",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Enviado (Terceiros)"
     },
     {
-      "data": "07/04/2025",
-      "descricao": "Transferência enviada pelo Pix MARIA DEUSINHA FEITOSA RIBEIRO 09269558703 - 34.595.290/0001-85 - STONE IP S.A. (0197) Agência: 1 Conta: 5107666-9",
-      "valor": 13.5,
+      "data": "15/05/2025",
+      "descricao": "Transferência enviada pelo Pix KAIZEN GAMING BRASIL LTDA - 46.786.961/0001-74 - BANCO BTG PACTUAL S.A. (0208) Agência: 30 Conta: 567491-0",
+      "valor": 40.0,
       "tipo_transacao": "Saída",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Enviado (Terceiros)"
     },
     {
-      "data": "07/04/2025",
-      "descricao": "Transferência enviada pelo Pix Raquel Martins Freitas - .515.057- - BCO BRADESCO S.A. (0237) Agência: 2736 Conta: 27517-4",
-      "valor": 60.0,
+      "data": "15/05/2025",
+      "descricao": "Transferência enviada pelo Pix HS DO BRASIL LTDA - 47.123.407/0001-70 - PAGSEGURO INTERNET IP S.A. (0290) Agência: 1 Conta: 78418804-7",
+      "valor": 80.0,
       "tipo_transacao": "Saída",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Enviado (Terceiros)"
     },
     {
-      "data": "05/04/2025",
-      "descricao": "Transferência enviada pelo Pix COMPANHIA B DISTRIBUICAO - 47.508.411/0001- 17,88\n56 - ITAÚ UNIBANCO S.A. (0341) Agência: 910\nConta: 14139-9",
-      "valor": 17.88,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "10/04/2025",
-      "descricao": "Transferência enviada pelo Pix 57.758.469 CELMA DA SILVA ANDRADE FERREIRA - 9,50",
-      "valor": 9.5,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "12/04/2025",
-      "descricao": "Transferência enviada pelo Pix TUDO DE MINAS COPACABANA LTDA - 53.311.967/0001-50 - STONE IP S.A. (0197) Agência: 1 Conta: 8129249-2",
-      "valor": 9.5,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "12/04/2025",
-      "descricao": "Transferência enviada pelo Pix PANIFICACAO RIAN LTDA - 33.280.223/0001-09 - BCO BRADESCO S.A. (0237) Agência: 472 Conta: 281664-4",
-      "valor": 6.67,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "12/04/2025",
-      "descricao": "Transferência enviada pelo Pix Jose Rogerio de Sousa - .972.943- - PAGSEGURO INTERNET IP S.A. (0290) Agência: 1 Conta: 5769726-0",
-      "valor": 35.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "12/04/2025",
-      "descricao": "Transferência enviada pelo Pix FUTEBOLCARD SISTEMAS LTDA EPP - 01.329.666/0001-50 - BCO BRADESCO S.A. (0237) Agência: 332 Conta: 48750-3",
-      "valor": 44.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "13/04/2025",
-      "descricao": "Transferência enviada pelo Pix Raquel Martins Freitas - .515.057- - BCO BRADESCO S.A. (0237) Agência: 2736 Conta: 27517-4",
-      "valor": 20.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "15/04/2025",
-      "descricao": "Transferência enviada pelo Pix DROGARIA DO METRO CENTRAL LTDA - 22.022.451/0001-62 - PAGSEGURO INTERNET IP S.A. (0290)\nAgência: 1 Conta: 52433405-9",
-      "valor": 39.12,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Compras",
-      "subcategoria_sugerida": "Itens para Casa"
-    },
-    {
-      "data": "15/04/2025",
+      "data": "01/05/2025 a 31/05/2025",
       "descricao": "Pagamento de fatura",
-      "valor": 107.1,
+      "valor": 157.49,
       "tipo_transacao": "Saída",
-      "categoria_sugerida": "Outros",
-      "subcategoria_sugerida": "Despesas não categorizadas"
+      "categoria_sugerida": "Financeiro",
+      "subcategoria_sugerida": "Pagamento de Fatura Cartão"
     },
     {
-      "data": "15/04/2025",
-      "descricao": "Transferência enviada pelo Pix Henrique Jesus Freitas Pereira - .819.117- - ITAÚ UNIBANCO S.A. (0341) Agência: 4515 Conta: 20787-8",
-      "valor": 1082.37,
+      "data": "19/05/2025",
+      "descricao": "Transferência enviada pelo Pix S M C SORVETES - 58.569.343/0001-51 - ITAÚ UNIBANCO S.A. (0341) Agência: 6021 Conta: 99054-1",
+      "valor": 4.0,
       "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
+      "categoria_sugerida": "Alimentação",
+      "subcategoria_sugerida": "Padaria e Lanches"
     },
     {
-      "data": "20/04/2025",
-      "descricao": "Transferência enviada pelo Pix KAIZEN GAMING BRASIL LTDA - 46.786.961/0001- 25,00\n74 - ONEKEY PAYMENTS IP S.A. (0659) Agência: 1\nConta: 315-8",
+      "data": "24/05/2025",
+      "descricao": "Transferência enviada pelo Pix KAIZEN GAMING BRASIL LTDA - 46.786.961/0001- 25,00\n74 - BANCO BTG PACTUAL S.A. (0208) Agência:\n30 Conta: 567491-0",
       "valor": 25.0,
       "tipo_transacao": "Saída",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Enviado (Terceiros)"
     },
     {
-      "data": "25/04/2025",
-      "descricao": "Transferência enviada pelo Pix ARISTOTELES MARQUES AZEVEDO - .863.187- - 9,00\nCAIXA ECONOMICA FEDERAL (0104) Agência: 2387\nConta: 1288000000764904806-4",
-      "valor": 9.0,
+      "data": "31/05/2025",
+      "descricao": "Transferência enviada pelo Pix KAIZEN GAMING BRASIL LTDA - 46.786.961/0001-",
+      "valor": 50.0,
       "tipo_transacao": "Saída",
       "categoria_sugerida": "Transferências",
       "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "25/04/2025",
-      "descricao": "Transferência enviada pelo Pix 57.758.469 CELMA DA SILVA ANDRADE FERREIRA - 10,00\n57.758.469/0001-01 - Nubank (0260) Agência: 1\nConta: 564062499-0",
-      "valor": 10.0,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Transferências",
-      "subcategoria_sugerida": "PIX Enviado (Terceiros)"
-    },
-    {
-      "data": "27/04/2025",
-      "descricao": "Transferência enviada pelo Pix Essential Distribuidora De Alimentos E Bebidas Ltda 6,50\n- 50.563.799/0001-00 - STONE IP S.A. (0197)\nAgência: 1 Conta: 52164878-2",
-      "valor": 6.5,
-      "tipo_transacao": "Saída",
-      "categoria_sugerida": "Alimentação",
-      "subcategoria_sugerida": "Restaurante/Delivery"
     }
   ]
 }
