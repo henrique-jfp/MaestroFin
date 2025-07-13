@@ -775,6 +775,9 @@ def _limpar_resposta_ia(texto: str) -> str:
     texto_limpo = re.sub(r'<p\s*>', '\n', texto_limpo, flags=re.IGNORECASE)
     texto_limpo = re.sub(r'</p>', '\n', texto_limpo, flags=re.IGNORECASE)
     
+    # CORREÇÃO: Converte asteriscos duplos em tags HTML <b>
+    texto_limpo = re.sub(r'\*\*([^*]+?)\*\*', r'<b>\1</b>', texto_limpo)
+    
     # Remove quebras de linha excessivas
     texto_limpo = re.sub(r'\n{3,}', '\n\n', texto_limpo)
     

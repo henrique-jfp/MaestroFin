@@ -989,6 +989,68 @@ def _detectar_padroes_comportamentais(lancamentos: List[Lancamento]) -> List[Dic
     
     return padroes
 
+# --- FUNÇÕES AUXILIARES PARA DADOS EXTERNOS ---
+async def _obter_dados_mercado_financeiro() -> Dict[str, Any]:
+    """Obtém dados básicos do mercado financeiro"""
+    try:
+        # Simulação de dados de mercado - você pode integrar APIs reais aqui
+        return {
+            "status": "disponível",
+            "ultima_atualizacao": datetime.now().strftime('%d/%m/%Y %H:%M'),
+            "fonte": "Dados simulados"
+        }
+    except Exception as e:
+        logger.warning(f"Erro ao obter dados de mercado: {e}")
+        return {"status": "indisponível", "erro": str(e)}
+
+async def _obter_dados_economicos_contexto() -> Dict[str, Any]:
+    """Obtém indicadores econômicos básicos"""
+    try:
+        # Tenta obter indicadores reais, senão usa dados simulados
+        contexto_macro = await obter_contexto_macroeconomico()
+        return {
+            "indicadores": contexto_macro,
+            "status": "disponível" if "indisponível" not in contexto_macro else "limitado"
+        }
+    except Exception as e:
+        logger.warning(f"Erro ao obter dados econômicos: {e}")
+        return {"status": "indisponível", "erro": str(e)}
+
+async def _classificar_situacao_comparativa(economia_mensal: float, gastos_mensais: float) -> Dict[str, Any]:
+    """Classifica a situação financeira comparativamente"""
+    try:
+        if economia_mensal > 1000:
+            classificacao = "Excelente capacidade de poupança"
+        elif economia_mensal > 500:
+            classificacao = "Boa capacidade de poupança"
+        elif economia_mensal > 0:
+            classificacao = "Poupança limitada mas positiva"
+        else:
+            classificacao = "Gastos excedem receitas"
+        
+        return {
+            "classificacao": classificacao,
+            "economia_mensal": economia_mensal,
+            "gastos_mensais": gastos_mensais,
+            "percentual_poupanca": (economia_mensal / (gastos_mensais + economia_mensal)) * 100 if (gastos_mensais + economia_mensal) > 0 else 0
+        }
+    except Exception as e:
+        logger.warning(f"Erro ao classificar situação: {e}")
+        return {"classificacao": "Indeterminada", "erro": str(e)}
+
+def _obter_estatisticas_cache() -> Dict[str, Any]:
+    """Obtém estatísticas do sistema de cache"""
+    try:
+        return {
+            "entradas_cache_geral": len(_cache_financeiro),
+            "entradas_cache_ia": len(_cache_respostas_ia),
+            "total_entradas": len(_cache_financeiro) + len(_cache_respostas_ia),
+            "status": "ativo"
+        }
+    except Exception as e:
+        logger.warning(f"Erro ao obter estatísticas de cache: {e}")
+        return {"status": "erro", "erro": str(e)}
+
 async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -> str:
     """
     Coleta e formata um resumo completo do ecossistema financeiro do usuário.
@@ -1119,6 +1181,35 @@ def _salvar_resposta_ia_cache(chave: str, resposta: str) -> None:
     _cache_respostas_ia[chave] = resposta
     _cache_respostas_tempo[chave] = time.time()
     logger.info(f"Resposta da IA salva no cache: {chave[:16]}...")
+
+def _limpar_cache_expirado() -> None:
+    """
+    Remove automaticamente entradas expiradas dos caches para otimizar memória
+    """
+    tempo_atual = time.time()
+    
+    # Limpa cache geral (_cache_tempo)
+    chaves_expiradas = []
+    for chave, timestamp in _cache_tempo.items():
+        if (tempo_atual - timestamp) > CACHE_TTL:
+            chaves_expiradas.append(chave)
+    
+    for chave in chaves_expiradas:
+        _cache_financeiro.pop(chave, None)
+        _cache_tempo.pop(chave, None)
+    
+    # Limpa cache de respostas IA (_cache_respostas_tempo)
+    chaves_ia_expiradas = []
+    for chave, timestamp in _cache_respostas_tempo.items():
+        if (tempo_atual - timestamp) > CACHE_TTL:
+            chaves_ia_expiradas.append(chave)
+    
+    for chave in chaves_ia_expiradas:
+        _cache_respostas_ia.pop(chave, None)
+        _cache_respostas_tempo.pop(chave, None)
+    
+    if chaves_expiradas or chaves_ia_expiradas:
+        logger.info(f"Cache limpo: {len(chaves_expiradas)} entradas gerais + {len(chaves_ia_expiradas)} respostas IA removidas")
 
 def _gerar_hash_dados_financeiros(contexto_financeiro: str) -> str:
     """Gera hash dos dados financeiros para detectar mudanças"""
