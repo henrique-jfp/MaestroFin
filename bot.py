@@ -4,9 +4,26 @@ import google.generativeai as genai
 import os
 from datetime import time
 from telegram.warnings import PTBUserWarning
+import threading
+from flask import Flask, jsonify
 
 # Suprimir warnings específicos do python-telegram-bot sobre ConversationHandler
 warnings.filterwarnings("ignore", category=PTBUserWarning, module="telegram")
+
+# Servidor web para health check
+health_app = Flask(__name__)
+
+@health_app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "service": "MaestroFin Bot"})
+
+@health_app.route('/')
+def home():
+    return jsonify({
+        "service": "MaestroFin Bot",
+        "status": "running",
+        "version": "3.1.0"
+    })
 
 from gerente_financeiro.extrato_handler import criar_conversation_handler_extrato
 from sqlalchemy.orm import Session, joinedload
