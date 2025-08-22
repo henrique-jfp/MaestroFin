@@ -1,0 +1,24 @@
+# Web Framework e Servidor
+fastapi
+uvicorn[standard]
+
+# Autenticação e Segurança
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# Banco de Dados
+sqlalchemy
+psycopg2-binary
+
+# IA e Outros
+google-generativeai
+google-cloud-vision
+pandas
+matplotlib
+seaborn
+weasyprint
+jinja2
+python-dotenv
+pydantic[email]
+pillow

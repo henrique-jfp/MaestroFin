@@ -1,0 +1,61 @@
+# Arquivo: .gitignore
+
+# Ambientes virtuais
+venv/
+/venv/
+.venv/
+__pycache__/
+*/__pycache__/
+
+# Arquivo de variáveis de ambiente
+.env
+
+# Arquivos de credenciais locais
+/credenciais/
+googlevision.json
+
+# Arquivos de log
+*.log
+
+# Arquivos de banco de dados SQLite (se usar no futuro)
+*.sqlite3
+
+# Testes automaticos
+/Testes/
+/testes/
+testes/
+
+# Arquivos de debugging e teste
+debug_*.json
+debug_diferenca_*.json
+teste_*.py
+testar_*.py
+*_teste.py
+criar_*.py
+executar_*.py
+forcar_*.py
+verificar_*.py
+texto_extraido_*.txt
+
+# Documentação de desenvolvimento temporária
+AJUSTE_*.md
+CORRECAO_*.md
+FUNCAO_*.md
+LIMPEZA_*.md
+MELHORIAS_*.md
+REFATORACAO_*.md
+DEBUG_*.md
+FATURA_*.md
+*_SETUP.md
+
+# PDFs de teste
+*.pdf
+
+# Arquivos temporários
+*.tmp
+*.temp
+
+# Repositórios aninhados
+maestro_web/maestrofin-web/
+*.tmp
+*.temp.env.backup
