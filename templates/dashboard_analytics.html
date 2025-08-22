@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MaestroFin Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .header {
+            background: rgba(255,255,255,0.95);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .header h1 {
+            color: #4a5568;
+            font-size: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 1.1rem;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #4a5568;
+            text-align: center;
+        }
+        
+        .errors-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .error-item {
+            padding: 0.8rem;
+            border-left: 4px solid #e53e3e;
+            background: #fed7d7;
+            margin-bottom: 0.5rem;
+            border-radius: 5px;
+        }
+        
+        .error-type {
+            font-weight: bold;
+            color: #c53030;
+        }
+        
+        .error-time {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .live-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #48bb78;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(72, 187, 120, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(72, 187, 120, 0); }
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s ease;
+            margin-left: auto;
+            display: block;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a6fd8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>
+                🤖 MaestroFin Analytics Dashboard
+                <span class="live-indicator"></span>
+                <span style="font-size: 0.6em; color: #666;">LIVE</span>
+            </h1>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Cards de Estatísticas Principais -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="todayUsers">-</div>
+                <div class="stat-label">Usuários Hoje</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="todayCommands">-</div>
+                <div class="stat-label">Comandos Hoje</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="activeUsers">-</div>
+                <div class="stat-label">Usuários Ativos (30min)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="errorCount">-</div>
+                <div class="stat-label">Erros (Última Hora)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="donationRate">-</div>
+                <div class="stat-label">Taxa de Doação</div>
+            </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">📊 Comandos por Hora (24h)</div>
+                <canvas id="hourlyChart"></canvas>
+            </div>
+            
+            <div class="chart-card">
+                <div class="chart-title">📈 Crescimento de Usuários (30 dias)</div>
+                <canvas id="growthChart"></canvas>
+            </div>
+            
+            <div class="chart-card">
+                <div class="chart-title">🏆 Top Comandos (7 dias)</div>
+                <canvas id="commandsChart"></canvas>
+            </div>
+            
+            <div class="chart-card">
+                <div class="chart-title">⚡ Performance por Comando</div>
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Seção de Erros -->
+        <div class="errors-section">
+            <h2>🚨 Erros Recentes</h2>
+            <div id="errorsList">
+                <p>Carregando erros...</p>
+            </div>
+        </div>
+
+        <button class="refresh-btn" onclick="refreshData()">🔄 Atualizar Dados</button>
+    </div>
+
+    <script>
+        // Configurações dos gráficos
+        Chart.defaults.font.family = 'Segoe UI';
+        Chart.defaults.responsive = true;
+
+        let charts = {};
+
+        // Função para carregar dados
+        async function loadData() {
+            try {
+                // Dados do dia
+                const dailyResponse = await fetch('/api/stats/daily');
+                const dailyData = await dailyResponse.json();
+                
+                document.getElementById('todayUsers').textContent = dailyData.unique_users;
+                document.getElementById('todayCommands').textContent = dailyData.total_commands;
+
+                // Dados ao vivo
+                const liveResponse = await fetch('/api/live/stats');
+                const liveData = await liveResponse.json();
+                
+                document.getElementById('activeUsers').textContent = liveData.active_users_30min;
+                document.getElementById('errorCount').textContent = liveData.errors_last_hour;
+
+                // Dados de doação
+                const donationResponse = await fetch('/api/donations/stats');
+                const donationData = await donationResponse.json();
+                
+                document.getElementById('donationRate').textContent = donationData.conversion_rate + '%';
+
+                // Atualizar gráficos
+                updateHourlyChart(liveData.hourly_commands);
+                await updateCommandsChart();
+                await updateGrowthChart();
+                await updatePerformanceChart();
+                await updateErrorsList();
+
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+            }
+        }
+
+        // Gráfico de comandos por hora
+        function updateHourlyChart(data) {
+            const ctx = document.getElementById('hourlyChart').getContext('2d');
+            
+            if (charts.hourly) {
+                charts.hourly.destroy();
+            }
+            
+            charts.hourly = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.hour),
+                    datasets: [{
+                        label: 'Comandos',
+                        data: data.map(d => d.commands),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Gráfico de top comandos
+        async function updateCommandsChart() {
+            const response = await fetch('/api/commands/ranking?days=7');
+            const data = await response.json();
+            
+            const ctx = document.getElementById('commandsChart').getContext('2d');
+            
+            if (charts.commands) {
+                charts.commands.destroy();
+            }
+            
+            charts.commands = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.slice(0, 8).map(d => d.command),
+                    datasets: [{
+                        data: data.slice(0, 8).map(d => d.total_uses),
+                        backgroundColor: [
+                            '#667eea', '#764ba2', '#f093fb', '#f5576c',
+                            '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7'
+                        ]
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        // Gráfico de crescimento
+        async function updateGrowthChart() {
+            const response = await fetch('/api/users/growth?days=30');
+            const data = await response.json();
+            
+            const ctx = document.getElementById('growthChart').getContext('2d');
+            
+            if (charts.growth) {
+                charts.growth.destroy();
+            }
+            
+            charts.growth = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => new Date(d.date).toLocaleDateString('pt-BR')),
+                    datasets: [{
+                        label: 'Usuários Acumulados',
+                        data: data.map(d => d.cumulative_users),
+                        borderColor: '#48bb78',
+                        backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                        borderWidth: 3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Gráfico de performance
+        async function updatePerformanceChart() {
+            const response = await fetch('/api/performance/metrics?hours=24');
+            const data = await response.json();
+            
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            
+            if (charts.performance) {
+                charts.performance.destroy();
+            }
+            
+            charts.performance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.command),
+                    datasets: [{
+                        label: 'Tempo Médio (ms)',
+                        data: data.map(d => d.avg_time),
+                        backgroundColor: 'rgba(245, 87, 108, 0.6)',
+                        borderColor: '#f5576c',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Atualizar lista de erros
+        async function updateErrorsList() {
+            const response = await fetch('/api/errors/summary?days=1');
+            const data = await response.json();
+            
+            const errorsList = document.getElementById('errorsList');
+            
+            if (data.recent_errors.length === 0) {
+                errorsList.innerHTML = '<p style="color: #48bb78;">✅ Nenhum erro nas últimas 24 horas!</p>';
+                return;
+            }
+            
+            errorsList.innerHTML = data.recent_errors.map(error => `
+                <div class="error-item">
+                    <div class="error-type">${error.error_type}</div>
+                    <div>${error.error_message}</div>
+                    <div class="error-time">
+                        ${error.command || 'Sistema'} • ${error.username || 'Desconhecido'} • 
+                        ${new Date(error.timestamp).toLocaleString('pt-BR')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Função para atualizar dados
+        function refreshData() {
+            loadData();
+        }
+
+        // Carregar dados iniciais
+        loadData();
+
+        // Atualizar automaticamente a cada 30 segundos
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
