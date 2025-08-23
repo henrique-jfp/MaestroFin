@@ -66,9 +66,9 @@ def start_bot():
     try:
         print("🤖 Iniciando Bot do Telegram...")
         
-        # Importar e rodar bot diretamente
-        import bot
-        # O bot já tem polling.idle() no final, então vai ficar rodando
+        # Importar e executar a função main do bot
+        from bot import main
+        main()  # Chama diretamente a função main
         
     except Exception as e:
         print(f"❌ Erro ao iniciar bot: {e}")
