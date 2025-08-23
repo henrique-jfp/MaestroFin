@@ -25,25 +25,27 @@ def check_requirements():
         return False
 
 def start_bot():
-    """Inicia o bot do Telegram"""
+    """Inicia o bot do Telegram como thread"""
     print("🤖 Iniciando Bot do Telegram...")
     try:
         subprocess.run([sys.executable, "bot.py"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"❌ Erro ao iniciar bot: {e}")
-        sys.exit(1)
+        return False
+    return True
 
 def start_dashboard():
-    """Inicia o dashboard analytics"""
+    """Inicia o dashboard analytics no processo principal"""
     print("📊 Iniciando Dashboard Analytics...")
     try:
         from analytics.dashboard_app import app
-        # Railway usa a variável PORT, usar essa se disponível
-        port = int(os.getenv('PORT', 5001))
+        # Railway usa a variável PORT, precisamos usar ela no processo principal
+        port = int(os.getenv('PORT', 8080))
         print(f"📊 Dashboard rodando na porta {port}")
         app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         print(f"❌ Erro ao iniciar dashboard: {e}")
+        sys.exit(1)
 
 def main():
     """Função principal para produção"""
@@ -82,16 +84,16 @@ def main():
     print("✅ Token do Telegram configurado")
     print("🚀 Iniciando sistema completo...")
     
-    # Iniciar dashboard em thread separada
-    dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
-    dashboard_thread.start()
+    # Iniciar bot em thread separada 
+    bot_thread = threading.Thread(target=start_bot, daemon=True)
+    bot_thread.start()
     
-    # Aguardar um pouco para dashboard inicializar
-    time.sleep(3)
-    print("📊 Dashboard iniciado na porta especificada")
+    # Aguardar um pouco para bot inicializar
+    time.sleep(5)
+    print("🤖 Bot iniciado em background")
     
-    # Iniciar bot (processo principal)
-    start_bot()
+    # Iniciar dashboard no processo principal (Railway precisa disso)
+    start_dashboard()
 
 if __name__ == "__main__":
     main()
