@@ -15,6 +15,40 @@ from telegram.ext import (
     MessageHandler, filters
 )
 
+# Importar analytics
+try:
+    from analytics.bot_analytics import BotAnalytics
+    analytics = BotAnalytics()
+    ANALYTICS_ENABLED = True
+except ImportError:
+    ANALYTICS_ENABLED = False
+
+def track_analytics(command_name):
+    """Decorator para tracking de comandos"""
+    import functools
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(update, context):
+            if ANALYTICS_ENABLED and update.effective_user:
+                user_id = update.effective_user.id
+                username = update.effective_user.username or update.effective_user.first_name or "Usuário"
+                
+                try:
+                    analytics.track_command_usage(
+                        user_id=user_id,
+                        username=username,
+                        command=command_name,
+                        success=True
+                    )
+                    analytics.track_daily_user(user_id, username, command_name)
+                    logging.info(f"📊 Analytics: {username} usou /{command_name}")
+                except Exception as e:
+                    logging.error(f"❌ Erro no analytics: {e}")
+            
+            return await func(update, context)
+        return wrapper
+    return decorator
+
 # --- IMPORTS DO PROJETO ---
 
 import config
@@ -536,6 +570,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 # --- HANDLER DE GERENTE FINANCEIRO (IA) - VERSÃO MELHORADA ---
 
+@track_analytics("gerente")
 async def start_gerente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     db = next(get_db())
     try:
