@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.tox
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis
+.pytest_cache
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Databases
+*.db
+*.sqlite3
+analytics.db
+
+# Temporary files
+tmp/
+temp/
+.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials
+credenciais/
+googlevision.json
+
+# Test files
+test_*.py
+debug_*.py
+
+# Build
+build/
+dist/
+*.egg-info/

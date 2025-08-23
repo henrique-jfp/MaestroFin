@@ -1,0 +1,14 @@
+# 🚂 Railway Deploy Configuration
+
+# Especifica a versão do Python
+[build]
+python = "3.11"
+
+# Comando para iniciar o aplicativo
+[deploy]
+start = "python3 launcher.py"
+
+# Variáveis de ambiente necessárias
+[env]
+PYTHONUNBUFFERED = "1"
+PYTHONDONTWRITEBYTECODE = "1"

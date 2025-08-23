@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MaestroFin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='dashboard.css') }}" rel="stylesheet">
+</head>
+
+<body>
+    <div class="landing-container">
+        <div class="hero-section">
+            <div class="container text-center">
+                <div class="hero-content">
+                    <i class="fas fa-chart-line hero-icon"></i>
+                    <h1 class="hero-title">MaestroFin Dashboard</h1>
+                    <p class="hero-subtitle">Visualize suas finanças de forma inteligente e interativa</p>
+
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <i class="fas fa-chart-pie"></i>
+                            <h3>Gráficos Interativos</h3>
+                            <p>Visualizações dinâmicas dos seus gastos e receitas</p>
+                        </div>
+                        <div class="feature-card">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <h3>KPIs em Tempo Real</h3>
+                            <p>Indicadores financeiros atualizados automaticamente</p>
+                        </div>
+                        <div class="feature-card">
+                            <i class="fas fa-mobile-alt"></i>
+                            <h3>Interface Responsiva</h3>
+                            <p>Acesse de qualquer dispositivo com design adaptativo</p>
+                        </div>
+                        <div class="feature-card">
+                            <i class="fas fa-shield-alt"></i>
+                            <h3>Dados Seguros</h3>
+                            <p>Suas informações financeiras protegidas e privadas</p>
+                        </div>
+                    </div>
+
+                    <div class="access-section">
+                        <h3>Como Acessar</h3>
+                        <div class="access-steps">
+                            <div class="step">
+                                <span class="step-number">1</span>
+                                <p>Acesse o bot no Telegram</p>
+                            </div>
+                            <div class="step">
+                                <span class="step-number">2</span>
+                                <p>Use o comando <code>/dashboard</code></p>
+                            </div>
+                            <div class="step">
+                                <span class="step-number">3</span>
+                                <p>Clique no link gerado</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="demo-section">
+                        <a href="/dashboard/demo" class="btn btn-primary btn-lg">
+                            <i class="fas fa-play"></i> Ver Demo
+                        </a>
+                        <p class="demo-note">Experimente com dados de exemplo</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h3>🎯 Recursos Principais</h3>
+                        <ul class="feature-list">
+                            <li><i class="fas fa-check"></i> Dashboard interativo com gráficos em tempo real</li>
+                            <li><i class="fas fa-check"></i> Análise de gastos por categoria</li>
+                            <li><i class="fas fa-check"></i> Evolução mensal de receitas e despesas</li>
+                            <li><i class="fas fa-check"></i> KPIs financeiros personalizados</li>
+                            <li><i class="fas fa-check"></i> Filtros por período e categoria</li>
+                            <li><i class="fas fa-check"></i> Exportação de dados e relatórios</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h3>📱 Integração Telegram</h3>
+                        <p>O dashboard funciona em perfeita integração com o bot do Telegram:</p>
+                        <ul class="feature-list">
+                            <li><i class="fas fa-sync"></i> Dados sincronizados em tempo real</li>
+                            <li><i class="fas fa-lock"></i> Acesso seguro via link personalizado</li>
+                            <li><i class="fas fa-mobile"></i> Responsivo para todos os dispositivos</li>
+                            <li><i class="fas fa-rocket"></i> Carregamento rápido e otimizado</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
