@@ -11,7 +11,17 @@ import base64
 from telegram import Update, InputFile
 from telegram.ext import ContextTypes, CommandHandler
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML, CSS
+
+# Import WeasyPrint com fallback para deployment sem dependências de sistema
+try:
+    from weasyprint import HTML, CSS
+    WEASYPRINT_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ WeasyPrint não disponível: {e}")
+    print("ℹ️ Relatórios PDF serão desabilitados, apenas HTML estará disponível")
+    WEASYPRINT_AVAILABLE = False
+    HTML = None
+    CSS = None
 
 from database.database import get_db
 from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio
@@ -239,6 +249,36 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         
         # 6. Carregar o CSS e gerar o PDF
         logger.info("Gerando PDF...")
+        
+        if not WEASYPRINT_AVAILABLE:
+            # Se WeasyPrint não está disponível, envia apenas o HTML
+            logger.warning("WeasyPrint não disponível, enviando apenas HTML")
+            
+            # Criar arquivo HTML temporário
+            html_filename = f"relatorio_{data_alvo.strftime('%Y-%m')}_{user_id}.html"
+            html_path = os.path.join("/tmp", html_filename)
+            
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_renderizado)
+            
+            # Enviar arquivo HTML
+            with open(html_path, "rb") as f:
+                await update.message.reply_document(
+                    document=InputFile(f, filename=html_filename),
+                    caption=f"📊 Relatório de {periodo_str}\n\n"
+                           f"⚠️ Arquivo HTML (PDF temporariamente indisponível)\n\n"
+                           f"📈 Total de receitas: R$ {contexto_dados.get('receita_total', 0):.2f}\n"
+                           f"📉 Total de despesas: R$ {contexto_dados.get('despesa_total', 0):.2f}\n"
+                           f"💰 Saldo: R$ {contexto_dados.get('saldo_mes', 0):.2f}",
+                    read_timeout=120,
+                    write_timeout=120
+                )
+            
+            # Limpar arquivo temporário
+            os.remove(html_path)
+            logger.info("Relatório HTML enviado com sucesso")
+            return
+            
         try:
             caminho_css = os.path.join(static_path, 'relatorio.css')
             
