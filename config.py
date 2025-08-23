@@ -1,29 +1,35 @@
 # Arquivo: config.py
 
 import os
-from dotenv import load_dotenv
-load_dotenv()
 import logging
 
-# --- CARREGAMENTO EXPLÍCITO DO .ENV ---
+# Configurar logging básico
+logging.basicConfig(level=logging.INFO)
 
-# Pega o caminho absoluto para o diretório onde este arquivo (config.py) está
-basedir = os.path.abspath(os.path.dirname(__file__))
+# --- CARREGAMENTO DO .ENV APENAS EM DESENVOLVIMENTO ---
 
-# Constrói o caminho completo para o arquivo .env na pasta raiz do projeto
-# (assumindo que config.py está na raiz ou em uma subpasta)
-# Se config.py está na raiz, o caminho será /caminho/para/projeto/.env
-# Se config.py está em /gerente_financeiro, precisamos voltar um nível:
-# dotenv_path = os.path.join(os.path.dirname(basedir), '.env')
-# Para sua estrutura, o .env está na raiz, então o seguinte é mais simples:
-dotenv_path = os.path.join(basedir, '.env')
+# Verificar se estamos em ambiente de produção (Railway)
+is_production = bool(os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('PORT'))
 
-# Verifica se o arquivo .env existe no caminho esperado
-if os.path.exists(dotenv_path):
-    logging.info(f"Carregando variáveis de ambiente de: {dotenv_path}")
-    load_dotenv(dotenv_path=dotenv_path)
+if not is_production:
+    # Apenas em desenvolvimento, tenta carregar .env
+    try:
+        from dotenv import load_dotenv
+        
+        # Pega o caminho absoluto para o diretório onde este arquivo está
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        dotenv_path = os.path.join(basedir, '.env')
+        
+        # Verifica se o arquivo .env existe
+        if os.path.exists(dotenv_path):
+            logging.info(f"🔧 [DEV] Carregando variáveis de ambiente de: {dotenv_path}")
+            load_dotenv(dotenv_path=dotenv_path)
+        else:
+            logging.info("🔧 [DEV] Arquivo .env não encontrado, usando variáveis de ambiente do sistema")
+    except ImportError:
+        logging.info("🔧 [DEV] python-dotenv não instalado, usando variáveis de ambiente do sistema")
 else:
-    logging.warning(f"AVISO: Arquivo .env não encontrado em {dotenv_path}. O programa dependerá de variáveis de ambiente do sistema.")
+    logging.info("🌐 [PROD] Ambiente de produção detectado - usando variáveis de ambiente do sistema")
 
 
 # --- CARREGAMENTO DAS VARIÁVEIS DE AMBIENTE ---
@@ -46,30 +52,30 @@ PIX_KEY = os.getenv("PIX_KEY")
 
 # --- VALIDAÇÃO E CONFIGURAÇÃO ADICIONAL ---
 
-required_vars = {
-    "TELEGRAM_TOKEN": TELEGRAM_TOKEN,
-    "GEMINI_API_KEY": GEMINI_API_KEY,
-    "DATABASE_URL": DATABASE_URL,
-    "GOOGLE_APPLICATION_CREDENTIALS": GOOGLE_APPLICATION_CREDENTIALS,
-}
+# Verificar apenas variáveis críticas para o bot funcionar
+if not TELEGRAM_TOKEN:
+    logging.error("❌ TELEGRAM_TOKEN não configurado!")
+    raise ValueError("TELEGRAM_TOKEN é obrigatório para o bot funcionar")
 
-missing_vars = [key for key, value in required_vars.items() if not value]
-if missing_vars:
-    raise ValueError(f"As seguintes variáveis de ambiente essenciais não foram definidas no arquivo .env ou no sistema: {', '.join(missing_vars)}")
+# Log das configurações (sem expor tokens)
+logging.info("✅ Configurações carregadas:")
+logging.info(f"   📱 TELEGRAM_TOKEN: {'✅ Configurado' if TELEGRAM_TOKEN else '❌ Não encontrado'}")
+logging.info(f"   🤖 GEMINI_API_KEY: {'✅ Configurado' if GEMINI_API_KEY else '⚠️ Não encontrado'}")
+logging.info(f"   🗄️ DATABASE_URL: {'✅ Configurado' if DATABASE_URL else '⚠️ Não encontrado'}")
 
+# Configurar credenciais do Google de forma mais flexível
 if GOOGLE_APPLICATION_CREDENTIALS:
-    # Forçar caminho correto se for o caminho problemático
-    if 'MaestroFin 1.0' in GOOGLE_APPLICATION_CREDENTIALS:
-        google_creds_path = os.path.join(basedir, 'credenciais/googlevision2.json')
-    elif not os.path.isabs(GOOGLE_APPLICATION_CREDENTIALS):
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    if not os.path.isabs(GOOGLE_APPLICATION_CREDENTIALS):
         google_creds_path = os.path.join(basedir, GOOGLE_APPLICATION_CREDENTIALS)
     else:
         google_creds_path = GOOGLE_APPLICATION_CREDENTIALS
     
     if os.path.exists(google_creds_path):
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = google_creds_path
-        logging.info(f"✅ Credenciais do Google Application encontradas e configuradas: {google_creds_path}")
+        logging.info(f"✅ Google Application Credentials configurado: {google_creds_path}")
     else:
-        raise FileNotFoundError(f"ERRO CRÍTICO: O arquivo de credenciais do Google não foi encontrado no caminho: {google_creds_path}")
+        logging.warning(f"⚠️ Arquivo de credenciais não encontrado: {google_creds_path}")
+        logging.info("⚠️ Funcionalidades do Google Vision podem não funcionar")
 else:
-    logging.warning("AVISO: A variável de ambiente GOOGLE_APPLICATION_CREDENTIALS não foi definida.")
+    logging.info("ℹ️ GOOGLE_APPLICATION_CREDENTIALS não configurado - funcionalidades OCR limitadas")
