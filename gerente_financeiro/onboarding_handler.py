@@ -9,6 +9,7 @@ from telegram.ext import (
 # Importar analytics
 try:
     from analytics.bot_analytics import BotAnalytics
+    from analytics.advanced_analytics import advanced_analytics
     analytics = BotAnalytics()
     ANALYTICS_ENABLED = True
 except ImportError:
@@ -33,6 +34,17 @@ def track_analytics(command_name):
                     )
                     analytics.track_daily_user(user_id, username, command_name)
                     logging.info(f"📊 Analytics: {username} usou /{command_name}")
+                    
+                    # 🆕 Tracking avançado de onboarding
+                    if command_name == "start":
+                        advanced_analytics.track_onboarding_step(
+                            user_id=user_id,
+                            username=username,
+                            step_name="start",
+                            completed=True,
+                            metadata={"command_timestamp": str(update.message.date)}
+                        )
+                    
                 except Exception as e:
                     logging.error(f"❌ Erro no analytics: {e}")
             
