@@ -6,7 +6,7 @@ python = "3.11"
 
 # Comando para iniciar o aplicativo
 [deploy]
-start = "python3 launcher.py"
+start = "python3 launcher_prod.py"
 
 # Variáveis de ambiente necessárias
 [env]
