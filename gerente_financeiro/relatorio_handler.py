@@ -16,7 +16,7 @@ from jinja2 import Environment, FileSystemLoader
 try:
     from weasyprint import HTML, CSS
     WEASYPRINT_AVAILABLE = True
-except ImportError as e:
+except (ImportError, OSError) as e:
     print(f"⚠️ WeasyPrint não disponível: {e}")
     print("ℹ️ Relatórios PDF serão desabilitados, apenas HTML estará disponível")
     WEASYPRINT_AVAILABLE = False
