@@ -28,6 +28,11 @@ env/
 .idea/
 *.swp
 *.swo
+.history/
+
+# VSCode Workspace
+*.code-workspace
+.vscode/settings.json
 
 # Logs
 *.log
