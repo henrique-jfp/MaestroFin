@@ -59,8 +59,25 @@ googlevision.json
 # Test files
 test_*.py
 debug_*.py
+*_test.py
+*_debug.py
+
+# Temporary development files
+temp_*.py
+rascunho_*.py
+experimento_*.py
+backup_*.py
 
 # Build
 build/
 dist/
 *.egg-info/
+
+# VSCode specific
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/c_cpp_properties.json
+.vscode/extensions.json
+
+# Git hooks
+.git/hooks/
