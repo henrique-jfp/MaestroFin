@@ -26,3 +26,7 @@ pdf2image==1.17.0
 pdfplumber==0.11.7
 opencv-python-headless==4.11.0.86
 PyMuPDF==1.25.2
+aiohttp==3.9.5
+scipy==1.11.4
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
