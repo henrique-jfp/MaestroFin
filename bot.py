@@ -72,8 +72,8 @@ from telegram.ext import (
 import config
 from database.database import get_db, popular_dados_iniciais, criar_tabelas
 from models import *
-from alerts import schedule_alerts, checar_objetivos_semanal
-from jobs import agendar_notificacoes_diarias
+from alerts import schedule_alerts
+from jobs import configurar_jobs
 
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
 from gerente_financeiro.handlers import (
@@ -311,8 +311,7 @@ def main() -> None:
     
     # Configuração e inicialização dos Jobs agendados
     job_queue = application.job_queue
-    job_queue.run_daily(checar_objetivos_semanal, time=time(hour=10, minute=0), days=(6,), name="checar_metas_semanalmente")
-    job_queue.run_daily(agendar_notificacoes_diarias, time=time(hour=1, minute=0), name="agendador_mestre_diario")
+    configurar_jobs(job_queue)
     logger.info("Jobs de metas e agendamentos configurados.")
     
     # Inicia o bot
