@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚨 MaestroFin Crisis Sensor - Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.0/index.min.js"></script>
+    <link rel="stylesheet" href="/static/dashboard_cyberpunk.css">
+</head>
+<body>
+    <!-- Header Cyberpunk -->
+    <div class="header">
+        <h1>🚨 MAESTROFIN CRISIS SENSOR</h1>
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span>SISTEMA ATIVO • ÚLTIMA VARREDURA: <span id="lastUpdate">--</span></span>
+        </div>
+    </div>
+
+    <!-- Container Principal -->
+    <div class="container">
+        <!-- Tabs de Navegação -->
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('overview')">📊 OVERVIEW</button>
+            <button class="tab-button" onclick="showTab('users')">👥 USUÁRIOS</button>
+            <button class="tab-button" onclick="showTab('commands')">⚡ COMANDOS</button>
+            <button class="tab-button" onclick="showTab('performance')">🚀 PERFORMANCE</button>
+            <button class="tab-button" onclick="showTab('errors')">🚨 ALERTAS</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <!-- Métricas em Tempo Real -->
+            <div class="metrics-grid" id="realtimeMetrics">
+                <div class="status-card">
+                    <div class="spinner"></div>
+                    INICIALIZANDO SENSORES...
+                </div>
+            </div>
+            
+            <!-- Gráficos Principais -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">📈 ATIVIDADE SISTEMA - 24H</h3>
+                    <div class="chart-container">
+                        <canvas id="activityChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">🏆 COMANDOS CRÍTICOS</h3>
+                    <div class="chart-container">
+                        <canvas id="commandsChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">⚡ LATÊNCIA SISTEMA</h3>
+                    <div class="chart-container">
+                        <canvas id="performanceChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">👤 USUÁRIOS EM ALERTA</h3>
+                    <div class="user-activity" id="topUsers">
+                        <div class="status-card">ESCANEANDO USUÁRIOS...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="users" class="tab-content">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">👥 USUÁRIOS MONITORADOS</h3>
+                    <div class="tabs">
+                        <button class="tab-button active" onclick="loadActiveUsers('24h')">24H</button>
+                        <button class="tab-button" onclick="loadActiveUsers('7d')">7 DIAS</button>
+                        <button class="tab-button" onclick="loadActiveUsers('30d')">30 DIAS</button>
+                    </div>
+                    <div id="activeUsersContent">
+                        <div class="status-card">CARREGANDO DADOS...</div>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">📊 DISTRIBUIÇÃO DE USUÁRIOS</h3>
+                    <div class="chart-container">
+                        <canvas id="userDistributionChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Commands Tab -->
+        <div id="commands" class="tab-content">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">⚡ ANÁLISE DE COMANDOS</h3>
+                    <div id="commandsContent">
+                        <div class="status-card">PROCESSANDO COMANDOS...</div>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">📈 TENDÊNCIAS DE COMANDOS</h3>
+                    <div class="chart-container">
+                        <canvas id="commandTrendsChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Tab -->
+        <div id="performance" class="tab-content">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">🚀 PERFORMANCE POR COMANDO</h3>
+                    <div id="performanceContent">
+                        <div class="status-card">ANALISANDO PERFORMANCE...</div>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">⏱️ TIMELINE DE PERFORMANCE</h3>
+                    <div class="chart-container">
+                        <canvas id="performanceTimelineChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Errors Tab -->
+        <div id="errors" class="tab-content">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">🚨 ANÁLISE DE ALERTAS</h3>
+                    <div id="errorsContent">
+                        <div class="status-card">VERIFICANDO ALERTAS...</div>
+                    </div>
+                </div>
+                
+                <div class="chart-card">
+                    <h3 class="chart-title">📊 ALERTAS POR COMANDO</h3>
+                    <div class="chart-container">
+                        <canvas id="errorsChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>MaestroFin Analytics Dashboard • Atualização automática a cada 30 segundos</p>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // Configuração global dos gráficos
+        Chart.defaults.color = '#00ffff';
+        Chart.defaults.borderColor = 'rgba(0, 255, 255, 0.2)';
+        Chart.defaults.backgroundColor = 'rgba(0, 255, 255, 0.1)';
+
+        // Estado atual da aplicação
+        let currentTab = 'overview';
+        let charts = {};
+
+        // Função para alternar tabs
+        function showTab(tabName) {
+            // Ocultar todas as tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remover classe active dos botões
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Mostrar tab selecionada
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            currentTab = tabName;
+            loadTabData(tabName);
+        }
+
+        // Carregar dados da tab
+        function loadTabData(tabName) {
+            switch(tabName) {
+                case 'overview':
+                    loadOverviewData();
+                    break;
+                case 'users':
+                    loadUsersData();
+                    break;
+                case 'commands':
+                    loadCommandsData();
+                    break;
+                case 'performance':
+                    loadPerformanceData();
+                    break;
+                case 'errors':
+                    loadErrorsData();
+                    break;
+            }
+        }
+
+        // Carregar dados do overview
+        async function loadOverviewData() {
+            try {
+                const response = await fetch('/api/realtime');
+                const data = await response.json();
+                
+                updateMetrics(data.realtime_stats);
+                updateCharts(data);
+                updateLastUpdate();
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+            }
+        }
+
+        // Atualizar métricas
+        function updateMetrics(stats) {
+            const metricsGrid = document.getElementById('realtimeMetrics');
+            if (!stats) return;
+
+            metricsGrid.innerHTML = `
+                <div class="status-card">
+                    <div class="metric-value">${stats.total_users || 0}</div>
+                    <div class="metric-label">USUÁRIOS ATIVOS</div>
+                </div>
+                <div class="status-card">
+                    <div class="metric-value">${stats.total_commands || 0}</div>
+                    <div class="metric-label">COMANDOS EXECUTADOS</div>
+                </div>
+                <div class="status-card">
+                    <div class="metric-value">${stats.avg_response_time || 0}ms</div>
+                    <div class="metric-label">TEMPO RESPOSTA</div>
+                </div>
+                <div class="status-card">
+                    <div class="metric-value">${stats.error_count || 0}</div>
+                    <div class="metric-label">ALERTAS DETECTADOS</div>
+                </div>
+            `;
+        }
+
+        // Atualizar timestamp
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                now.toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+        }
+
+        // Carregar dados dos usuários
+        async function loadUsersData() {
+            // Implementar carregamento de dados dos usuários
+        }
+
+        // Carregar dados dos comandos
+        async function loadCommandsData() {
+            // Implementar carregamento de dados dos comandos
+        }
+
+        // Carregar dados de performance
+        async function loadPerformanceData() {
+            // Implementar carregamento de dados de performance
+        }
+
+        // Carregar dados de erros
+        async function loadErrorsData() {
+            // Implementar carregamento de dados de erros
+        }
+
+        // Atualizar gráficos
+        function updateCharts(data) {
+            // Implementar atualização dos gráficos
+        }
+
+        // Inicializar dashboard
+        function initDashboard() {
+            loadOverviewData();
+            
+            // Atualizar a cada 30 segundos
+            setInterval(() => {
+                if (currentTab === 'overview') {
+                    loadOverviewData();
+                }
+            }, 30000);
+        }
+
+        // Inicializar quando a página carregar
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>

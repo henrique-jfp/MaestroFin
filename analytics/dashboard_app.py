@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-Dashboard Web para Analytics do MaestroFin Bot
+Dashboa@app.route('/')
+def dashboard():
+    """Página principal do dashboard"""
+    try:
+        return render_template('dashboard_analytics_clean.html')
+    except Exception as e:
+        return f"""
+        <h1>🚨 ERRO NO DASHBOARD</h1>
+        <p><strong>Erro:</strong> {str(e)}</p>
+        <p><strong>Template dir:</strong> {template_dir}</p>
+        <p><strong>Template existe:</strong> {os.path.exists(os.path.join(template_dir, 'dashboard_analytics_clean.html'))}</p>
+        <p><strong>Arquivos na pasta templates:</strong> {os.listdir(template_dir) if os.path.exists(template_dir) else 'Pasta não existe'}</p>
+        """nalytics do MaestroFin Bot
 Interface web para visualizar métricas, estatísticas e logs
 """
 
@@ -751,4 +763,10 @@ def api_realtime_overview():
         }
     })
 
-# ... existing code ...
+if __name__ == '__main__':
+    print("🚨 Iniciando MaestroFin Crisis Sensor Dashboard...")
+    print(f"📁 Template folder: {template_dir}")
+    print(f"📁 Static folder: {static_dir}")
+    print(f"✅ Analytics disponível: {analytics_available}")
+    print("🌐 Servidor rodando em: http://localhost:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)

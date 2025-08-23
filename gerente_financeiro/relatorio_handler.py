@@ -1,9 +1,44 @@
 # gerente_financeiro/relatorio_handler.py
 
+# Importar analytics
+try:
+    from analytics.bot_analytics import BotAnalytics
+    from analytics.advanced_analytics import advanced_analytics
+    analytics = BotAnalytics()
+    ANALYTICS_ENABLED = True
+except ImportError:
+    ANALYTICS_ENABLED = False
+
+def track_analytics(command_name):
+    """Decorator para tracking de comandos"""
+    import functools
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(update, context):
+            if ANALYTICS_ENABLED and update.effective_user:
+                user_id = update.effective_user.id
+                username = update.effective_user.username or update.effective_user.first_name or "Usuário"
+                
+                try:
+                    analytics.track_command_usage(
+                        user_id=user_id,
+                        username=username,
+                        command=command_name,
+                        success=True
+                    )
+                    logging.info(f"📊 Analytics: {username} usou /{command_name}")
+                except Exception as e:
+                    logging.error(f"❌ Erro no analytics: {e}")
+            
+            return await func(update, context)
+        return wrapper
+    return decorator
+
 import logging
 from datetime import datetime
 from io import BytesIO
 import os
+import io
 from dateutil.relativedelta import relativedelta
 import re
 import base64
@@ -18,10 +53,20 @@ try:
     WEASYPRINT_AVAILABLE = True
 except (ImportError, OSError) as e:
     print(f"⚠️ WeasyPrint não disponível: {e}")
-    print("ℹ️ Relatórios PDF serão desabilitados, apenas HTML estará disponível")
     WEASYPRINT_AVAILABLE = False
     HTML = None
     CSS = None
+
+# Import ReportLab como alternativa
+try:
+    from .pdf_generator import generate_financial_pdf
+    REPORTLAB_AVAILABLE = True
+    print("✅ ReportLab disponível como alternativa para PDFs")
+except ImportError as e:
+    print(f"⚠️ ReportLab não disponível: {e}")
+    print("ℹ️ Relatórios PDF serão desabilitados, apenas HTML estará disponível")
+    REPORTLAB_AVAILABLE = False
+    generate_financial_pdf = None
 
 from database.database import get_db
 from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio
@@ -247,58 +292,103 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             logger.error(f"Erro ao renderizar template: {e}", exc_info=True)
             raise
         
-        # 6. Carregar o CSS e gerar o PDF
+        # 6. Gerar o PDF
         logger.info("Gerando PDF...")
         
-        if not WEASYPRINT_AVAILABLE:
-            # Se WeasyPrint não está disponível, envia apenas o HTML
-            logger.warning("WeasyPrint não disponível, enviando apenas HTML")
-            
-            # Criar arquivo HTML temporário
-            html_filename = f"relatorio_{data_alvo.strftime('%Y-%m')}_{user_id}.html"
-            html_path = os.path.join("/tmp", html_filename)
-            
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(html_renderizado)
-            
-            # Enviar arquivo HTML
-            with open(html_path, "rb") as f:
+        if REPORTLAB_AVAILABLE:
+            # Usar ReportLab como primeira opção
+            logger.info("Usando ReportLab para gerar PDF...")
+            try:
+                pdf_bytes = generate_financial_pdf(contexto_dados)
+                
+                # Enviar PDF
+                pdf_filename = f"relatorio_{data_alvo.strftime('%Y-%m')}_{user_id}.pdf"
+                
                 await update.message.reply_document(
-                    document=InputFile(f, filename=html_filename),
+                    document=InputFile(io.BytesIO(pdf_bytes), filename=pdf_filename),
                     caption=f"📊 Relatório de {periodo_str}\n\n"
-                           f"⚠️ Arquivo HTML (PDF temporariamente indisponível)\n\n"
                            f"📈 Total de receitas: R$ {contexto_dados.get('receita_total', 0):.2f}\n"
                            f"📉 Total de despesas: R$ {contexto_dados.get('despesa_total', 0):.2f}\n"
                            f"💰 Saldo: R$ {contexto_dados.get('saldo_mes', 0):.2f}",
                     read_timeout=120,
                     write_timeout=120
                 )
-            
-            # Limpar arquivo temporário
-            os.remove(html_path)
-            logger.info("Relatório HTML enviado com sucesso")
-            return
-            
-        try:
-            caminho_css = os.path.join(static_path, 'relatorio.css')
-            
-            # Verifica se o arquivo CSS existe
-            if not os.path.exists(caminho_css):
-                logger.warning(f"Arquivo CSS não encontrado: {caminho_css}")
-                # Gera PDF sem CSS se necessário
-                pdf_bytes = HTML(string=html_renderizado, base_url=static_path).write_pdf()
-            else:
-                css = CSS(caminho_css)
-                pdf_bytes = HTML(string=html_renderizado, base_url=static_path).write_pdf(stylesheets=[css])
-            
-            logger.info(f"PDF gerado. Tamanho: {len(pdf_bytes)} bytes")
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar PDF: {e}", exc_info=True)
-            raise
+                
+                logger.info("✅ Relatório PDF enviado com sucesso via ReportLab!")
+                return
+                
+            except Exception as e:
+                logger.error(f"Erro ao gerar PDF com ReportLab: {e}", exc_info=True)
+                # Continua para tentar WeasyPrint como fallback
         
-        # 7. Preparar e enviar o arquivo PDF para o usuário
-        logger.info("Enviando PDF...")
+        if WEASYPRINT_AVAILABLE:
+            # Usar WeasyPrint como segunda opção
+            logger.info("Tentando WeasyPrint...")
+            try:
+                caminho_css = os.path.join(static_path, 'relatorio.css')
+                
+                # Verifica se o arquivo CSS existe
+                if not os.path.exists(caminho_css):
+                    # Gera PDF sem CSS se necessário
+                    pdf_bytes = HTML(string=html_renderizado, base_url=static_path).write_pdf()
+                else:
+                    css = CSS(filename=caminho_css)
+                    pdf_bytes = HTML(string=html_renderizado, base_url=static_path).write_pdf(stylesheets=[css])
+                
+                logger.info(f"PDF gerado via WeasyPrint. Tamanho: {len(pdf_bytes)} bytes")
+                
+                # Enviar PDF
+                pdf_filename = f"relatorio_{data_alvo.strftime('%Y-%m')}_{user_id}.pdf"
+                
+                await update.message.reply_document(
+                    document=InputFile(io.BytesIO(pdf_bytes), filename=pdf_filename),
+                    caption=f"📊 Relatório de {periodo_str}\n\n"
+                           f"📈 Total de receitas: R$ {contexto_dados.get('receita_total', 0):.2f}\n"
+                           f"📉 Total de despesas: R$ {contexto_dados.get('despesa_total', 0):.2f}\n"
+                           f"💰 Saldo: R$ {contexto_dados.get('saldo_mes', 0):.2f}",
+                    read_timeout=120,
+                    write_timeout=120
+                )
+                
+                logger.info("✅ Relatório PDF enviado com sucesso via WeasyPrint!")
+                return
+                
+            except Exception as e:
+                logger.error(f"Erro ao gerar PDF com WeasyPrint: {e}", exc_info=True)
+        
+        # Fallback: enviar apenas HTML se todas as opções de PDF falharam
+        logger.warning("Todas as opções de PDF falharam, enviando apenas HTML")
+        
+        # Criar arquivo HTML temporário
+        html_filename = f"relatorio_{data_alvo.strftime('%Y-%m')}_{user_id}.html"
+        html_path = os.path.join("/tmp", html_filename)
+        
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_renderizado)
+        
+        # Enviar arquivo HTML
+        with open(html_path, "rb") as f:
+            await update.message.reply_document(
+                document=InputFile(f, filename=html_filename),
+                caption=f"📊 Relatório de {periodo_str}\n\n"
+                       f"⚠️ Arquivo HTML (PDF temporariamente indisponível)\n\n"
+                       f"📈 Total de receitas: R$ {contexto_dados.get('receita_total', 0):.2f}\n"
+                       f"📉 Total de despesas: R$ {contexto_dados.get('despesa_total', 0):.2f}\n"
+                       f"💰 Saldo: R$ {contexto_dados.get('saldo_mes', 0):.2f}",
+                read_timeout=120,
+                write_timeout=120
+            )
+        
+        # Limpar arquivo temporário
+        os.remove(html_path)
+        logger.info("Relatório HTML enviado como fallback")
+
+    except Exception as e:
+        logger.error(f"Erro crítico na geração do relatório: {e}", exc_info=True)
+        await update.message.reply_text(
+            "❌ Ocorreu um erro ao gerar o relatório. Tente novamente em alguns minutos.",
+            parse_mode='HTML'
+        )
         try:
             pdf_buffer = BytesIO(pdf_bytes)
             nome_usuario_safe = contexto_dados['usuario'].nome_completo.split(' ')[0] if hasattr(contexto_dados.get('usuario'), 'nome_completo') else "Usuario"

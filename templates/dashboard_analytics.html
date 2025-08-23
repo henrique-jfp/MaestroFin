@@ -3,32 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎼 MaestroFin Analytics Dashboard</title>
+    <title>🚨 MaestroFin Crisis Sensor - Analytics Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.0/index.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }
-        
-        .header {
-            background: rgba(255,255,255,0.95);
-            padding: 1rem 2rem;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .header h1 {
-            color: #5a67d8;
-            font-size: 1.8rem;
-            font-weight: 700;
+    <link rel="stylesheet" href="/static/dashboard_cyberpunk.css">
+</head>
+<body>
+    <!-- Header Cyberpunk -->
+    <div class="header">
+        <h1>🚨 MAESTROFIN CRISIS SENSOR</h1>
+        <div class="subtitle">SISTEMA DE MONITORAMENTO AVANÇADO</div>
+    </div>
+
+    <!-- Container Principal -->
+    <div class="container">
         }
         
         .status-indicator {
@@ -301,21 +289,21 @@
 </head>
 <body>
     <div class="header">
-        <h1>🎼 MaestroFin Analytics Dashboard</h1>
+        <h1>🚨 MAESTROFIN CRISIS SENSOR</h1>
         <div class="status-indicator">
             <div class="status-dot"></div>
-            <span>Online • Última atualização: <span id="lastUpdate">--</span></span>
+            <span>SISTEMA ATIVO • ÚLTIMA VARREDURA: <span id="lastUpdate">--</span></span>
         </div>
     </div>
     
     <div class="container">
         <!-- Tabs de Navegação -->
         <div class="tabs">
-            <button class="tab-button active" onclick="showTab('overview')">📊 Visão Geral</button>
-            <button class="tab-button" onclick="showTab('users')">👥 Usuários</button>
-            <button class="tab-button" onclick="showTab('commands')">⚡ Comandos</button>
-            <button class="tab-button" onclick="showTab('performance')">🚀 Performance</button>
-            <button class="tab-button" onclick="showTab('errors')">🚨 Erros</button>
+            <button class="tab-button active" onclick="showTab('overview')">📊 OVERVIEW</button>
+            <button class="tab-button" onclick="showTab('users')">👥 USUÁRIOS</button>
+            <button class="tab-button" onclick="showTab('commands')">⚡ COMANDOS</button>
+            <button class="tab-button" onclick="showTab('performance')">🚀 PERFORMANCE</button>
+            <button class="tab-button" onclick="showTab('errors')">🚨 ALERTAS</button>
         </div>
         
         <!-- Overview Tab -->
@@ -324,31 +312,31 @@
             <div class="metrics-grid" id="realtimeMetrics">
                 <div class="loading">
                     <div class="spinner"></div>
-                    Carregando métricas...
+                    INICIALIZANDO SENSORES...
                 </div>
             </div>
             
             <!-- Gráficos Principais -->
             <div class="charts-grid">
                 <div class="chart-card">
-                    <h3 class="chart-title">📈 Atividade nas Últimas 24h</h3>
+                    <h3 class="chart-title">📈 ATIVIDADE SISTEMA - 24H</h3>
                     <canvas id="activityChart" width="400" height="200"></canvas>
                 </div>
                 
                 <div class="chart-card">
-                    <h3 class="chart-title">🏆 Top Comandos Hoje</h3>
+                    <h3 class="chart-title">🏆 COMANDOS CRÍTICOS</h3>
                     <canvas id="commandsChart" width="400" height="200"></canvas>
                 </div>
                 
                 <div class="chart-card">
-                    <h3 class="chart-title">⚡ Tempo de Resposta</h3>
+                    <h3 class="chart-title">⚡ LATÊNCIA SISTEMA</h3>
                     <canvas id="performanceChart" width="400" height="200"></canvas>
                 </div>
                 
                 <div class="chart-card">
-                    <h3 class="chart-title">👤 Top Usuários Ativos</h3>
+                    <h3 class="chart-title">👤 USUÁRIOS EM ALERTA</h3>
                     <div class="user-activity" id="topUsers">
-                        <div class="loading">Carregando usuários...</div>
+                        <div class="loading">ESCANEANDO USUÁRIOS...</div>
                     </div>
                 </div>
             </div>
@@ -358,11 +346,11 @@
         <div id="users" class="tab-content">
             <div class="charts-grid">
                 <div class="chart-card">
-                    <h3 class="chart-title">👥 Usuários Ativos por Período</h3>
+                    <h3 class="chart-title">👥 USUÁRIOS MONITORADOS</h3>
                     <div class="tabs">
-                        <button class="tab-button active" onclick="loadActiveUsers('24h')">24h</button>
-                        <button class="tab-button" onclick="loadActiveUsers('7d')">7 dias</button>
-                        <button class="tab-button" onclick="loadActiveUsers('30d')">30 dias</button>
+                        <button class="tab-button active" onclick="loadActiveUsers('24h')">24H</button>
+                        <button class="tab-button" onclick="loadActiveUsers('7d')">7 DIAS</button>
+                        <button class="tab-button" onclick="loadActiveUsers('30d')">30 DIAS</button>
                     </div>
                     <div id="activeUsersContent">
                         <div class="loading">Carregando usuários ativos...</div>

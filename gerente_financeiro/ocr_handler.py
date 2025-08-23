@@ -1,6 +1,7 @@
 import logging
 import json
 import re
+import os
 from datetime import datetime, timedelta
 import io
 
@@ -9,8 +10,8 @@ import google.generativeai as genai
 from google.cloud import vision
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from sqlalchemy.orm import Session, joinedload # Adicionando o import que faltava
-from sqlalchemy import and_, func # Adicionando o import que faltava
+from sqlalchemy.orm import Session, joinedload 
+from sqlalchemy import and_, func 
 
 import config
 from database.database import get_or_create_user, get_db
@@ -18,6 +19,27 @@ from models import Lancamento, ItemLancamento, Categoria, Subcategoria, Usuario
 from .states import OCR_CONFIRMATION_STATE
 
 logger = logging.getLogger(__name__)
+
+# Configurar credenciais do Google Vision
+def setup_google_credentials():
+    """Configura as credenciais do Google Vision"""
+    try:
+        # Caminho para o arquivo de credenciais
+        credentials_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'credenciais', 'googlevision2.json')
+        
+        if os.path.exists(credentials_path):
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+            logger.info(f"✅ Credenciais Google Vision configuradas: {credentials_path}")
+            return True
+        else:
+            logger.error(f"❌ Arquivo de credenciais não encontrado: {credentials_path}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Erro ao configurar credenciais: {e}")
+        return False
+
+# Configurar credenciais na inicialização
+setup_google_credentials()
 
 PROMPT_IA_OCR = """
 **TAREFA:** Você é uma API especialista em analisar notas fiscais e comprovantes brasileiros para extrair e classificar os dados em um objeto JSON.
@@ -146,10 +168,25 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             return ConversationHandler.END
 
         await message.edit_text("🔎 Lendo conteúdo com Google Vision...")
-        vision_image = vision.Image(content=image_content_for_vision)
-        vision_client = vision.ImageAnnotatorClient()
-        response = vision_client.document_text_detection(image=vision_image)
-        texto_ocr = response.full_text_annotation.text
+        
+        # Verificar se credenciais estão configuradas
+        if not setup_google_credentials():
+            await message.edit_text("❌ Erro na configuração do Google Vision. Contacte o administrador.")
+            return ConversationHandler.END
+            
+        try:
+            vision_image = vision.Image(content=image_content_for_vision)
+            vision_client = vision.ImageAnnotatorClient()
+            response = vision_client.document_text_detection(image=vision_image)
+            
+            if response.error.message:
+                raise Exception(f"Google Vision API error: {response.error.message}")
+                
+            texto_ocr = response.full_text_annotation.text
+        except Exception as vision_error:
+            logger.error(f"Erro no Google Vision: {vision_error}")
+            await message.edit_text(f"❌ Erro na leitura da imagem: {str(vision_error)}")
+            return ConversationHandler.END
 
         if not texto_ocr or len(texto_ocr.strip()) < 20:
             await message.edit_text(

@@ -6,6 +6,40 @@ Handler para integração do dashboard com o bot do Telegram
 """
 
 import os
+# Importar analytics
+try:
+    from analytics.bot_analytics import BotAnalytics
+    from analytics.advanced_analytics import advanced_analytics
+    analytics = BotAnalytics()
+    ANALYTICS_ENABLED = True
+except ImportError:
+    ANALYTICS_ENABLED = False
+
+def track_analytics(command_name):
+    """Decorator para tracking de comandos"""
+    import functools
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(update, context):
+            if ANALYTICS_ENABLED and update.effective_user:
+                user_id = update.effective_user.id
+                username = update.effective_user.username or update.effective_user.first_name or "Usuário"
+                
+                try:
+                    analytics.track_command_usage(
+                        user_id=user_id,
+                        username=username,
+                        command=command_name,
+                        success=True
+                    )
+                    logging.info(f"📊 Analytics: {username} usou /{command_name}")
+                except Exception as e:
+                    logging.error(f"❌ Erro no analytics: {e}")
+            
+            return await func(update, context)
+        return wrapper
+    return decorator
+
 import logging
 import requests
 import traceback
@@ -265,6 +299,7 @@ async def cmd_dashstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML'
         )
 
+@track_analytics("dashboard")
 async def dashboard_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para callbacks dos botões do dashboard"""
     query = update.callback_query
