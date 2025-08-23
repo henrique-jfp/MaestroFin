@@ -61,10 +61,12 @@ def realtime_stats():
     if not analytics_available:
         return jsonify({'error': 'Analytics não disponível'})
     
+    now = datetime.now()
+    
     try:
         # Conectar ao banco de dados
-        conn = analytics.get_db_connection()
-        now = datetime.now()
+        import sqlite3
+        conn = sqlite3.connect(analytics.db_path)
         
         # Estatísticas em tempo real
         realtime_stats = {}
@@ -72,23 +74,23 @@ def realtime_stats():
         # Total de usuários únicos (últimas 24h)
         total_users = conn.execute("""
             SELECT COUNT(DISTINCT username) 
-            FROM command_logs 
+            FROM command_usage 
             WHERE timestamp >= datetime('now', '-24 hours')
         """).fetchone()[0]
         
         # Total de comandos (últimas 24h)
         total_commands = conn.execute("""
             SELECT COUNT(*) 
-            FROM command_logs 
+            FROM command_usage 
             WHERE timestamp >= datetime('now', '-24 hours')
         """).fetchone()[0]
         
         # Tempo médio de resposta (últimas 24h)
         avg_response = conn.execute("""
-            SELECT AVG(response_time_ms) 
-            FROM command_logs 
+            SELECT AVG(execution_time_ms) 
+            FROM command_usage 
             WHERE timestamp >= datetime('now', '-24 hours')
-            AND response_time_ms IS NOT NULL
+            AND execution_time_ms IS NOT NULL
         """).fetchone()[0]
         
         # Contagem de erros (últimas 24h)
@@ -101,14 +103,14 @@ def realtime_stats():
         realtime_stats = {
             'total_users': total_users or 0,
             'total_commands': total_commands or 0,
-            'avg_response_time': round(avg_response[0] if avg_response and avg_response[0] else 0, 2),
+            'avg_response_time': round(avg_response if avg_response else 0, 2),
             'error_count': error_count or 0
         }
         
         # Usuário mais ativo recente
         most_active_recent = conn.execute("""
             SELECT username, COUNT(*) as count
-            FROM command_logs 
+            FROM command_usage 
             WHERE timestamp >= datetime('now', '-4 hours')
             GROUP BY username
             ORDER BY count DESC
@@ -118,7 +120,7 @@ def realtime_stats():
         # Comando mais usado
         most_used_command = conn.execute("""
             SELECT command, COUNT(*) as count
-            FROM command_logs 
+            FROM command_usage 
             WHERE timestamp >= datetime('now', '-24 hours')
             GROUP BY command
             ORDER BY count DESC
@@ -148,7 +150,7 @@ def realtime_stats():
     except Exception as e:
         return jsonify({
             'error': str(e),
-            'timestamp': now.isoformat()
+            'timestamp': now.isoformat() if 'now' in locals() else datetime.now().isoformat()
         })
 
 if __name__ == '__main__':
