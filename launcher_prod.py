@@ -38,7 +38,9 @@ def start_dashboard():
     print("📊 Iniciando Dashboard Analytics...")
     try:
         from analytics.dashboard_app import app
+        # Railway usa a variável PORT, usar essa se disponível
         port = int(os.getenv('PORT', 5001))
+        print(f"📊 Dashboard rodando na porta {port}")
         app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         print(f"❌ Erro ao iniciar dashboard: {e}")
@@ -62,6 +64,14 @@ def main():
         print("❌ bot.py não encontrado!")
         sys.exit(1)
     
+    # Importar config para carregar variáveis
+    try:
+        import config
+        print("✅ Configurações carregadas")
+    except Exception as e:
+        print(f"❌ Erro ao carregar config: {e}")
+        sys.exit(1)
+    
     # Verificar variáveis essenciais
     telegram_token = os.getenv('TELEGRAM_TOKEN')
     if not telegram_token:
@@ -78,7 +88,7 @@ def main():
     
     # Aguardar um pouco para dashboard inicializar
     time.sleep(3)
-    print("📊 Dashboard iniciado na porta 5001")
+    print("📊 Dashboard iniciado na porta especificada")
     
     # Iniciar bot (processo principal)
     start_bot()
