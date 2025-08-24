@@ -1,13 +1,23 @@
 # gerente_financeiro/contact_handler.py
 
-# Importar analytics
+import logging
+import os
+
+# Importar analytics (dual system: PostgreSQL para Render, SQLite para local)
 try:
-    from analytics.bot_analytics import BotAnalytics
-    from analytics.advanced_analytics import advanced_analytics
-    analytics = BotAnalytics()
+    if os.getenv('DATABASE_URL'):  # Render
+        from analytics.bot_analytics_postgresql import get_analytics, track_command
+        analytics = get_analytics()
+        logging.info("✅ Contact Handler: Analytics PostgreSQL carregado")
+    else:  # Local
+        from analytics.bot_analytics import BotAnalytics
+        analytics = BotAnalytics()
+        logging.info("✅ Contact Handler: Analytics SQLite carregado")
+    
     ANALYTICS_ENABLED = True
-except ImportError:
+except ImportError as e:
     ANALYTICS_ENABLED = False
+    logging.warning(f"⚠️ Contact Handler: Analytics não disponível - {e}")
 
 def track_analytics(command_name):
     """Decorator para tracking de comandos"""
@@ -20,12 +30,21 @@ def track_analytics(command_name):
                 username = update.effective_user.username or update.effective_user.first_name or "Usuário"
                 
                 try:
-                    analytics.track_command_usage(
-                        user_id=user_id,
-                        username=username,
-                        command=command_name,
-                        success=True
-                    )
+                    if hasattr(analytics, 'track_command_usage'):
+                        # SQLite
+                        analytics.track_command_usage(
+                            user_id=user_id,
+                            username=username,
+                            command=command_name,
+                            success=True
+                        )
+                    else:
+                        # PostgreSQL
+                        analytics.track_command(
+                            user_id=user_id,
+                            username=username,
+                            command=command_name
+                        )
                     logging.info(f"📊 Analytics: {username} usou /{command_name}")
                 except Exception as e:
                     logging.error(f"❌ Erro no analytics: {e}")
@@ -56,12 +75,20 @@ logger = logging.getLogger(__name__)
 def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> bool:
     """Função para enviar o e-mail com a mensagem do usuário."""
     
+    logger.info(f"🚀 Iniciando envio de email para {sender_name} (ID: {sender_id})")
+    
     # --- CORREÇÃO APLICADA ---
     # Usamos variáveis distintas para clareza e correção.
     login_user = config.EMAIL_HOST_USER             # Usuário de login da Brevo (ex: 911b48001@smtp-brevo.com)
     login_password = config.EMAIL_HOST_PASSWORD     # Senha/Chave SMTP da Brevo
     sender_address = config.SENDER_EMAIL            # E-mail do remetente (ex: vdmgerente@gmail.com)
     receiver_address = config.EMAIL_RECEIVER        # E-mail do destinatário
+    
+    logger.info(f"📧 Configurações de email carregadas:")
+    logger.info(f"   - Login user: {'✓ Configurado' if login_user else '❌ AUSENTE'}")
+    logger.info(f"   - Login password: {'✓ Configurado' if login_password else '❌ AUSENTE'}")
+    logger.info(f"   - Sender address: {'✓ Configurado' if sender_address else '❌ AUSENTE'}")
+    logger.info(f"   - Receiver address: {'✓ Configurado' if receiver_address else '❌ AUSENTE'}")
     
     # Verifica se todas as variáveis necessárias estão configuradas
     if not all([login_user, login_password, sender_address, receiver_address]):
@@ -97,17 +124,22 @@ def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> boo
     msg.attach(MIMEText(full_body, 'html', 'utf-8'))
 
     try:
+        logger.info("📡 Conectando ao servidor SMTP da Brevo...")
         # Conecta-se ao servidor SMTP da Brevo
         server = smtplib.SMTP('smtp-relay.brevo.com', 587)
+        logger.info("🔐 Iniciando conexão TLS...")
         server.starttls() # Inicia a conexão segura
         
+        logger.info("🔑 Fazendo login no servidor SMTP...")
         # --- PONTO CRÍTICO DA CORREÇÃO ---
         # Faz o login usando as credenciais de autenticação da Brevo
         server.login(login_user, login_password)
+        logger.info("✅ Login no SMTP realizado com sucesso!")
         
         # Converte a mensagem para string para envio
         text = msg.as_string()
         
+        logger.info("📤 Enviando email...")
         # Envia o e-mail
         # 'from_addr' deve ser o e-mail do remetente verificado na sua conta Brevo
         server.sendmail(
@@ -117,7 +149,7 @@ def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> boo
         )
         
         server.quit()
-        logger.info(f"E-mail enviado com sucesso via Brevo de {sender_id} para {receiver_address}")
+        logger.info(f"✅ E-mail enviado com sucesso via Brevo de {sender_id} para {receiver_address}")
         return True
     except smtplib.SMTPAuthenticationError as e:
         logger.error(f"Erro de autenticação ao enviar e-mail via Brevo: {e}", exc_info=True)
@@ -168,12 +200,16 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return AWAIT_SUBJECT
 
     elif action == "contact_pix":
+        logger.info("🏷️ Usuário solicitou informações do PIX")
         pix_key = config.PIX_KEY
+        logger.info(f"   - PIX_KEY carregado: {'✓ Configurado' if pix_key else '❌ AUSENTE'}")
+        
         if not pix_key:
-            logger.error("A variável PIX_KEY não está configurada no arquivo .env")
+            logger.error("❌ A variável PIX_KEY não está configurada no Render Environment")
             await query.edit_message_text("❤️ <b>Ops!</b> Parece que minha chave PIX tirou uma folga. Agradeço imensamente sua intenção!")
             return ConversationHandler.END
 
+        logger.info("✅ PIX_KEY configurado corretamente, exibindo para usuário")
         text = (
             "❤️ <b>Gratidão pelo seu apoio!</b>\n\n"
             "Seu cafezinho faz toda a diferença para manter o Maestro ativo e em constante evolução. ☕💡\n\n"

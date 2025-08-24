@@ -27,20 +27,47 @@ except ImportError as e:
     import flask
 
 # Configurações para Render
+print("� Configurando ambiente Render...")
+        setup_analytics_postgresql()
+        
+        print("📊 Carregando Dashboard Analytics...")
+        from analytics.dashboard_app import app DASHBOARD - RENDER DEPLOY
+Launcher otimizado para Render (gratuito)
+"""
+
+import os
+import sys
+
+print("\n" + "="*60)
+print("╭────────────────────────────────────────────────────────╮")
+print("│              🎼 MAESTROFIN DASHBOARD 🎼                │")
+print("│                 🎨 Render Deploy                       │")
+print("│               ⚡ Gratuito e Confiável                  │")
+print("╰────────────────────────────────────────────────────────╯")
+print("="*60)
+
+# Verificar dependências
+try:
+    import flask
+    from flask import Flask
+    print("✅ Flask detectado")
+except ImportError as e:
+    print(f"❌ Flask não encontrado: {e}")
+    print("📦 Instalando dependências...")
+    os.system("pip install -r requirements.txt")
+    import flask
+
+# Configurações para Render
 print("🔧 Configurando ambiente Render...")
 
 def main():
     """Iniciar dashboard otimizado para Render"""
     try:
         # 🚨 TESTE OCR NO RENDER
-        print("🔍 Testando OCR no Render...")
+        print("� Testando OCR no Render...")
         test_ocr_render()
         
-        # 🚀 MIGRAR ANALYTICS PARA POSTGRESQL
-        print("🔄 Configurando Analytics PostgreSQL...")
-        setup_analytics_postgresql()
-        
-        print("📊 Carregando Dashboard Analytics...")
+        print("�📊 Carregando Dashboard Analytics...")
         from analytics.dashboard_app import app
         
         # Render usa PORT automaticamente
@@ -89,7 +116,7 @@ def test_ocr_render():
     print(f"📋 GOOGLE_VISION_CREDENTIALS_JSON: {'✅' if google_json_creds else '❌'}")
     print(f"📋 GEMINI_API_KEY: {'✅' if gemini_key else '❌'}")
     
-    # TESTAR CONFIGURAÇÃO JSON CREDENTIALS
+    # Testar configuração de credenciais
     if google_json_creds:
         try:
             import tempfile
@@ -116,9 +143,9 @@ def test_ocr_render():
             print("✅ Cliente Google Vision criado com sucesso!")
             
         except Exception as e:
-            print(f"❌ Erro teste OCR Google Vision: {e}")
+            print(f"❌ Erro teste OCR: {e}")
     
-    # Testar Gemini como fallback
+    # Testar Gemini
     if gemini_key:
         try:
             import google.generativeai as genai
@@ -164,8 +191,6 @@ def setup_analytics_postgresql():
             
     except Exception as e:
         print(f"❌ Erro configurando Analytics PostgreSQL: {e}")
-        import traceback
-        traceback.print_exc()
 
 if __name__ == '__main__':
     main()
