@@ -235,6 +235,85 @@ def users_stats():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+# --- Endpoints de compatibilidade com frontend antigo ---
+@app.route('/api/users/active')
+def users_active():
+    """Retorna usuários ativos no período (param: period, ex: 24h)"""
+    period = request.args.get('period', '24h')
+    try:
+        if analytics_available and is_render:
+            # Usar PostgreSQL
+            from analytics.bot_analytics_postgresql import get_session, DailyUsers
+            from sqlalchemy import func
+            session = get_session()
+            now = datetime.now()
+            # Interpretar periodo simples '24h' -> 24 horas
+            hours = 24 if '24' in period else 24
+            cutoff = now - timedelta(hours=hours)
+            count = session.query(func.count(func.distinct(DailyUsers.user_id))).filter(DailyUsers.date >= cutoff).scalar() or 0
+            session.close()
+            return jsonify({'active_users': int(count), 'period': period, 'status': 'ok'})
+        else:
+            return jsonify({'active_users': 0, 'period': period, 'status': 'analytics_unavailable'})
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'})
+
+@app.route('/api/commands/ranking')
+def commands_ranking():
+    """Retorna ranking de comandos (param: days)"""
+    days = int(request.args.get('days', '7'))
+    try:
+        if analytics_available and is_render:
+            from analytics.bot_analytics_postgresql import get_session, CommandUsage
+            from sqlalchemy import func
+            session = get_session()
+            start_date = datetime.now() - timedelta(days=days)
+            results = session.query(CommandUsage.command, func.count(CommandUsage.id).label('count')).filter(CommandUsage.timestamp >= start_date).group_by(CommandUsage.command).order_by(func.count(CommandUsage.id).desc()).limit(20).all()
+            session.close()
+            return jsonify({'top_commands': [{'command': r[0], 'count': int(r[1])} for r in results], 'status': 'ok'})
+        else:
+            # Mock
+            return jsonify({'top_commands': [{'command': '/start', 'count': 25}, {'command': '/help', 'count': 18}], 'status': 'mock'})
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'})
+
+@app.route('/api/performance/metrics')
+def performance_metrics():
+    """Retorna métricas de performance (param: hours)"""
+    hours = int(request.args.get('hours', '24'))
+    try:
+        if analytics_available and is_render:
+            from analytics.bot_analytics_postgresql import get_session, CommandUsage
+            from sqlalchemy import func
+            session = get_session()
+            cutoff = datetime.now() - timedelta(hours=hours)
+            avg_response = session.query(func.avg(CommandUsage.execution_time_ms)).filter(CommandUsage.timestamp >= cutoff, CommandUsage.execution_time_ms.isnot(None)).scalar() or 0
+            total_commands = session.query(func.count(CommandUsage.id)).filter(CommandUsage.timestamp >= cutoff).scalar() or 0
+            session.close()
+            return jsonify({'avg_response_time': float(avg_response), 'total_commands': int(total_commands), 'status': 'ok'})
+        else:
+            return jsonify({'avg_response_time': 0.0, 'total_commands': 0, 'status': 'analytics_unavailable'})
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'})
+
+@app.route('/api/errors/detailed')
+def errors_detailed():
+    """Retorna erros detalhados (param: days)"""
+    days = int(request.args.get('days', '7'))
+    try:
+        if analytics_available and is_render:
+            from analytics.bot_analytics_postgresql import get_session, ErrorLogs
+            session = get_session()
+            cutoff = datetime.now() - timedelta(days=days)
+            rows = session.query(ErrorLogs).filter(ErrorLogs.timestamp >= cutoff).order_by(ErrorLogs.timestamp.desc()).limit(50).all()
+            session.close()
+            errors = [{'error_type': r.error_type, 'error_message': r.error_message, 'command': r.command, 'timestamp': r.timestamp.isoformat(), 'username': r.username} for r in rows]
+            return jsonify({'recent_errors': errors, 'error_count': len(errors), 'status': 'ok'})
+        else:
+            return jsonify({'recent_errors': [], 'error_count': 0, 'status': 'analytics_unavailable'})
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'})
+
 if __name__ == '__main__':
     # Verificar se templates e static existem
     print(f"🌐 Dashboard iniciando em 0.0.0.0:10000")

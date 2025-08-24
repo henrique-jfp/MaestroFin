@@ -271,6 +271,13 @@ def get_analytics():
 # Para compatibilidade com código existente
 analytics = get_analytics()
 
+def get_session():
+    """Retorna uma nova sessão SQLAlchemy para uso em endpoints Flask"""
+    pg = get_analytics()
+    if pg and pg.Session:
+        return pg.Session()
+    return None
+
 def track_command(command_name: str):
     """
     Decorator para rastrear o uso de comandos de forma assíncrona,

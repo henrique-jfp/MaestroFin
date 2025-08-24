@@ -1,43 +1,31 @@
 #!/usr/bin/env python3
 """
-🎨 MAESTROFIN DASHBOARD - RENDER DEPLOY
-Launcher otimizado para Render (gratuito)
+🎨 MAESTROFIN RENDER LAUNCHER - CORRIGIDO
+Inicializa bot Telegram (asyncio) + servidor Flask (Gunicorn) para produção
 """
 
 import os
 import sys
 import json
-
-#!/usr/bin/env python3
-"""
-🎨 MAESTROFIN DASHBOARD - RENDER DEPLOY
-Launcher otimizado para Render com Gunicorn.
-Este script configura e expõe a aplicação Flask para ser servida pelo Gunicorn.
-O bot é iniciado como um processo 'worker' separado, conforme definido no Procfile.
-"""
-
-import os
-import sys
-import json
+import asyncio
+import threading
 import traceback
+import logging
 
 print("\n" + "="*60)
 print("╭────────────────────────────────────────────────────────╮")
 print("│              🎼 MAESTROFIN DASHBOARD 🎼                │")
-print("│           🚀 Gunicorn Launcher for Render              │")
+print("│           🚀 Render Deploy - CORRIGIDO                │")
 print("╰────────────────────────────────────────────────────────╯")
 print("="*60)
 
-def test_ocr():
-    """Testa configuração OCR no Render com suporte a Secret Files"""
-    print("🔧 Testando configuração OCR...")
+def setup_credentials():
+    """Configura credenciais do Google Cloud (Secret Files ou Env Var)"""
+    print("🔧 Configurando credenciais Google Cloud...")
     
     try:
         secret_file = '/etc/secrets/google_vision_credentials.json'
         env_var_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
-        
-        print(f"📋 Verificando Secret File: {'✅ Encontrado' if os.path.exists(secret_file) else '❌ Não encontrado'}")
-        print(f"📋 Verificando Env Var JSON: {'✅ Definida' if env_var_json else '❌ Não definida'}")
         
         credentials_configured = False
         
@@ -46,292 +34,160 @@ def test_ocr():
                 with open(secret_file, 'r') as f:
                     secret_data = json.load(f)
                 project_id = secret_data.get('project_id', 'N/A')
-                print(f"✅ Secret File válido, projeto: {project_id}")
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = secret_file
                 credentials_configured = True
+                print(f"✅ Secret File configurado - Projeto: {project_id}")
             except Exception as e:
-                print(f"❌ Erro ao processar Secret File: {e}")
+                print(f"❌ Erro ao ler Secret File: {e}")
         
         elif env_var_json:
             try:
                 import tempfile
                 creds_data = json.loads(env_var_json)
-                project_id = creds_data.get('project_id', 'N/A')
-                
                 temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
                 json.dump(creds_data, temp_file)
                 temp_file.close()
-                
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file.name
                 credentials_configured = True
-                print(f"✅ Credenciais via Env Var configuradas, projeto: {project_id}")
+                print("✅ Credenciais configuradas via variável de ambiente")
             except Exception as e:
-                print(f"❌ Erro ao processar credenciais da Env Var: {e}")
-
-        if credentials_configured:
-            print("✅ Credenciais do Google Cloud configuradas.")
-        else:
-            print("⚠️ Nenhuma credencial do Google Cloud foi configurada. OCR pode falhar.")
-
-    except Exception as e:
-        print(f"❌ Erro crítico no teste de OCR: {e}")
-        traceback.print_exc()
-
-def setup_analytics_postgresql():
-    """Configura e migra o banco de dados de analytics para PostgreSQL."""
-    print("🔧 Configurando Analytics com PostgreSQL...")
-    
-    try:
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            print("⚠️ DATABASE_URL não encontrada. O Dashboard pode não funcionar.")
-            return
-            
-        print("✅ DATABASE_URL encontrada.")
+                print(f"❌ Erro ao processar env var: {e}")
         
-        from analytics.bot_analytics_postgresql import get_analytics
-        pg_analytics = get_analytics()
+        if not credentials_configured:
+            print("⚠️ Nenhuma credencial do Google Cloud configurada")
         
-        if pg_analytics and pg_analytics.Session:
-            print("✅ Sessão do Analytics PostgreSQL inicializada.")
-            
-            # Opcional: criar dados sintéticos se o banco estiver vazio
-            # from migrate_analytics_postgresql import create_synthetic_data
-            # create_synthetic_data(pg_analytics)
-        else:
-            print("❌ Falha ao inicializar a sessão do Analytics PostgreSQL.")
-            
-    except Exception as e:
-        print(f"❌ Erro configurando Analytics PostgreSQL: {e}")
-        traceback.print_exc()
-
-# --- Inicialização Global ---
-print("🚀 Iniciando pré-configuração do ambiente...")
-test_ocr()
-setup_analytics_postgresql()
-
-print("📊 Carregando a aplicação Flask do Dashboard...")
-try:
-    from analytics.dashboard_app_render_fixed import app
-    print("✅ Aplicação Flask importada com sucesso.")
-    
-    # Verificações de sanidade
-    template_path = os.path.join(app.template_folder, 'dashboard_analytics_clean.html')
-    css_path = os.path.join(app.static_folder, 'dashboard_cyberpunk.css')
-    print(f"🔍 Verificando template: {'OK' if os.path.exists(template_path) else 'ERRO'}")
-    print(f"🔍 Verificando CSS: {'OK' if os.path.exists(css_path) else 'ERRO'}")
-
-except ImportError:
-    print("❌ CRÍTICO: Não foi possível importar 'app' de 'analytics.dashboard_app_render_fixed'.")
-    print("Verifique se o arquivo existe e não contém erros de sintaxe.")
-    app = None # Garante que o Gunicorn falhe de forma explícita se a importação falhar
-except Exception as e:
-    print(f"❌ CRÍTICO: Erro inesperado ao carregar a aplicação Flask: {e}")
-    traceback.print_exc()
-    app = None
-
-if app:
-    print("🎉 Configuração concluída. Aplicação Flask pronta para ser servida pelo Gunicorn.")
-else:
-    print("🔥 Falha na inicialização. A aplicação não pode ser iniciada.")
-
-# O Gunicorn irá procurar pela variável 'app' neste arquivo.
-# O comando 'app.run()' não é mais necessário.
-print("╭────────────────────────────────────────────────────────╮")
-print("│              🎼 MAESTROFIN DASHBOARD 🎼                │")
-print("│                 🎨 Render Deploy                       │")
-print("│               ⚡ Gratuito e Confiável                  │")
-print("╰────────────────────────────────────────────────────────╯")
-print("="*60)
-
-# Verificar dependências
-try:
-    import flask
-    from flask import Flask
-    print("✅ Flask detectado")
-except ImportError as e:
-    print(f"❌ Flask não encontrado: {e}")
-    print("📦 Instalando dependências...")
-    os.system("pip install -r requirements.txt")
-    import flask
-
-# Configurações para Render
-print("🔧 Configurando ambiente Render...")
-
-def main():
-    """Função principal - inicia BOT + DASHBOARD no Render"""
-    try:
-        print("✅ Flask detectado")
-        print("� Configurando ambiente Render...")
-        
-        # Testar OCR
-        test_ocr()
-        
-        # 🚀 MIGRAR ANALYTICS PARA POSTGRESQL
-        print("🔄 Configurando Analytics PostgreSQL...")
-        setup_analytics_postgresql()
-        
-        # 🤖 INICIAR BOT TELEGRAM EM BACKGROUND
-        print("🤖 Iniciando Bot Telegram...")
-        import threading
-        import subprocess
-        import sys
-        
-        def run_bot():
-            """Executa o bot Telegram em thread separada"""
-            try:
-                print("🚀 Bot Telegram iniciando...")
-                # Importar e executar o bot
-                import bot
-                bot.main()
-            except Exception as e:
-                print(f"❌ Erro no Bot Telegram: {e}")
-        
-        # Iniciar bot em thread separada
-        bot_thread = threading.Thread(target=run_bot, daemon=True)
-        bot_thread.start()
-        print("✅ Bot Telegram rodando em background!")
-        
-        print("📊 Carregando Dashboard Analytics...")
-        from analytics.dashboard_app_render_fixed import app
-        
-        # Render usa PORT automaticamente
-        port = int(os.environ.get('PORT', 10000))
-        host = '0.0.0.0'
-        
-        print(f"🌐 Dashboard iniciando em {host}:{port}")
-        print(f"📁 Template dir: {app.template_folder}")
-        print(f"📁 Static dir: {app.static_folder}")
-        
-        # Verificações para Render
-        template_path = os.path.join(app.template_folder, 'dashboard_analytics_clean.html')
-        css_path = os.path.join(app.static_folder, 'dashboard_cyberpunk.css')
-        
-        print(f"✅ Template: {'OK' if os.path.exists(template_path) else 'ERRO'}")
-        print(f"✅ CSS: {'OK' if os.path.exists(css_path) else 'ERRO'}")
-        
-        print("🚀 Iniciando servidor Flask...")
-        print("🎨 Dashboard disponível no Render!")
-        print("🤖 Bot Telegram ativo e processando mensagens!")
-        
-        # Iniciar Flask (bloqueia thread principal)
-        app.run(host=host, port=port, debug=False, threaded=True)
-        
-    except Exception as e:
-        print(f"❌ Erro crítico: {e}")
-        import traceback
-        traceback.print_exc()
-
-def test_ocr():
-    """Testa configuração OCR no Render com suporte a Secret Files"""
-    print("� Testando OCR no Render...")
-    
-    try:
-        print("🔧 Testando configuração OCR...")
-        
-        # Verificar métodos disponíveis de credenciais
-        secret_file = '/etc/secrets/google_vision_credentials.json'
-        env_var_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
-        env_var_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-        
-        print(f"📋 Secret File (/etc/secrets/...): {'✅' if os.path.exists(secret_file) else '❌'}")
-        print(f"📋 GOOGLE_APPLICATION_CREDENTIALS: {'✅' if env_var_path else '❌'}")
-        print(f"📋 GOOGLE_VISION_CREDENTIALS_JSON: {'✅' if env_var_json else '❌'}")
-        
-        gemini_key = os.getenv('GEMINI_API_KEY')
-        print(f"📋 GEMINI_API_KEY: {'✅' if gemini_key else '❌'}")
-        
-        credentials_configured = False
-        
-        # Testar Secret Files (método mais seguro)
-        if os.path.exists(secret_file):
-            try:
-                with open(secret_file, 'r') as f:
-                    secret_data = json.load(f)
-                project_id = secret_data.get('project_id', 'N/A')
-                print(f"✅ Secret File válido: projeto {project_id}")
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = secret_file
-                credentials_configured = True
-            except Exception as e:
-                print(f"❌ Erro no Secret File: {e}")
-        
-        # Fallback para variável de ambiente JSON
-        elif env_var_json:
-            try:
-                import tempfile
-                creds_data = json.loads(env_var_json)
-                project_id = creds_data.get('project_id', 'N/A')
-                print(f"✅ JSON Credenciais válido: projeto {project_id}")
-                
-                # Criar arquivo temporário
-                temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-                json.dump(creds_data, temp_file)
-                temp_file.close()
-                
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file.name
-                credentials_configured = True
-            except Exception as e:
-                print(f"❌ Erro JSON credenciais: {e}")
-        
-        # Testar Google Vision se credenciais configuradas
+        # Testar conexão
         if credentials_configured:
             try:
                 from google.cloud import vision
                 client = vision.ImageAnnotatorClient()
-                print("✅ Cliente Google Vision criado com sucesso!")
+                print("✅ Cliente Google Vision inicializado")
             except Exception as e:
-                print(f"❌ Erro Google Vision: {e}")
-        
-        # Testar Gemini
-        if gemini_key:
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=gemini_key)
-                print("✅ Gemini configurado com sucesso!")
-            except Exception as e:
-                print(f"❌ Erro Gemini: {e}")
-        
-        print("🔧 Teste OCR concluído!")
-        
+                print(f"❌ Erro ao inicializar Google Vision: {e}")
+                
     except Exception as e:
-        print(f"❌ Erro no teste OCR: {e}")
+        print(f"❌ Erro na configuração de credenciais: {e}")
 
-def setup_analytics_postgresql():
-    """🚀 Configura Analytics PostgreSQL no Render"""
+def setup_analytics():
+    """Configura sistema de analytics PostgreSQL"""
     print("🔧 Configurando Analytics PostgreSQL...")
     
     try:
-        # Testar se PostgreSQL está disponível
         database_url = os.getenv('DATABASE_URL')
         if not database_url:
-            print("❌ DATABASE_URL não configurado")
+            print("⚠️ DATABASE_URL não configurado")
             return
-            
-        print(f"✅ DATABASE_URL configurado")
         
-        # Importar e inicializar analytics PostgreSQL
         from analytics.bot_analytics_postgresql import get_analytics
-        pg_analytics = get_analytics()
+        analytics = get_analytics()
         
-        if pg_analytics.Session:
+        if analytics and hasattr(analytics, 'Session') and analytics.Session:
             print("✅ Analytics PostgreSQL inicializado")
-            
-            # Criar dados sintéticos na primeira execução
-            stats = pg_analytics.get_daily_stats()
-            if stats.get('total_commands', 0) == 0:
-                print("📊 Primeira execução - criando dados sintéticos...")
-                from migrate_analytics_postgresql import create_synthetic_data
-                create_synthetic_data(pg_analytics)
-                print("✅ Dados sintéticos criados!")
-            else:
-                print(f"📊 Analytics ativo: {stats.get('total_commands', 0)} comandos registrados")
+            return analytics
         else:
             print("❌ Falha ao inicializar Analytics PostgreSQL")
+            return None
             
     except Exception as e:
-        print(f"❌ Erro configurando Analytics PostgreSQL: {e}")
-        import traceback
+        print(f"❌ Erro na configuração do Analytics: {e}")
+        return None
+
+async def run_bot_async():
+    """Executa o bot Telegram usando asyncio corretamente"""
+    try:
+        print("🤖 Iniciando Bot Telegram com asyncio...")
+        
+        # Configurar logging
+        logging.basicConfig(
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            level=logging.INFO
+        )
+        
+        # Importar e executar o bot
+        import bot
+        
+        # Executar a função main do bot (que é síncrona)
+        bot.main()
+        
+    except Exception as e:
+        print(f"❌ Erro no Bot Telegram: {e}")
         traceback.print_exc()
+
+def start_bot_thread():
+    """Inicia o bot em uma thread separada com asyncio"""
+    def run_bot():
+        try:
+            # Criar novo event loop para esta thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Executar o bot
+            loop.run_until_complete(run_bot_async())
+        except Exception as e:
+            print(f"❌ Erro na thread do bot: {e}")
+            traceback.print_exc()
+    
+    # Criar e iniciar thread
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+    print("✅ Bot Telegram iniciado em thread separada")
+
+def create_app():
+    """Cria e configura a aplicação Flask"""
+    try:
+        from analytics.dashboard_app_render_fixed import app
+        print("✅ Aplicação Flask carregada")
+        return app
+    except Exception as e:
+        print(f"❌ Erro ao carregar aplicação Flask: {e}")
+        traceback.print_exc()
+        return None
+
+def main():
+    """Função principal - configura tudo e inicia os serviços"""
+    try:
+        print("🚀 Iniciando configuração do ambiente...")
+        
+        # Configurar credenciais e analytics
+        setup_credentials()
+        setup_analytics()
+        
+        # Iniciar bot em thread separada
+        start_bot_thread()
+        
+        # Carregar aplicação Flask
+        app = create_app()
+        if not app:
+            print("❌ Falha crítica: não foi possível carregar a aplicação Flask")
+            return
+        
+        # Configurar servidor
+        port = int(os.environ.get('PORT', 10000))
+        host = '0.0.0.0'
+        
+        print(f"🌐 Servidor Flask iniciando em {host}:{port}")
+        print("🤖 Bot Telegram rodando em paralelo")
+        print("🚀 Sistema totalmente operacional!")
+        
+        # Iniciar servidor Flask
+        app.run(host=host, port=port, debug=False, threaded=True)
+        
+    except Exception as e:
+        print(f"❌ Erro crítico na inicialização: {e}")
+        traceback.print_exc()
+
+# Executar configurações iniciais
+print("⚡ Executando pré-configuração...")
+setup_credentials()
+setup_analytics()
+
+# Carregar aplicação Flask para Gunicorn
+try:
+    from analytics.dashboard_app_render_fixed import app
+    print("✅ Aplicação Flask pronta para Gunicorn")
+except Exception as e:
+    print(f"❌ Erro ao carregar Flask para Gunicorn: {e}")
+    app = None
 
 if __name__ == '__main__':
     main()
