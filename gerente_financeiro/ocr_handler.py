@@ -24,16 +24,34 @@ logger = logging.getLogger(__name__)
 def setup_google_credentials():
     """Configura as credenciais do Google Vision"""
     try:
-        # Caminho para o arquivo de credenciais
-        credentials_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'credenciais', 'googlevision2.json')
+        # 🔧 CORREÇÃO URGENTE - Melhor detecção de credenciais
         
-        if os.path.exists(credentials_path):
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-            logger.info(f"✅ Credenciais Google Vision configuradas: {credentials_path}")
-            return True
-        else:
-            logger.error(f"❌ Arquivo de credenciais não encontrado: {credentials_path}")
-            return False
+        # 1. Verificar se já está configurado no ambiente
+        if os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+            cred_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if os.path.exists(cred_path):
+                logger.info(f"✅ Credenciais já configuradas no ambiente: {cred_path}")
+                return True
+        
+        # 2. Tentar arquivos de credenciais locais
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        possible_paths = [
+            os.path.join(base_dir, 'credenciais', 'googlevision2.json'),
+            os.path.join(base_dir, 'credenciais', 'service-account-key.json'),
+            os.path.join(base_dir, 'credenciais', 'credentials.json'),
+        ]
+        
+        for credentials_path in possible_paths:
+            if os.path.exists(credentials_path):
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+                logger.info(f"✅ Credenciais Google Vision configuradas: {credentials_path}")
+                return True
+                
+        # 3. Se nenhum arquivo encontrado
+        logger.warning("⚠️ Nenhum arquivo de credenciais Google Vision encontrado")
+        logger.info("📋 Tentando usar credenciais do ambiente Render...")
+        return True  # Continua mesmo sem arquivo local (para Render)
+        
     except Exception as e:
         logger.error(f"❌ Erro ao configurar credenciais: {e}")
         return False
@@ -167,14 +185,17 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             await message.edit_text("❌ Não foi possível processar o arquivo enviado.")
             return ConversationHandler.END
 
-        await message.edit_text("🔎 Lendo conteúdo com Google Vision...")
+        await message.edit_text("🔎 Analisando imagem com OCR...")
         
-        # Verificar se credenciais estão configuradas
-        if not setup_google_credentials():
-            await message.edit_text("❌ Erro na configuração do Google Vision. Contacte o administrador.")
-            return ConversationHandler.END
-            
+        # 🚨 CORREÇÃO URGENTE - OCR mais robusto
+        texto_ocr = ""
+        
         try:
+            # Configurar credenciais
+            setup_google_credentials()
+            
+            # Tentar Google Vision primeiro
+            logger.info("🔍 Tentando Google Vision API...")
             vision_image = vision.Image(content=image_content_for_vision)
             vision_client = vision.ImageAnnotatorClient()
             response = vision_client.document_text_detection(image=vision_image)
@@ -183,17 +204,53 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                 raise Exception(f"Google Vision API error: {response.error.message}")
                 
             texto_ocr = response.full_text_annotation.text
+            logger.info(f"✅ Google Vision extraiu {len(texto_ocr)} caracteres")
+            
         except Exception as vision_error:
-            logger.error(f"Erro no Google Vision: {vision_error}")
-            await message.edit_text(f"❌ Erro na leitura da imagem: {str(vision_error)}")
-            return ConversationHandler.END
+            logger.error(f"❌ Google Vision falhou: {vision_error}")
+            
+            # 🚨 TENTATIVA DE FALLBACK - Gemini Vision
+            logger.info("🔄 Tentando fallback com Gemini Vision...")
+            await message.edit_text("🔄 Tentando método alternativo de OCR...")
+            
+            texto_ocr = await ocr_fallback_gemini(image_content_for_vision)
+            
+            if not texto_ocr:
+                # 🚨 ÚLTIMO FALLBACK - Input manual
+                logger.info("🔄 Tentando fallback manual...")
+                await message.edit_text(
+                    "⚠️ <b>OCR temporariamente indisponível</b>\n\n"
+                    "🔧 Por favor, <b>digite manualmente</b> os dados da nota:\n\n"
+                    "📝 <b>Formato:</b>\n"
+                    "<code>Local: Nome do estabelecimento\n"
+                    "Valor: 25.50\n"
+                    "Data: 24/08/2025\n"
+                    "Categoria: Alimentação</code>\n\n"
+                    "💡 <b>Ou envie o texto da nota fiscal:</b>",
+                    parse_mode='HTML'
+                )
+                return ConversationHandler.END
+            else:
+                logger.info(f"✅ Fallback Gemini conseguiu extrair {len(texto_ocr)} caracteres")
 
+        # 🚨 MELHORIA URGENTE - Logs detalhados para debug
         if not texto_ocr or len(texto_ocr.strip()) < 20:
+            logger.warning(f"⚠️ Texto OCR insuficiente. Tamanho: {len(texto_ocr) if texto_ocr else 0}")
+            logger.warning(f"Texto extraído: '{texto_ocr[:100] if texto_ocr else 'None'}...'")
+            
             await message.edit_text(
-                "⚠️ Não consegui extrair dados claros desta imagem.",
-                parse_mode='Markdown'
+                "⚠️ <b>Texto insuficiente extraído</b>\n\n"
+                "🔧 <b>Possíveis soluções:</b>\n"
+                "📸 Tire uma foto mais clara\n"
+                "💡 Envie o texto manualmente\n"
+                "🔄 Tente novamente com melhor iluminação\n\n"
+                "📝 <b>Ou digite os dados:</b>\n"
+                "<code>Local: Nome\nValor: 25.50\nData: 24/08/2025</code>",
+                parse_mode='HTML'
             )
             return ConversationHandler.END
+
+        logger.info(f"✅ OCR extraiu {len(texto_ocr)} caracteres com sucesso")
 
         await message.edit_text("📚 Buscando categorias para análise...")
         db: Session = next(get_db())
@@ -340,3 +397,46 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
         finally:
             db.close()
             context.user_data.pop('dados_ocr', None)
+
+# 🚨 MÉTODO FALLBACK - OCR com Gemini Vision
+async def ocr_fallback_gemini(image_content):
+    """Método alternativo usando apenas Gemini Vision quando Google Vision falha"""
+    try:
+        if not config.GEMINI_API_KEY:
+            logger.error("❌ GEMINI_API_KEY não configurado para fallback")
+            return None
+            
+        logger.info("🔄 Usando Gemini Vision como fallback...")
+        
+        # Configurar Gemini
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Upload da imagem para Gemini
+        import PIL.Image
+        import io
+        
+        # Converter bytes para PIL Image
+        image = PIL.Image.open(io.BytesIO(image_content))
+        
+        # Prompt específico para OCR
+        prompt = """
+        Analise esta imagem de nota fiscal ou comprovante e extraia APENAS o texto visível.
+        Retorne todo o texto que conseguir ler, mantendo a estrutura original.
+        Se não conseguir ler nada, retorne 'ERRO_OCR'.
+        """
+        
+        # Enviar para Gemini Vision
+        response = await model.generate_content_async([prompt, image])
+        texto_extraido = response.text.strip()
+        
+        if texto_extraido and texto_extraido != 'ERRO_OCR' and len(texto_extraido) > 10:
+            logger.info(f"✅ Gemini Vision extraiu {len(texto_extraido)} caracteres")
+            return texto_extraido
+        else:
+            logger.warning("⚠️ Gemini Vision não conseguiu extrair texto")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Erro no fallback Gemini Vision: {e}")
+        return None
