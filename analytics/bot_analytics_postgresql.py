@@ -13,6 +13,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
 
+import functools
+
 # Base para modelos SQLAlchemy
 Base = declarative_base()
 
@@ -268,3 +270,65 @@ def get_analytics():
 
 # Para compatibilidade com código existente
 analytics = get_analytics()
+
+def track_command(command_name: str):
+    """
+    Decorator para rastrear o uso de comandos de forma assíncrona,
+    compatível com a infraestrutura do PostgreSQL.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(update, context, *args, **kwargs):
+            # Obter a instância correta do analytics
+            pg_analytics = get_analytics()
+            
+            user = update.effective_user
+            user_id = user.id if user else None
+            username = user.username if user else 'N/A'
+            
+            start_time = datetime.utcnow()
+            
+            try:
+                # Executa a função de handler original
+                result = await func(update, context, *args, **kwargs)
+                
+                execution_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                
+                # Registrar sucesso
+                pg_analytics.track_command_usage(
+                    user_id=user_id,
+                    username=username,
+                    command=command_name,
+                    success=True,
+                    execution_time_ms=execution_time
+                )
+                return result
+                
+            except Exception as e:
+                execution_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                
+                # Registrar falha
+                pg_analytics.track_command_usage(
+                    user_id=user_id,
+                    username=username,
+                    command=command_name,
+                    success=False,
+                    execution_time_ms=execution_time
+                )
+                
+                # Log detalhado do erro
+                import traceback
+                pg_analytics.log_error(
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    stack_trace=traceback.format_exc(),
+                    user_id=user_id,
+                    username=username,
+                    command=command_name
+                )
+                
+                # Re-lança a exceção para que o bot possa tratá-la (ex: enviar msg de erro)
+                raise
+
+        return wrapper
+    return decorator
