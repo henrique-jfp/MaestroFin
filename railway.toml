@@ -6,7 +6,7 @@ python = "3.11"
 
 # Comando para iniciar o aplicativo
 [deploy]
-start = "python3 launcher_railway.py"
+start = "python3 dashboard_only.py"
 
 # Variáveis de ambiente necessárias
 [env]

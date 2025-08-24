@@ -1,3 +1,3 @@
-# web: python launcher_prod.py DEPLOY RAILWAY - MAESTROFIN 24/7
+# Dashboard Analytics para Railway - MAESTROFIN 24/7
 
-web: python launcher_railway.py
+web: python dashboard_only.py

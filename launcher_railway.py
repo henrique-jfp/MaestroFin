@@ -57,9 +57,13 @@ def start_dashboard():
         from analytics.dashboard_app import app
         port = int(os.getenv('PORT', 8080))
         print(f"📊 Dashboard rodando na porta {port}")
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+        print(f"📊 Template dir: {app.template_folder}")
+        print(f"📊 Static dir: {app.static_folder}")
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
     except Exception as e:
         print(f"❌ Erro no dashboard: {e}")
+        import traceback
+        traceback.print_exc()
 
 def start_bot():
     """Inicia bot em processo separado"""
@@ -75,10 +79,24 @@ def start_bot():
         return False
     return True
 
-# Iniciar dashboard em thread separada
-dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
-dashboard_thread.start()
-print("📊 Dashboard iniciado na porta especificada")
+# Determinar qual serviço rodar baseado na variável de ambiente
+service_mode = os.getenv('SERVICE_MODE', 'both')  # 'bot', 'dashboard', ou 'both'
 
-# Iniciar bot no processo principal
-start_bot()
+if service_mode == 'dashboard':
+    print("🎯 Modo Dashboard - Executando apenas dashboard")
+    start_dashboard()
+elif service_mode == 'bot':
+    print("🎯 Modo Bot - Executando apenas bot")
+    start_bot()
+else:
+    print("🎯 Modo Completo - Executando bot e dashboard")
+    # Iniciar dashboard em thread separada
+    dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
+    dashboard_thread.start()
+    print("📊 Dashboard iniciado na porta especificada")
+    
+    # Dar tempo para dashboard iniciar
+    time.sleep(2)
+    
+    # Iniciar bot no processo principal
+    start_bot()
