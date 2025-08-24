@@ -92,10 +92,10 @@ def setup_analytics():
         print(f"❌ Erro na configuração do Analytics: {e}")
         return None
 
-async def run_bot_async():
-    """Executa o bot Telegram usando asyncio corretamente"""
+def run_bot_sync():
+    """Executa o bot Telegram de forma síncrona (evita problema de signal handlers)"""
     try:
-        print("🤖 Iniciando Bot Telegram com asyncio...")
+        print("🤖 Iniciando Bot Telegram...")
         
         # Configurar logging
         logging.basicConfig(
@@ -103,10 +103,8 @@ async def run_bot_async():
             level=logging.INFO
         )
         
-        # Importar e executar o bot
+        # Importar e executar o bot diretamente
         import bot
-        
-        # Executar a função main do bot (que é síncrona)
         bot.main()
         
     except Exception as e:
@@ -114,15 +112,11 @@ async def run_bot_async():
         traceback.print_exc()
 
 def start_bot_thread():
-    """Inicia o bot em uma thread separada com asyncio"""
+    """Inicia o bot em uma thread separada (sem asyncio para evitar problemas de signal)"""
     def run_bot():
         try:
-            # Criar novo event loop para esta thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # Executar o bot
-            loop.run_until_complete(run_bot_async())
+            # Executar bot diretamente sem asyncio na thread
+            run_bot_sync()
         except Exception as e:
             print(f"❌ Erro na thread do bot: {e}")
             traceback.print_exc()
