@@ -532,3 +532,58 @@ body::before {
     font-weight: 600;
     font-size: 0.8rem;
 }
+
+/* ===== TABS ESPECÍFICAS ===== */
+.metric-header {
+    background: rgba(0, 255, 255, 0.1);
+    border: 1px solid var(--neon-cyan);
+    border-radius: var(--border-radius);
+    padding: 10px;
+    margin-bottom: 15px;
+    color: var(--neon-cyan);
+    font-weight: bold;
+    text-align: center;
+}
+
+.tab-content .status-card {
+    margin-bottom: 10px;
+    min-height: auto;
+}
+
+.tab-content .status-card .metric-value {
+    font-size: 1.2em;
+    margin-bottom: 5px;
+}
+
+.tab-content .status-card .metric-label {
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+/* Melhorias nos botões das tabs internas */
+.tab-content .tabs {
+    margin-bottom: 20px;
+}
+
+.tab-content .tab-button {
+    font-size: 0.9em;
+    padding: 8px 16px;
+    margin-right: 5px;
+}
+
+/* ===== RESPONSIVIDADE PARA TABS ===== */
+@media (max-width: 768px) {
+    .tab-content .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .tab-content .tabs {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .tab-content .tab-button {
+        flex: 1;
+        min-width: 100px;
+    }
+}

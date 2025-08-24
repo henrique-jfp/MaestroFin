@@ -171,6 +171,8 @@
 
         // Função para alternar tabs
         function showTab(tabName) {
+            console.log('Mudando para tab:', tabName); // Debug
+            
             // Ocultar todas as tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -182,14 +184,54 @@
             });
             
             // Mostrar tab selecionada
-            document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
+            const tabElement = document.getElementById(tabName);
+            if (tabElement) {
+                tabElement.classList.add('active');
+            }
+            
+            // Ativar botão clicado
+            const clickedButton = event ? event.target : document.querySelector(`[onclick="showTab('${tabName}')"]`);
+            if (clickedButton) {
+                clickedButton.classList.add('active');
+            }
             
             currentTab = tabName;
             loadTabData(tabName);
         }
 
-        // Carregar dados da tab
+        // Função para carregar usuários ativos por período
+        async function loadActiveUsers(period) {
+            try {
+                const response = await fetch(`/api/users/active?period=${period}`);
+                const data = await response.json();
+                
+                const content = document.getElementById('activeUsersContent');
+                if (data.users && data.users.length > 0) {
+                    content.innerHTML = `
+                        <div class="metric-header">
+                            <span>Total: ${data.total_active_users} usuários ativos (${period})</span>
+                        </div>
+                        ${data.users.slice(0, 10).map(user => `
+                            <div class="status-card">
+                                <div class="metric-value">${user.username || 'Usuário'}</div>
+                                <div class="metric-label">${user.commands_count} comandos • Último: ${new Date(user.last_activity).toLocaleString('pt-BR')}</div>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    content.innerHTML = '<div class="status-card">NENHUM USUÁRIO ATIVO NO PERÍODO</div>';
+                }
+                
+                // Atualizar botões ativos
+                document.querySelectorAll('#users .tab-button').forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+                
+            } catch (error) {
+                console.error('Erro ao carregar usuários:', error);
+                document.getElementById('activeUsersContent').innerHTML = 
+                    '<div class="status-card">ERRO AO CARREGAR DADOS</div>';
+            }
+        }
         function loadTabData(tabName) {
             switch(tabName) {
                 case 'overview':
@@ -265,22 +307,98 @@
 
         // Carregar dados dos usuários
         async function loadUsersData() {
-            // Implementar carregamento de dados dos usuários
+            try {
+                const response = await fetch('/api/users/active?period=24h');
+                const data = await response.json();
+                
+                const content = document.getElementById('activeUsersContent');
+                if (data.users && data.users.length > 0) {
+                    content.innerHTML = data.users.map(user => `
+                        <div class="status-card">
+                            <div class="metric-value">${user.username || 'Usuário'}</div>
+                            <div class="metric-label">${user.commands_count} comandos</div>
+                        </div>
+                    `).join('');
+                } else {
+                    content.innerHTML = '<div class="status-card">NENHUM USUÁRIO ATIVO</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar usuários:', error);
+                document.getElementById('activeUsersContent').innerHTML = 
+                    '<div class="status-card">ERRO AO CARREGAR</div>';
+            }
         }
 
         // Carregar dados dos comandos
         async function loadCommandsData() {
-            // Implementar carregamento de dados dos comandos
+            try {
+                const response = await fetch('/api/commands/ranking?days=7');
+                const data = await response.json();
+                
+                const content = document.getElementById('commandsContent');
+                if (data && data.length > 0) {
+                    content.innerHTML = data.map(cmd => `
+                        <div class="status-card">
+                            <div class="metric-value">/${cmd.command}</div>
+                            <div class="metric-label">${cmd.total_uses} usos • ${cmd.success_rate}% sucesso</div>
+                        </div>
+                    `).join('');
+                } else {
+                    content.innerHTML = '<div class="status-card">NENHUM COMANDO REGISTRADO</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar comandos:', error);
+                document.getElementById('commandsContent').innerHTML = 
+                    '<div class="status-card">ERRO AO CARREGAR</div>';
+            }
         }
 
         // Carregar dados de performance
         async function loadPerformanceData() {
-            // Implementar carregamento de dados de performance
+            try {
+                const response = await fetch('/api/performance/metrics?hours=24');
+                const data = await response.json();
+                
+                const content = document.getElementById('performanceContent');
+                if (data && data.length > 0) {
+                    content.innerHTML = data.map(perf => `
+                        <div class="status-card">
+                            <div class="metric-value">/${perf.command}</div>
+                            <div class="metric-label">${perf.avg_time}ms médio • ${perf.count} execuções</div>
+                        </div>
+                    `).join('');
+                } else {
+                    content.innerHTML = '<div class="status-card">DADOS DE PERFORMANCE INDISPONÍVEIS</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar performance:', error);
+                document.getElementById('performanceContent').innerHTML = 
+                    '<div class="status-card">ERRO AO CARREGAR</div>';
+            }
         }
 
         // Carregar dados de erros
         async function loadErrorsData() {
-            // Implementar carregamento de dados de erros
+            try {
+                const response = await fetch('/api/errors/detailed?days=7');
+                const data = await response.json();
+                
+                const content = document.getElementById('errorsContent');
+                if (data && data.error_analysis && data.error_analysis.length > 0) {
+                    content.innerHTML = data.error_analysis.map(error => `
+                        <div class="status-card">
+                            <div class="metric-value">${error.error_type}</div>
+                            <div class="metric-label">${error.error_count} ocorrências • ${error.affected_users} usuários</div>
+                        </div>
+                    `).join('');
+                } else {
+                    content.innerHTML = '<div class="status-card">NENHUM ALERTA DETECTADO ✅</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar alertas:', error);
+                document.getElementById('errorsContent').innerHTML = 
+                    '<div class="status-card">ERRO AO CARREGAR</div>';
+            }
         }
 
         // Atualizar gráficos
