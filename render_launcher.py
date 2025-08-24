@@ -8,7 +8,135 @@ import os
 import sys
 import json
 
+#!/usr/bin/env python3
+"""
+🎨 MAESTROFIN DASHBOARD - RENDER DEPLOY
+Launcher otimizado para Render com Gunicorn.
+Este script configura e expõe a aplicação Flask para ser servida pelo Gunicorn.
+O bot é iniciado como um processo 'worker' separado, conforme definido no Procfile.
+"""
+
+import os
+import sys
+import json
+import traceback
+
 print("\n" + "="*60)
+print("╭────────────────────────────────────────────────────────╮")
+print("│              🎼 MAESTROFIN DASHBOARD 🎼                │")
+print("│           🚀 Gunicorn Launcher for Render              │")
+print("╰────────────────────────────────────────────────────────╯")
+print("="*60)
+
+def test_ocr():
+    """Testa configuração OCR no Render com suporte a Secret Files"""
+    print("🔧 Testando configuração OCR...")
+    
+    try:
+        secret_file = '/etc/secrets/google_vision_credentials.json'
+        env_var_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
+        
+        print(f"📋 Verificando Secret File: {'✅ Encontrado' if os.path.exists(secret_file) else '❌ Não encontrado'}")
+        print(f"📋 Verificando Env Var JSON: {'✅ Definida' if env_var_json else '❌ Não definida'}")
+        
+        credentials_configured = False
+        
+        if os.path.exists(secret_file):
+            try:
+                with open(secret_file, 'r') as f:
+                    secret_data = json.load(f)
+                project_id = secret_data.get('project_id', 'N/A')
+                print(f"✅ Secret File válido, projeto: {project_id}")
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = secret_file
+                credentials_configured = True
+            except Exception as e:
+                print(f"❌ Erro ao processar Secret File: {e}")
+        
+        elif env_var_json:
+            try:
+                import tempfile
+                creds_data = json.loads(env_var_json)
+                project_id = creds_data.get('project_id', 'N/A')
+                
+                temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                json.dump(creds_data, temp_file)
+                temp_file.close()
+                
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file.name
+                credentials_configured = True
+                print(f"✅ Credenciais via Env Var configuradas, projeto: {project_id}")
+            except Exception as e:
+                print(f"❌ Erro ao processar credenciais da Env Var: {e}")
+
+        if credentials_configured:
+            print("✅ Credenciais do Google Cloud configuradas.")
+        else:
+            print("⚠️ Nenhuma credencial do Google Cloud foi configurada. OCR pode falhar.")
+
+    except Exception as e:
+        print(f"❌ Erro crítico no teste de OCR: {e}")
+        traceback.print_exc()
+
+def setup_analytics_postgresql():
+    """Configura e migra o banco de dados de analytics para PostgreSQL."""
+    print("🔧 Configurando Analytics com PostgreSQL...")
+    
+    try:
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            print("⚠️ DATABASE_URL não encontrada. O Dashboard pode não funcionar.")
+            return
+            
+        print("✅ DATABASE_URL encontrada.")
+        
+        from analytics.bot_analytics_postgresql import get_analytics
+        pg_analytics = get_analytics()
+        
+        if pg_analytics and pg_analytics.Session:
+            print("✅ Sessão do Analytics PostgreSQL inicializada.")
+            
+            # Opcional: criar dados sintéticos se o banco estiver vazio
+            # from migrate_analytics_postgresql import create_synthetic_data
+            # create_synthetic_data(pg_analytics)
+        else:
+            print("❌ Falha ao inicializar a sessão do Analytics PostgreSQL.")
+            
+    except Exception as e:
+        print(f"❌ Erro configurando Analytics PostgreSQL: {e}")
+        traceback.print_exc()
+
+# --- Inicialização Global ---
+print("🚀 Iniciando pré-configuração do ambiente...")
+test_ocr()
+setup_analytics_postgresql()
+
+print("📊 Carregando a aplicação Flask do Dashboard...")
+try:
+    from analytics.dashboard_app_render_fixed import app
+    print("✅ Aplicação Flask importada com sucesso.")
+    
+    # Verificações de sanidade
+    template_path = os.path.join(app.template_folder, 'dashboard_analytics_clean.html')
+    css_path = os.path.join(app.static_folder, 'dashboard_cyberpunk.css')
+    print(f"🔍 Verificando template: {'OK' if os.path.exists(template_path) else 'ERRO'}")
+    print(f"🔍 Verificando CSS: {'OK' if os.path.exists(css_path) else 'ERRO'}")
+
+except ImportError:
+    print("❌ CRÍTICO: Não foi possível importar 'app' de 'analytics.dashboard_app_render_fixed'.")
+    print("Verifique se o arquivo existe e não contém erros de sintaxe.")
+    app = None # Garante que o Gunicorn falhe de forma explícita se a importação falhar
+except Exception as e:
+    print(f"❌ CRÍTICO: Erro inesperado ao carregar a aplicação Flask: {e}")
+    traceback.print_exc()
+    app = None
+
+if app:
+    print("🎉 Configuração concluída. Aplicação Flask pronta para ser servida pelo Gunicorn.")
+else:
+    print("🔥 Falha na inicialização. A aplicação não pode ser iniciada.")
+
+# O Gunicorn irá procurar pela variável 'app' neste arquivo.
+# O comando 'app.run()' não é mais necessário.
 print("╭────────────────────────────────────────────────────────╮")
 print("│              🎼 MAESTROFIN DASHBOARD 🎼                │")
 print("│                 🎨 Render Deploy                       │")

@@ -1,13 +1,15 @@
 # 🎨 Render Deploy Configuration
-# Configuração para deploy no Render (gratuito)
+# Arquitetura de Serviços Web + Worker para estabilidade máxima.
 
 services:
+  # --- Serviço Web: Dashboard com Gunicorn ---
   - type: web
     name: maestrofin-dashboard
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python render_launcher.py
+    startCommand: gunicorn --worker-class gevent --bind 0.0.0.0:$PORT render_launcher:app
+    healthCheckPath: /
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.3
@@ -16,13 +18,30 @@ services:
       - key: PYTHONDONTWRITEBYTECODE
         value: 1
       - key: RENDER_DEPLOY
-        value: true
-      # Adicione suas variáveis aqui:
+        value: "true"
+      # Adicione suas variáveis de ambiente aqui (serão compartilhadas com o bot)
       # - key: TELEGRAM_TOKEN
-      #   value: seu_token_aqui
-      # - key: GEMINI_API_KEY  
-      #   value: sua_key_aqui
-    # Health check endpoint
-    healthCheckPath: /
-    # Auto-deploy on push
-    autoDeploy: true
+      #   fromSecret: true
+      # - key: GEMINI_API_KEY
+      #   fromSecret: true
+      # - key: DATABASE_URL
+      #   fromSecret: true
+      # - key: GOOGLE_VISION_CREDENTIALS_JSON
+      #   fromSecret: true
+
+  # --- Serviço Worker: Bot do Telegram ---
+  - type: worker
+    name: maestrofin-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PYTHONDONTWRITEBYTECODE
+        value: 1
+      - key: RENDER_DEPLOY
+        value: "true"
