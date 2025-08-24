@@ -138,19 +138,20 @@ body::before {
     opacity: 0.8;
 }
 
-/* ===== NAVEGAÇÃO TABS ===== */
-.nav-tabs {
+/* ===== NAVEGAÇÃO TABS - CORREÇÃO URGENTE ===== */
+.tabs {
+    display: flex;
     background: var(--cyber-bg-secondary);
-    border: none;
+    border: 1px solid rgba(0, 255, 255, 0.3);
     border-radius: var(--border-radius);
     margin-bottom: 25px;
     padding: 5px;
-    display: flex;
-    flex-wrap: wrap;
     gap: 5px;
+    overflow-x: auto;
+    min-height: 50px;
 }
 
-.nav-tabs .nav-link {
+.tab-button {
     background: transparent;
     border: 1px solid rgba(0, 255, 255, 0.2);
     color: var(--text-secondary);
@@ -160,22 +161,249 @@ body::before {
     font-weight: bold;
     letter-spacing: 1px;
     transition: all 0.3s ease;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
     position: relative;
     overflow: hidden;
+    min-width: 120px;
+    text-align: center;
+    user-select: none;
+    flex-shrink: 0;
 }
 
-.nav-tabs .nav-link:hover {
-    color: var(--neon-cyan);
-    border-color: var(--neon-cyan);
-    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+.tab-button:hover {
+    color: var(--neon-cyan) !important;
+    border-color: var(--neon-cyan) !important;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3) !important;
     transform: translateY(-2px);
+    background: rgba(0, 255, 255, 0.05) !important;
 }
 
-.nav-tabs .nav-link.active {
-    background: rgba(0, 255, 255, 0.1);
+.tab-button.active {
+    background: rgba(0, 255, 255, 0.15) !important;
+    color: var(--neon-cyan) !important;
+    border-color: var(--neon-cyan) !important;
+    box-shadow: var(--glow-cyan) !important;
+    text-shadow: 0 0 10px var(--neon-cyan);
+}
+
+.tab-button:focus {
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: 2px;
+}
+
+/* ===== CONTEÚDO DAS TABS ===== */
+.tab-content {
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.tab-content.active {
+    display: block;
+    opacity: 1;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== MÉTRICAS GRID - RESPONSIVO ===== */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.metrics-grid .status-card {
+    text-align: center;
+    padding: 20px;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.metrics-grid .status-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(0, 255, 255, 0.4);
+}
+
+.metrics-grid .metric-value {
+    font-size: 2.5rem;
+    font-weight: bold;
     color: var(--neon-cyan);
-    border-color: var(--neon-cyan);
-    box-shadow: var(--glow-cyan);
+    text-shadow: var(--glow-cyan);
+    margin-bottom: 10px;
+    font-family: 'Courier New', monospace;
+}
+
+.metrics-grid .metric-label {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+
+/* ===== RESPONSIVO MOBILE - CORREÇÃO TOTAL ===== */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .header {
+        margin-bottom: 20px;
+        padding: 15px;
+    }
+    
+    .header h1 {
+        font-size: 1.8rem;
+        letter-spacing: 1px;
+    }
+    
+    .header::before {
+        font-size: 10px;
+        top: -12px;
+    }
+    
+    .tabs {
+        flex-direction: column;
+        padding: 10px;
+        gap: 8px;
+    }
+    
+    .tab-button {
+        padding: 15px;
+        min-width: auto;
+        width: 100%;
+        font-size: 1rem;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 10px;
+    }
+    
+    .metrics-grid .metric-value {
+        font-size: 2rem;
+    }
+    
+    .charts-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .chart-card {
+        padding: 15px;
+        max-height: none;
+    }
+    
+    .chart-container {
+        height: 200px;
+    }
+    
+    .chart-container canvas {
+        max-height: 200px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .metrics-grid .metric-value {
+        font-size: 1.8rem;
+    }
+    
+    .tab-button {
+        padding: 12px;
+        font-size: 0.9rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .chart-card {
+        padding: 10px;
+    }
+}
+
+/* ===== DEBUG E VISUAL FEEDBACK ===== */
+.debug-info {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: var(--neon-green);
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: 'Courier New', monospace;
+    border: 1px solid var(--neon-green);
+    z-index: 1000;
+    max-width: 300px;
+    word-break: break-all;
+}
+
+/* ===== LOADING STATES ===== */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.spinner {
+    border: 3px solid rgba(0, 255, 255, 0.3);
+    border-top: 3px solid var(--neon-cyan);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: cyber-spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+/* ===== ERRO STATES ===== */
+.error-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--neon-red);
+    border: 1px solid var(--neon-red);
+    border-radius: var(--border-radius);
+    background: rgba(255, 7, 58, 0.05);
+}
+
+/* ===== STATUS INDICATOR MELHORADO ===== */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 15px var(--neon-green);
+    animation: pulse-green 2s infinite;
+}
+
+.status-indicator span {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-family: 'Courier New', monospace;
 }
 
 /* ===== CARDS DE STATUS ===== */

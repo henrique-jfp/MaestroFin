@@ -169,9 +169,9 @@
         let currentTab = 'overview';
         let charts = {};
 
-        // Função para alternar tabs
+        // 🚨 CORREÇÃO URGENTE - Tabs clicáveis funcionais
         function showTab(tabName) {
-            console.log('Mudando para tab:', tabName); // Debug
+            console.log('🔄 Mudando para tab:', tabName); // Debug
             
             // Ocultar todas as tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
@@ -187,17 +187,37 @@
             const tabElement = document.getElementById(tabName);
             if (tabElement) {
                 tabElement.classList.add('active');
+                console.log('✅ Tab ativada:', tabName);
+            } else {
+                console.error('❌ Tab não encontrada:', tabName);
             }
             
-            // Ativar botão clicado
-            const clickedButton = event ? event.target : document.querySelector(`[onclick="showTab('${tabName}')"]`);
-            if (clickedButton) {
-                clickedButton.classList.add('active');
+            // Ativar botão clicado - Melhorada detecção
+            const activeButton = document.querySelector(`button[onclick*="showTab('${tabName}')"]`);
+            if (activeButton) {
+                activeButton.classList.add('active');
+                console.log('✅ Botão ativado');
             }
             
             currentTab = tabName;
             loadTabData(tabName);
         }
+
+        // 🔥 EVENTO DE CLIQUE DIRETO - Backup para garantir funcionamento
+        document.addEventListener('DOMContentLoaded', function() {
+            // Adicionar eventos de clique diretamente nos botões
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach((button, index) => {
+                const tabNames = ['overview', 'users', 'commands', 'performance', 'errors'];
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    console.log('🎯 Clique direto detectado:', tabNames[index]);
+                    showTab(tabNames[index]);
+                });
+            });
+            
+            console.log('✅ Event listeners adicionados a', tabButtons.length, 'botões');
+        });
 
         // Função para carregar usuários ativos por período
         async function loadActiveUsers(period) {

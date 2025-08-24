@@ -55,9 +55,11 @@ def health():
         'analytics_available': analytics_available
     })
 
+# 🚨 CORREÇÃO URGENTE - APIs completas para Analytics
+
 @app.route('/api/realtime')
 def realtime_stats():
-    """API para métricas em tempo real"""
+    """API para métricas em tempo real - CORRIGIDA"""
     if not analytics_available:
         return jsonify({'error': 'Analytics não disponível'})
     
@@ -152,6 +154,213 @@ def realtime_stats():
             'error': str(e),
             'timestamp': now.isoformat() if 'now' in locals() else datetime.now().isoformat()
         })
+
+# 🔥 NOVAS APIs FALTANTES - Correção Crítica
+
+@app.route('/api/users/active')
+def get_active_users():
+    """API para usuários ativos por período"""
+    if not analytics_available:
+        return jsonify({'error': 'Analytics não disponível'})
+    
+    period = request.args.get('period', '24h')
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect(analytics.db_path)
+        
+        # Calcular intervalo baseado no período
+        if period == '24h':
+            time_filter = "datetime('now', '-24 hours')"
+        elif period == '7d':
+            time_filter = "datetime('now', '-7 days')"
+        elif period == '30d':
+            time_filter = "datetime('now', '-30 days')"
+        else:
+            time_filter = "datetime('now', '-24 hours')"
+        
+        # Buscar usuários ativos
+        users = conn.execute(f"""
+            SELECT username, 
+                   COUNT(*) as commands_count,
+                   MAX(timestamp) as last_activity,
+                   MIN(timestamp) as first_activity
+            FROM command_usage 
+            WHERE timestamp >= {time_filter}
+            GROUP BY username
+            ORDER BY commands_count DESC
+            LIMIT 50
+        """).fetchall()
+        
+        # Total de usuários únicos
+        total_users = conn.execute(f"""
+            SELECT COUNT(DISTINCT username) 
+            FROM command_usage 
+            WHERE timestamp >= {time_filter}
+        """).fetchone()[0]
+        
+        conn.close()
+        
+        return jsonify({
+            'total_active_users': total_users,
+            'period': period,
+            'users': [
+                {
+                    'username': user[0],
+                    'commands_count': user[1],
+                    'last_activity': user[2],
+                    'first_activity': user[3]
+                } for user in users
+            ]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/api/commands/ranking')
+def get_commands_ranking():
+    """API para ranking de comandos"""
+    if not analytics_available:
+        return jsonify({'error': 'Analytics não disponível'})
+    
+    days = int(request.args.get('days', 7))
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect(analytics.db_path)
+        
+        # Ranking de comandos com taxa de sucesso
+        commands = conn.execute("""
+            SELECT command,
+                   COUNT(*) as total_uses,
+                   SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful_uses,
+                   AVG(execution_time_ms) as avg_execution_time,
+                   COUNT(DISTINCT username) as unique_users
+            FROM command_usage 
+            WHERE timestamp >= datetime('now', '-{} days')
+            GROUP BY command
+            ORDER BY total_uses DESC
+            LIMIT 20
+        """.format(days)).fetchall()
+        
+        conn.close()
+        
+        result = []
+        for cmd in commands:
+            success_rate = (cmd[2] / cmd[0]) * 100 if cmd[0] > 0 else 0
+            result.append({
+                'command': cmd[0],
+                'total_uses': cmd[0],
+                'successful_uses': cmd[2],
+                'success_rate': round(success_rate, 1),
+                'avg_execution_time': round(cmd[3] or 0, 2),
+                'unique_users': cmd[4]
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/api/performance/metrics')
+def get_performance_metrics():
+    """API para métricas de performance"""
+    if not analytics_available:
+        return jsonify({'error': 'Analytics não disponível'})
+    
+    hours = int(request.args.get('hours', 24))
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect(analytics.db_path)
+        
+        # Métricas de performance por comando
+        metrics = conn.execute("""
+            SELECT command,
+                   COUNT(*) as count,
+                   AVG(execution_time_ms) as avg_time,
+                   MIN(execution_time_ms) as min_time,
+                   MAX(execution_time_ms) as max_time
+            FROM command_usage 
+            WHERE timestamp >= datetime('now', '-{} hours')
+            AND execution_time_ms IS NOT NULL
+            GROUP BY command
+            ORDER BY avg_time DESC
+            LIMIT 20
+        """.format(hours)).fetchall()
+        
+        conn.close()
+        
+        return jsonify([
+            {
+                'command': metric[0],
+                'count': metric[1],
+                'avg_time': round(metric[2] or 0, 2),
+                'min_time': metric[3] or 0,
+                'max_time': metric[4] or 0
+            } for metric in metrics
+        ])
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/api/errors/detailed')
+def get_detailed_errors():
+    """API para análise detalhada de erros"""
+    if not analytics_available:
+        return jsonify({'error': 'Analytics não disponível'})
+    
+    days = int(request.args.get('days', 7))
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect(analytics.db_path)
+        
+        # Análise de erros por tipo
+        error_analysis = conn.execute("""
+            SELECT error_type,
+                   COUNT(*) as error_count,
+                   COUNT(DISTINCT username) as affected_users,
+                   MAX(timestamp) as last_occurrence
+            FROM error_logs 
+            WHERE timestamp >= datetime('now', '-{} days')
+            GROUP BY error_type
+            ORDER BY error_count DESC
+        """.format(days)).fetchall()
+        
+        # Erros recentes
+        recent_errors = conn.execute("""
+            SELECT error_type, error_message, command, username, timestamp
+            FROM error_logs 
+            WHERE timestamp >= datetime('now', '-{} days')
+            ORDER BY timestamp DESC
+            LIMIT 10
+        """.format(days)).fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            'error_analysis': [
+                {
+                    'error_type': error[0],
+                    'error_count': error[1],
+                    'affected_users': error[2],
+                    'last_occurrence': error[3]
+                } for error in error_analysis
+            ],
+            'recent_errors': [
+                {
+                    'error_type': error[0],
+                    'error_message': error[1][:100] + '...' if len(error[1]) > 100 else error[1],
+                    'command': error[2],
+                    'username': error[3],
+                    'timestamp': error[4]
+                } for error in recent_errors
+            ]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 if __name__ == '__main__':
     print("🚨 Iniciando MaestroFin Crisis Sensor Dashboard...")
