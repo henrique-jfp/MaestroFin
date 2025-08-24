@@ -154,105 +154,171 @@ async def _reply_with_summary(update_or_query, context: ContextTypes.DEFAULT_TYP
 
 async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Processa um arquivo (foto ou pdf) e retorna um estado de confirmação.
+    🚨 VERSÃO COMPLETAMENTE REESCRITA - OCR Ultra Robusto
     """
-    message = await update.message.reply_text("📸 Arquivo capturado! Começando a leitura...🤖📄")
+    
+    # 🔥 LOGS DETALHADOS PARA DEBUG
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    logger.info(f"🚀 OCR iniciado por usuário: {username} (ID: {user_id})")
+    
+    message = await update.message.reply_text("📸 Iniciando processamento OCR...")
+    
     try:
+        # ===== FASE 1: CAPTURA DO ARQUIVO =====
+        logger.info("📥 FASE 1: Capturando arquivo do Telegram")
+        
         is_photo = bool(update.message.photo)
         file_source = update.message.photo[-1] if is_photo else update.message.document
-
+        
+        logger.info(f"📄 Tipo de arquivo: {'Foto' if is_photo else 'Documento'}")
+        
+        if not is_photo and update.message.document:
+            logger.info(f"📎 MIME Type: {update.message.document.mime_type}")
+            logger.info(f"📎 Nome arquivo: {update.message.document.file_name}")
+        
         await message.edit_text("📥 Baixando arquivo do Telegram...")
+        
         telegram_file = await file_source.get_file()
         file_bytearray = await telegram_file.download_as_bytearray()
         file_bytes = bytes(file_bytearray)
-
+        
+        logger.info(f"✅ Arquivo baixado: {len(file_bytes)} bytes")
+        
+        # ===== FASE 2: PROCESSAMENTO DE PDF/IMAGEM =====
+        logger.info("🔄 FASE 2: Processando arquivo para OCR")
+        
         image_content_for_vision = None
-
-        # Lógica de processamento de PDF e Imagem (sem alterações)
+        
         if not is_photo and file_source.mime_type == 'application/pdf':
-            await message.edit_text("📄 PDF detectado! Convertendo para imagem...")
-            images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt='png')
-            if not images:
-                await message.edit_text("❌ Não foi possível converter o PDF para imagem.")
+            await message.edit_text("📄 Convertendo PDF para imagem...")
+            logger.info("📄 Detectado PDF - convertendo...")
+            
+            try:
+                from pdf2image import convert_from_bytes
+                images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt='png')
+                
+                if not images:
+                    logger.error("❌ Falha na conversão PDF->Imagem")
+                    await message.edit_text("❌ PDF não pôde ser convertido.")
+                    return ConversationHandler.END
+                
+                with io.BytesIO() as output:
+                    images[0].save(output, format="PNG")
+                    image_content_for_vision = output.getvalue()
+                    
+                logger.info(f"✅ PDF convertido: {len(image_content_for_vision)} bytes")
+                
+            except Exception as pdf_error:
+                logger.error(f"❌ Erro conversão PDF: {pdf_error}")
+                await message.edit_text(f"❌ Erro ao processar PDF: {str(pdf_error)}")
                 return ConversationHandler.END
-            with io.BytesIO() as output:
-                images[0].save(output, format="PNG")
-                image_content_for_vision = output.getvalue()
         else:
             image_content_for_vision = file_bytes
-
+            logger.info(f"✅ Imagem direta: {len(image_content_for_vision)} bytes")
+        
         if not image_content_for_vision:
-            await message.edit_text("❌ Não foi possível processar o arquivo enviado.")
+            logger.error("❌ Conteúdo da imagem está vazio")
+            await message.edit_text("❌ Arquivo não pôde ser processado.")
             return ConversationHandler.END
-
-        await message.edit_text("🔎 Analisando imagem com OCR...")
         
-        # 🚨 CORREÇÃO URGENTE - OCR mais robusto
+        # ===== FASE 3: OCR COM DUPLO FALLBACK =====
+        logger.info("🔍 FASE 3: Executando OCR")
+        await message.edit_text("🔎 Lendo texto da imagem...")
+        
         texto_ocr = ""
+        ocr_method_used = "Nenhum"
         
+        # 🥇 MÉTODO 1: Google Vision (Primário)
+        logger.info("🔍 Tentativa 1: Google Vision API")
         try:
-            # Configurar credenciais
             setup_google_credentials()
             
-            # Tentar Google Vision primeiro
-            logger.info("🔍 Tentando Google Vision API...")
+            client = vision.ImageAnnotatorClient()
             vision_image = vision.Image(content=image_content_for_vision)
-            vision_client = vision.ImageAnnotatorClient()
-            response = vision_client.document_text_detection(image=vision_image)
+            response = client.document_text_detection(image=vision_image)
             
             if response.error.message:
-                raise Exception(f"Google Vision API error: {response.error.message}")
-                
+                logger.error(f"❌ Google Vision API Error: {response.error.message}")
+                raise Exception(f"Google Vision API: {response.error.message}")
+            
             texto_ocr = response.full_text_annotation.text
-            logger.info(f"✅ Google Vision extraiu {len(texto_ocr)} caracteres")
+            ocr_method_used = "Google Vision"
+            
+            logger.info(f"✅ Google Vision: {len(texto_ocr)} caracteres extraídos")
             
         except Exception as vision_error:
-            logger.error(f"❌ Google Vision falhou: {vision_error}")
+            logger.warning(f"⚠️ Google Vision falhou: {vision_error}")
             
-            # 🚨 TENTATIVA DE FALLBACK - Gemini Vision
-            logger.info("🔄 Tentando fallback com Gemini Vision...")
-            await message.edit_text("🔄 Tentando método alternativo de OCR...")
+            # 🥈 MÉTODO 2: Gemini Vision (Fallback)
+            logger.info("🔄 Tentativa 2: Gemini Vision (Fallback)")
+            await message.edit_text("🔄 Tentando método alternativo...")
             
-            texto_ocr = await ocr_fallback_gemini(image_content_for_vision)
-            
-            if not texto_ocr:
-                # 🚨 ÚLTIMO FALLBACK - Input manual
-                logger.info("🔄 Tentando fallback manual...")
-                await message.edit_text(
-                    "⚠️ <b>OCR temporariamente indisponível</b>\n\n"
-                    "🔧 Por favor, <b>digite manualmente</b> os dados da nota:\n\n"
-                    "📝 <b>Formato:</b>\n"
-                    "<code>Local: Nome do estabelecimento\n"
-                    "Valor: 25.50\n"
-                    "Data: 24/08/2025\n"
-                    "Categoria: Alimentação</code>\n\n"
-                    "💡 <b>Ou envie o texto da nota fiscal:</b>",
-                    parse_mode='HTML'
-                )
-                return ConversationHandler.END
-            else:
-                logger.info(f"✅ Fallback Gemini conseguiu extrair {len(texto_ocr)} caracteres")
-
-        # 🚨 MELHORIA URGENTE - Logs detalhados para debug
-        if not texto_ocr or len(texto_ocr.strip()) < 20:
-            logger.warning(f"⚠️ Texto OCR insuficiente. Tamanho: {len(texto_ocr) if texto_ocr else 0}")
-            logger.warning(f"Texto extraído: '{texto_ocr[:100] if texto_ocr else 'None'}...'")
+            try:
+                if not config.GEMINI_API_KEY:
+                    raise Exception("GEMINI_API_KEY não configurado")
+                
+                genai.configure(api_key=config.GEMINI_API_KEY)
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                # Converter para PIL Image
+                from PIL import Image
+                pil_image = Image.open(io.BytesIO(image_content_for_vision))
+                
+                prompt = """
+                TAREFA: Extrair TODO o texto visível desta imagem de nota fiscal ou comprovante.
+                
+                INSTRUÇÕES:
+                - Leia TODOS os números, valores, nomes, datas que conseguir
+                - Mantenha a estrutura original do texto
+                - Inclua estabelecimento, valor total, data, forma de pagamento
+                - Se não conseguir ler NADA, retorne exatamente: ERRO_OCR
+                
+                RESPOSTA: Apenas o texto extraído, sem comentários.
+                """
+                
+                response = await model.generate_content_async([prompt, pil_image])
+                texto_gemini = response.text.strip()
+                
+                if texto_gemini and texto_gemini != 'ERRO_OCR' and len(texto_gemini) > 10:
+                    texto_ocr = texto_gemini
+                    ocr_method_used = "Gemini Vision"
+                    logger.info(f"✅ Gemini Vision: {len(texto_ocr)} caracteres extraídos")
+                else:
+                    logger.warning(f"⚠️ Gemini Vision retornou: '{texto_gemini[:50]}...'")
+                    
+            except Exception as gemini_error:
+                logger.error(f"❌ Gemini Vision falhou: {gemini_error}")
+        
+        # ===== VERIFICAÇÃO FINAL DO TEXTO =====
+        logger.info(f"🔍 Verificação final: Método={ocr_method_used}, Tamanho={len(texto_ocr)}")
+        
+        if not texto_ocr or len(texto_ocr.strip()) < 10:
+            logger.error(f"❌ OCR FALHOU: Texto insuficiente (tamanho: {len(texto_ocr)})")
+            logger.error(f"Texto extraído: '{texto_ocr[:100] if texto_ocr else 'VAZIO'}'")
             
             await message.edit_text(
-                "⚠️ <b>Texto insuficiente extraído</b>\n\n"
-                "🔧 <b>Possíveis soluções:</b>\n"
-                "📸 Tire uma foto mais clara\n"
-                "💡 Envie o texto manualmente\n"
-                "🔄 Tente novamente com melhor iluminação\n\n"
-                "📝 <b>Ou digite os dados:</b>\n"
-                "<code>Local: Nome\nValor: 25.50\nData: 24/08/2025</code>",
+                "❌ <b>Falha na Leitura do OCR</b>\n\n"
+                f"🔧 <b>Método testado:</b> {ocr_method_used}\n"
+                f"� <b>Caracteres extraídos:</b> {len(texto_ocr)}\n\n"
+                "💡 <b>Soluções:</b>\n"
+                "📸 Foto mais clara e bem iluminada\n"
+                "� Zoom na parte importante da nota\n"
+                "📝 Ou digite os dados manualmente:\n\n"
+                "<code>Local: Nome do estabelecimento\n"
+                "Valor: 25.50\n"
+                "Data: 24/08/2025</code>",
                 parse_mode='HTML'
             )
             return ConversationHandler.END
-
-        logger.info(f"✅ OCR extraiu {len(texto_ocr)} caracteres com sucesso")
-
-        await message.edit_text("📚 Buscando categorias para análise...")
+        
+        logger.info(f"✅ OCR SUCESSO: {len(texto_ocr)} caracteres - Método: {ocr_method_used}")
+        
+        # ===== FASE 4: PROCESSAMENTO COM IA =====
+        logger.info("🧠 FASE 4: Analisando com IA")
+        await message.edit_text(f"🧠 Texto extraído! Analisando com IA...\n<i>Método: {ocr_method_used}</i>", parse_mode='HTML')
+        
+        # Buscar categorias
         db: Session = next(get_db())
         try:
             categorias_db = db.query(Categoria).options(joinedload(Categoria.subcategorias)).all()
@@ -262,46 +328,63 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             categorias_contexto = "\n".join(categorias_formatadas)
         finally:
             db.close()
-
-        await message.edit_text("🧠 Texto extraído! Analisando com a IA...")
+        
+        # Processar com IA
         model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
         prompt = PROMPT_IA_OCR.format(texto_ocr=texto_ocr, categorias_disponiveis=categorias_contexto)
+        
         ia_response = await model.generate_content_async(prompt)
-
         response_text = ia_response.text
+        
+        # Extrair JSON
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if not json_match:
-            logger.error(f"Nenhum JSON válido foi encontrado na resposta da IA: {response_text}")
-            await message.edit_text("❌ A IA retornou um formato inesperado. Tente novamente.")
+            logger.error(f"❌ IA não retornou JSON válido: {response_text[:200]}...")
+            await message.edit_text("❌ IA não conseguiu processar os dados. Tente novamente.")
             return ConversationHandler.END
-
+        
         json_str = json_match.group(0)
-
+        
         try:
             dados_ia = json.loads(json_str)
+            logger.info("✅ Dados da IA processados com sucesso")
         except json.JSONDecodeError as e:
-            logger.error(f"Erro ao decodificar JSON da IA: {e}\nString Tentada: {json_str}")
-            await message.edit_text("❌ A IA retornou um formato inválido. Tente novamente.")
+            logger.error(f"❌ JSON inválido da IA: {e}\nJSON: {json_str[:200]}...")
+            await message.edit_text("❌ IA retornou dados inválidos. Tente novamente.")
             return ConversationHandler.END
-
+        
+        # Processar valor
         valor_bruto = dados_ia.get('valor_total')
         valor_str = str(valor_bruto or '0').replace(',', '.')
         dados_ia['valor_total'] = float(valor_str) if valor_str else 0.0
-
+        
+        # Armazenar dados
         context.user_data['dados_ocr'] = dados_ia
-
+        
+        logger.info(f"✅ PROCESSO COMPLETO: {dados_ia.get('nome_estabelecimento', 'N/A')} - R${dados_ia['valor_total']}")
+        
+        # ===== FASE 5: MOSTRAR RESUMO =====
         await message.delete()
         await _reply_with_summary(update, context)
-
-        # AQUI ESTÁ A MUDANÇA CRUCIAL
+        
         return OCR_CONFIRMATION_STATE
-
+        
     except Exception as e:
-        logger.error(f"Erro CRÍTICO no fluxo de OCR (ocr_iniciar_como_subprocesso): {e}", exc_info=True)
+        logger.error(f"💥 ERRO CRÍTICO no OCR: {type(e).__name__}: {e}", exc_info=True)
+        
         try:
-            await message.edit_text("❌ Ops! Ocorreu um erro inesperado. O erro foi registrado.")
-        except Exception as inner_e:
-            logger.error(f"Não foi possível editar a mensagem de erro: {inner_e}")
+            await message.edit_text(
+                f"💥 <b>Erro Crítico no OCR</b>\n\n"
+                f"🚨 <b>Tipo:</b> {type(e).__name__}\n"
+                f"📝 <b>Detalhes:</b> {str(e)[:100]}...\n\n"
+                f"👤 <b>Usuário:</b> {username}\n"
+                f"🕒 <b>Timestamp:</b> {datetime.now().strftime('%H:%M:%S')}\n\n"
+                "💡 Tente enviar outra imagem ou digite os dados manualmente.",
+                parse_mode='HTML'
+            )
+        except Exception as msg_error:
+            logger.error(f"❌ Falha ao editar mensagem de erro: {msg_error}")
+            
         return ConversationHandler.END
 
 async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -398,45 +481,88 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
             db.close()
             context.user_data.pop('dados_ocr', None)
 
-# 🚨 MÉTODO FALLBACK - OCR com Gemini Vision
+# 🚨 MÉTODO FALLBACK MELHORADO - OCR com Gemini Vision
 async def ocr_fallback_gemini(image_content):
-    """Método alternativo usando apenas Gemini Vision quando Google Vision falha"""
+    """🔄 Método alternativo ultra robusto usando Gemini Vision"""
     try:
+        logger.info("🔄 INICIANDO FALLBACK - Gemini Vision")
+        
         if not config.GEMINI_API_KEY:
             logger.error("❌ GEMINI_API_KEY não configurado para fallback")
             return None
-            
-        logger.info("🔄 Usando Gemini Vision como fallback...")
         
         # Configurar Gemini
         genai.configure(api_key=config.GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-1.5-flash')
+        logger.info("✅ Gemini configurado")
         
-        # Upload da imagem para Gemini
+        # Converter bytes para PIL Image com validação
         import PIL.Image
         import io
         
-        # Converter bytes para PIL Image
-        image = PIL.Image.open(io.BytesIO(image_content))
+        try:
+            image = PIL.Image.open(io.BytesIO(image_content))
+            logger.info(f"✅ Imagem PIL criada: {image.size} - Modo: {image.mode}")
+            
+            # Converter para RGB se necessário
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+                logger.info("🔄 Imagem convertida para RGB")
+                
+        except Exception as img_error:
+            logger.error(f"❌ Erro ao processar imagem PIL: {img_error}")
+            return None
         
-        # Prompt específico para OCR
+        # Prompt otimizado para OCR
         prompt = """
-        Analise esta imagem de nota fiscal ou comprovante e extraia APENAS o texto visível.
-        Retorne todo o texto que conseguir ler, mantendo a estrutura original.
-        Se não conseguir ler nada, retorne 'ERRO_OCR'.
+        🎯 TAREFA CRÍTICA: Extrair TODO o texto desta imagem de documento/nota fiscal.
+
+        📋 INSTRUÇÕES ESPECÍFICAS:
+        - Leia TODOS os textos visíveis: números, valores, nomes, datas
+        - Inclua: estabelecimento, CNPJ, valor total, data, forma pagamento
+        - Mantenha estrutura e pontuação originais
+        - NÃO invente informações que não estão visíveis
+        - Se a imagem estiver ilegível, retorne: ERRO_OCR
+
+        ⚡ RESPOSTA: Apenas o texto extraído, sem explicações.
         """
         
-        # Enviar para Gemini Vision
+        logger.info("🚀 Enviando para Gemini Vision...")
+        
+        # Enviar para Gemini Vision com timeout
         response = await model.generate_content_async([prompt, image])
+        
+        if not response or not response.text:
+            logger.warning("⚠️ Gemini Vision retornou resposta vazia")
+            return None
+            
         texto_extraido = response.text.strip()
         
-        if texto_extraido and texto_extraido != 'ERRO_OCR' and len(texto_extraido) > 10:
-            logger.info(f"✅ Gemini Vision extraiu {len(texto_extraido)} caracteres")
-            return texto_extraido
+        logger.info(f"📝 Gemini Vision Response: '{texto_extraido[:100]}...' (Total: {len(texto_extraido)} chars)")
+        
+        # Validação rigorosa do texto extraído
+        if texto_extraido and texto_extraido != 'ERRO_OCR' and len(texto_extraido) > 15:
+            
+            # Verificar se contém informações úteis
+            useful_patterns = [
+                r'\d+[.,]\d{2}',  # Valores monetários
+                r'\d{2}[/.-]\d{2}[/.-]\d{2,4}',  # Datas
+                r'CNPJ|CPF|\d{2}\.\d{3}\.\d{3}',  # Documentos
+                r'[A-Za-z]{3,}',  # Palavras com pelo menos 3 letras
+            ]
+            
+            useful_content = any(re.search(pattern, texto_extraido, re.IGNORECASE) for pattern in useful_patterns)
+            
+            if useful_content:
+                logger.info(f"✅ Gemini Vision SUCESSO: {len(texto_extraido)} caracteres úteis extraídos")
+                return texto_extraido
+            else:
+                logger.warning(f"⚠️ Gemini Vision: texto sem conteúdo útil: '{texto_extraido[:50]}...'")
+                return None
         else:
-            logger.warning("⚠️ Gemini Vision não conseguiu extrair texto")
+            logger.warning(f"⚠️ Gemini Vision falhou: '{texto_extraido}' (len: {len(texto_extraido)})")
             return None
             
     except Exception as e:
-        logger.error(f"❌ Erro no fallback Gemini Vision: {e}")
+        logger.error(f"❌ ERRO CRÍTICO no fallback Gemini Vision: {type(e).__name__}: {e}", exc_info=True)
         return None
