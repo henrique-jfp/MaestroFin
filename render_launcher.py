@@ -31,15 +31,38 @@ except ImportError as e:
 print("🔧 Configurando ambiente Render...")
 
 def main():
-    """Iniciar dashboard otimizado para Render"""
+    """Função principal - inicia BOT + DASHBOARD no Render"""
     try:
-        # 🚨 TESTE OCR NO RENDER
-        print("🔍 Testando OCR no Render...")
+        print("✅ Flask detectado")
+        print("� Configurando ambiente Render...")
+        
+        # Testar OCR
         test_ocr()
         
         # 🚀 MIGRAR ANALYTICS PARA POSTGRESQL
         print("🔄 Configurando Analytics PostgreSQL...")
         setup_analytics_postgresql()
+        
+        # 🤖 INICIAR BOT TELEGRAM EM BACKGROUND
+        print("🤖 Iniciando Bot Telegram...")
+        import threading
+        import subprocess
+        import sys
+        
+        def run_bot():
+            """Executa o bot Telegram em thread separada"""
+            try:
+                print("🚀 Bot Telegram iniciando...")
+                # Importar e executar o bot
+                import bot
+                bot.main()
+            except Exception as e:
+                print(f"❌ Erro no Bot Telegram: {e}")
+        
+        # Iniciar bot em thread separada
+        bot_thread = threading.Thread(target=run_bot, daemon=True)
+        bot_thread.start()
+        print("✅ Bot Telegram rodando em background!")
         
         print("📊 Carregando Dashboard Analytics...")
         from analytics.dashboard_app_render_fixed import app
@@ -61,21 +84,15 @@ def main():
         
         print("🚀 Iniciando servidor Flask...")
         print("🎨 Dashboard disponível no Render!")
+        print("🤖 Bot Telegram ativo e processando mensagens!")
         
-        # Configuração otimizada para Render
-        app.run(
-            host=host,
-            port=port,
-            debug=False,           # Render = produção
-            threaded=True,         # Suporte múltiplas conexões
-            use_reloader=False     # Sem reload em produção
-        )
+        # Iniciar Flask (bloqueia thread principal)
+        app.run(host=host, port=port, debug=False, threaded=True)
         
     except Exception as e:
-        print(f"❌ Erro ao iniciar: {e}")
+        print(f"❌ Erro crítico: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
 
 def test_ocr():
     """Testa configuração OCR no Render com suporte a Secret Files"""
