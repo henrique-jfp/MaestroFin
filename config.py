@@ -63,6 +63,13 @@ logging.info(f"   📱 TELEGRAM_TOKEN: {'✅ Configurado' if TELEGRAM_TOKEN else
 logging.info(f"   🤖 GEMINI_API_KEY: {'✅ Configurado' if GEMINI_API_KEY else '⚠️ Não encontrado'}")
 logging.info(f"   🗄️ DATABASE_URL: {'✅ Configurado' if DATABASE_URL else '⚠️ Não encontrado'}")
 
+# Log das configurações de email e PIX (para debug)
+logging.info(f"   📧 EMAIL_HOST_USER: {'✅ Configurado' if EMAIL_HOST_USER else '❌ Não encontrado'}")
+logging.info(f"   📧 EMAIL_HOST_PASSWORD: {'✅ Configurado' if EMAIL_HOST_PASSWORD else '❌ Não encontrado'}")
+logging.info(f"   📧 SENDER_EMAIL: {'✅ Configurado' if SENDER_EMAIL else '❌ Não encontrado'}")
+logging.info(f"   📧 EMAIL_RECEIVER: {'✅ Configurado' if EMAIL_RECEIVER else '❌ Não encontrado'}")
+logging.info(f"   💳 PIX_KEY: {'✅ Configurado' if PIX_KEY else '❌ Não encontrado'}")
+
 # Configurar credenciais do Google de forma mais flexível
 if GOOGLE_APPLICATION_CREDENTIALS:
     basedir = os.path.abspath(os.path.dirname(__file__))

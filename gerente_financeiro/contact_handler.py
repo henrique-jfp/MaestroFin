@@ -65,7 +65,14 @@ def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> boo
     
     # Verifica se todas as variáveis necessárias estão configuradas
     if not all([login_user, login_password, sender_address, receiver_address]):
-        logger.error("Credenciais de e-mail não configuradas corretamente no arquivo de configuração.")
+        missing_vars = []
+        if not login_user: missing_vars.append("EMAIL_HOST_USER")
+        if not login_password: missing_vars.append("EMAIL_HOST_PASSWORD")  
+        if not sender_address: missing_vars.append("SENDER_EMAIL")
+        if not receiver_address: missing_vars.append("EMAIL_RECEIVER")
+        
+        logger.error(f"❌ Variáveis de email não configuradas: {', '.join(missing_vars)}")
+        logger.error("📋 Verifique se essas variáveis estão definidas no Render Environment")
         return False
 
     # Monta o corpo do e-mail com as informações do usuário do Telegram
