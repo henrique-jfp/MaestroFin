@@ -7,7 +7,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python dashboard_only.py
+    startCommand: python render_launcher.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.3
