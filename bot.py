@@ -24,13 +24,20 @@ except Exception as ocr_init_error:
 
 # Inicializar Analytics
 try:
-    from analytics.bot_analytics import BotAnalytics, track_command
-    analytics = BotAnalytics()
+    # 🚀 RENDER: Usar PostgreSQL, LOCAL: Usar SQLite
+    if os.getenv('DATABASE_URL'):  # Render tem DATABASE_URL
+        from analytics.bot_analytics_postgresql import get_analytics, track_command
+        analytics = get_analytics()
+        logging.info("✅ Sistema de Analytics PostgreSQL integrado ao bot (RENDER)")
+    else:  # Local usa SQLite
+        from analytics.bot_analytics import BotAnalytics, track_command
+        analytics = BotAnalytics()
+        logging.info("✅ Sistema de Analytics SQLite integrado ao bot (LOCAL)")
+    
     ANALYTICS_ENABLED = True
-    logging.info("✅ Sistema de Analytics integrado ao bot")
-except ImportError:
+except ImportError as e:
     ANALYTICS_ENABLED = False
-    logging.warning("⚠️ Sistema de Analytics não encontrado")
+    logging.warning(f"⚠️ Sistema de Analytics não encontrado: {e}")
 
 def track_analytics(command_name):
     """Decorator para tracking de comandos"""

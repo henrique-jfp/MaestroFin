@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-🎨 MAESTROFIN DASHBOARD - RENDER DEPLOY
+🎨 Mdef main():
+    """Iniciar dashboard otimizado para Render"""
+    try:
+        # 🚨 TESTE OCR NO RENDER
+        print("🔍 Testando OCR no Render...")
+        test_ocr_render()
+        
+        # 🚀 MIGRAR ANALYTICS PARA POSTGRESQL
+        print("🔄 Configurando Analytics PostgreSQL...")
+        setup_analytics_postgresql()
+        
+        print("📊 Carregando Dashboard Analytics...")
+        from analytics.dashboard_app import app DASHBOARD - RENDER DEPLOY
 Launcher otimizado para Render (gratuito)
 """
 
@@ -125,6 +137,41 @@ def test_ocr_render():
             print(f"❌ Erro Gemini: {e}")
     
     print("🔧 Teste OCR concluído!")
+
+def setup_analytics_postgresql():
+    """🚀 Configura Analytics PostgreSQL no Render"""
+    print("🔧 Configurando Analytics PostgreSQL...")
+    
+    try:
+        # Testar se PostgreSQL está disponível
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            print("❌ DATABASE_URL não configurado")
+            return
+            
+        print(f"✅ DATABASE_URL configurado")
+        
+        # Importar e inicializar analytics PostgreSQL
+        from analytics.bot_analytics_postgresql import get_analytics
+        pg_analytics = get_analytics()
+        
+        if pg_analytics.Session:
+            print("✅ Analytics PostgreSQL inicializado")
+            
+            # Criar dados sintéticos na primeira execução
+            stats = pg_analytics.get_daily_stats()
+            if stats.get('total_commands', 0) == 0:
+                print("📊 Primeira execução - criando dados sintéticos...")
+                from migrate_analytics_postgresql import create_synthetic_data
+                create_synthetic_data(pg_analytics)
+                print("✅ Dados sintéticos criados!")
+            else:
+                print(f"📊 Analytics ativo: {stats.get('total_commands', 0)} comandos registrados")
+        else:
+            print("❌ Falha ao inicializar Analytics PostgreSQL")
+            
+    except Exception as e:
+        print(f"❌ Erro configurando Analytics PostgreSQL: {e}")
 
 if __name__ == '__main__':
     main()
