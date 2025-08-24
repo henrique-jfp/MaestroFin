@@ -22,18 +22,36 @@ logger = logging.getLogger(__name__)
 
 # Configurar credenciais do Google Vision
 def setup_google_credentials():
-    """Configura as credenciais do Google Vision"""
+    """Configura as credenciais do Google Vision para local e Render"""
     try:
-        # 🔧 CORREÇÃO URGENTE - Melhor detecção de credenciais
+        # � RENDER FIX - Suporte para variável JSON direta
         
-        # 1. Verificar se já está configurado no ambiente
+        # 1. RENDER: Tentar credenciais JSON diretamente da variável de ambiente
+        google_creds_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
+        if google_creds_json:
+            try:
+                # Criar arquivo temporário com as credenciais
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                temp_creds_file = os.path.join(temp_dir, 'google_vision_creds.json')
+                
+                with open(temp_creds_file, 'w') as f:
+                    f.write(google_creds_json)
+                
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_file
+                logger.info("✅ RENDER: Credenciais Google Vision configuradas via JSON")
+                return True
+            except Exception as e:
+                logger.error(f"❌ Erro ao configurar credenciais JSON: {e}")
+        
+        # 2. LOCAL: Verificar se já está configurado no ambiente
         if os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
             cred_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             if os.path.exists(cred_path):
-                logger.info(f"✅ Credenciais já configuradas no ambiente: {cred_path}")
+                logger.info(f"✅ LOCAL: Credenciais já configuradas: {cred_path}")
                 return True
         
-        # 2. Tentar arquivos de credenciais locais
+        # 3. LOCAL: Tentar arquivos de credenciais locais
         base_dir = os.path.dirname(os.path.dirname(__file__))
         possible_paths = [
             os.path.join(base_dir, 'credenciais', 'googlevision2.json'),
@@ -44,11 +62,11 @@ def setup_google_credentials():
         for credentials_path in possible_paths:
             if os.path.exists(credentials_path):
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-                logger.info(f"✅ Credenciais Google Vision configuradas: {credentials_path}")
+                logger.info(f"✅ LOCAL: Credenciais configuradas: {credentials_path}")
                 return True
                 
-        # 3. Se nenhum arquivo encontrado
-        logger.warning("⚠️ Nenhum arquivo de credenciais Google Vision encontrado")
+        # 4. Se nenhum método funcionou
+        logger.warning("⚠️ Nenhuma credencial Google Vision encontrada (local ou Render)")
         logger.info("📋 Tentando usar credenciais do ambiente Render...")
         return True  # Continua mesmo sem arquivo local (para Render)
         
