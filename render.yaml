@@ -1,0 +1,21 @@
+# 🎨 Render Deploy Configuration
+# Configuração para deploy no Render (gratuito)
+
+services:
+  - type: web
+    name: maestrofin-dashboard
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python dashboard_only.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PYTHONDONTWRITEBYTECODE
+        value: 1
+    # Health check endpoint
+    healthCheckPath: /
+    # Auto-deploy on push
+    autoDeploy: true
