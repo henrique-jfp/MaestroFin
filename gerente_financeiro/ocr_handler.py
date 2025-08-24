@@ -22,14 +22,40 @@ logger = logging.getLogger(__name__)
 
 # Configurar credenciais do Google Vision
 def setup_google_credentials():
-    """🚀 RENDER FIX - Configuração ultra-robusta para local e Render"""
+    """🚀 RENDER FIX - Configuração ultra-robusta: Secret Files > Env Vars > Local"""
     try:
         logger.info("🔧 Configurando credenciais Google Vision...")
         
-        # 🎯 RENDER: Primeira prioridade - JSON direto da variável
+        # 🥇 RENDER: Primeira prioridade - Secret Files
+        secret_file_path = '/etc/secrets/google_vision_credentials.json'
+        if os.path.exists(secret_file_path):
+            logger.info("🔐 RENDER SECRET FILES: Detectado google_vision_credentials.json")
+            try:
+                # Validar JSON do Secret File
+                with open(secret_file_path, 'r') as f:
+                    credentials_data = json.load(f)
+                
+                # Verificar campos obrigatórios
+                required_fields = ['type', 'project_id', 'private_key', 'client_email']
+                for field in required_fields:
+                    if field not in credentials_data:
+                        logger.error(f"❌ Campo '{field}' ausente no Secret File")
+                        raise ValueError(f"Campo obrigatório '{field}' ausente")
+                
+                # Configurar variável de ambiente para Google Cloud
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = secret_file_path
+                logger.info("✅ RENDER SECRET FILES: Credenciais configuradas com sucesso!")
+                return True
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ JSON inválido no Secret File: {e}")
+            except Exception as e:
+                logger.error(f"❌ Erro ao processar Secret File: {e}")
+        
+        # 🥈 RENDER: Segunda prioridade - JSON direto da variável
         google_creds_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
         if google_creds_json:
-            logger.info("📦 RENDER: Detectado GOOGLE_VISION_CREDENTIALS_JSON")
+            logger.info("📦 RENDER ENV VAR: Detectado GOOGLE_VISION_CREDENTIALS_JSON")
             try:
                 # Criar arquivo temporário com as credenciais
                 import tempfile
@@ -43,11 +69,10 @@ def setup_google_credentials():
                 # Verificar se o arquivo foi criado corretamente
                 if os.path.exists(temp_creds_file):
                     file_size = os.path.getsize(temp_creds_file)
-                    logger.info(f"✅ RENDER: Arquivo temporário criado ({file_size} bytes)")
+                    logger.info(f"✅ RENDER ENV VAR: Arquivo temporário criado ({file_size} bytes)")
                     
                     # Validar JSON
                     try:
-                        import json
                         with open(temp_creds_file, 'r') as f:
                             creds_data = json.load(f)
                         logger.info(f"✅ RENDER: JSON válido - projeto: {creds_data.get('project_id', 'N/A')}")

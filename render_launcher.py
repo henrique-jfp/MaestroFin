@@ -6,6 +6,7 @@ Launcher otimizado para Render (gratuito)
 
 import os
 import sys
+import json
 
 print("\n" + "="*60)
 print("╭────────────────────────────────────────────────────────╮")
@@ -34,7 +35,7 @@ def main():
     try:
         # 🚨 TESTE OCR NO RENDER
         print("🔍 Testando OCR no Render...")
-        test_ocr_render()
+        test_ocr()
         
         # 🚀 MIGRAR ANALYTICS PARA POSTGRESQL
         print("🔄 Configurando Analytics PostgreSQL...")
@@ -76,59 +77,79 @@ def main():
         traceback.print_exc()
         sys.exit(1)
 
-def test_ocr_render():
-    """🚨 TESTE ESPECÍFICO OCR PARA RENDER"""
-    print("🔧 Testando configuração OCR...")
+def test_ocr():
+    """Testa configuração OCR no Render com suporte a Secret Files"""
+    print("� Testando OCR no Render...")
     
-    # Testar variáveis de ambiente
-    google_app_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-    google_json_creds = os.environ.get('GOOGLE_VISION_CREDENTIALS_JSON')
-    gemini_key = os.environ.get('GEMINI_API_KEY')
-    
-    print(f"📋 GOOGLE_APPLICATION_CREDENTIALS: {'✅' if google_app_creds else '❌'}")
-    print(f"📋 GOOGLE_VISION_CREDENTIALS_JSON: {'✅' if google_json_creds else '❌'}")
-    print(f"📋 GEMINI_API_KEY: {'✅' if gemini_key else '❌'}")
-    
-    # TESTAR CONFIGURAÇÃO JSON CREDENTIALS
-    if google_json_creds:
-        try:
-            import tempfile
-            import json
-            
-            temp_dir = tempfile.gettempdir()
-            temp_creds_file = os.path.join(temp_dir, 'google_vision_render_test.json')
-            
-            with open(temp_creds_file, 'w') as f:
-                f.write(google_json_creds)
-            
-            # Verificar se é JSON válido
-            with open(temp_creds_file, 'r') as f:
-                creds_data = json.load(f)
-            
-            print(f"✅ JSON Credenciais válido: projeto {creds_data.get('project_id', 'N/A')}")
-            
-            # Configurar variável
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_file
-            
-            # Testar cliente Google Vision
-            from google.cloud import vision
-            client = vision.ImageAnnotatorClient()
-            print("✅ Cliente Google Vision criado com sucesso!")
-            
-        except Exception as e:
-            print(f"❌ Erro teste OCR Google Vision: {e}")
-    
-    # Testar Gemini como fallback
-    if gemini_key:
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            print("✅ Gemini configurado com sucesso!")
-        except Exception as e:
-            print(f"❌ Erro Gemini: {e}")
-    
-    print("🔧 Teste OCR concluído!")
+    try:
+        print("🔧 Testando configuração OCR...")
+        
+        # Verificar métodos disponíveis de credenciais
+        secret_file = '/etc/secrets/google_vision_credentials.json'
+        env_var_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
+        env_var_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        
+        print(f"📋 Secret File (/etc/secrets/...): {'✅' if os.path.exists(secret_file) else '❌'}")
+        print(f"📋 GOOGLE_APPLICATION_CREDENTIALS: {'✅' if env_var_path else '❌'}")
+        print(f"📋 GOOGLE_VISION_CREDENTIALS_JSON: {'✅' if env_var_json else '❌'}")
+        
+        gemini_key = os.getenv('GEMINI_API_KEY')
+        print(f"📋 GEMINI_API_KEY: {'✅' if gemini_key else '❌'}")
+        
+        credentials_configured = False
+        
+        # Testar Secret Files (método mais seguro)
+        if os.path.exists(secret_file):
+            try:
+                with open(secret_file, 'r') as f:
+                    secret_data = json.load(f)
+                project_id = secret_data.get('project_id', 'N/A')
+                print(f"✅ Secret File válido: projeto {project_id}")
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = secret_file
+                credentials_configured = True
+            except Exception as e:
+                print(f"❌ Erro no Secret File: {e}")
+        
+        # Fallback para variável de ambiente JSON
+        elif env_var_json:
+            try:
+                import tempfile
+                creds_data = json.loads(env_var_json)
+                project_id = creds_data.get('project_id', 'N/A')
+                print(f"✅ JSON Credenciais válido: projeto {project_id}")
+                
+                # Criar arquivo temporário
+                temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                json.dump(creds_data, temp_file)
+                temp_file.close()
+                
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file.name
+                credentials_configured = True
+            except Exception as e:
+                print(f"❌ Erro JSON credenciais: {e}")
+        
+        # Testar Google Vision se credenciais configuradas
+        if credentials_configured:
+            try:
+                from google.cloud import vision
+                client = vision.ImageAnnotatorClient()
+                print("✅ Cliente Google Vision criado com sucesso!")
+            except Exception as e:
+                print(f"❌ Erro Google Vision: {e}")
+        
+        # Testar Gemini
+        if gemini_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                print("✅ Gemini configurado com sucesso!")
+            except Exception as e:
+                print(f"❌ Erro Gemini: {e}")
+        
+        print("🔧 Teste OCR concluído!")
+        
+    except Exception as e:
+        print(f"❌ Erro no teste OCR: {e}")
 
 def setup_analytics_postgresql():
     """🚀 Configura Analytics PostgreSQL no Render"""
