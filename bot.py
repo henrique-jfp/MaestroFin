@@ -11,6 +11,17 @@ from flask import Flask, jsonify
 # Suprimir warnings específicos do python-telegram-bot sobre ConversationHandler
 warnings.filterwarnings("ignore", category=PTBUserWarning, module="telegram")
 
+# 🚀 INICIALIZAR OCR CREDENCIAIS NO STARTUP
+try:
+    from gerente_financeiro.ocr_handler import setup_google_credentials
+    setup_success = setup_google_credentials()
+    if setup_success:
+        logging.info("✅ OCR: Credenciais Google Vision configuradas no startup")
+    else:
+        logging.warning("⚠️ OCR: Usando apenas fallback Gemini")
+except Exception as ocr_init_error:
+    logging.error(f"❌ OCR: Erro na inicialização - {ocr_init_error}")
+
 # Inicializar Analytics
 try:
     from analytics.bot_analytics import BotAnalytics, track_command
