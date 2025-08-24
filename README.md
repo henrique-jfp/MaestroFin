@@ -1,61 +1,247 @@
-# 🎼 MaestroFin - Maestro das Suas Finanças
+# 🎼 MaestroFin - Bot de Controle Financeiro
 
-> **Seu Assistente Financeiro Inteligente no Telegram com IA Generativa**
+> **Assistente financeiro inteligente no Telegram com IA, OCR e analytics avançado**
 
-[![Python](https://img.shields.io/badge/Python-3.12+-3776ab?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://telegram.org)
-[![AI](https://img.shields.io/badge/Google-Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://gemini.google.com)
-[![License](https://img.shields.io/badge/License-Dual-yellow?style=for-the-badge)](./LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-blue.svg)](https://telegram.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+## 📋 Sobre o Projeto
 
-## 📋 Índice
+MaestroFin é um bot do Telegram para controle financeiro pessoal que combina **inteligência artificial**, **OCR** e **análise de dados** para automatizar o gerenciamento das suas finanças.
 
-- [🎯 Sobre o Projeto](#-sobre-o-projeto)
-- [✨ Funcionalidades Principais](#-funcionalidades-principais)
-- [🎬 Demonstração](#-demonstração)
-- [🏗️ Arquitetura Técnica](#️-arquitetura-técnica)
-- [🛠️ Tecnologias Utilizadas](#️-tecnologias-utilizadas)
-- [⚡ Instalação e Configuração](#-instalação-e-configuração)
-- [📱 Como Usar](#-como-usar)
-- [📊 Estrutura do Banco de Dados](#-estrutura-do-banco-de-dados)
-- [🤖 Inteligência Artificial](#-inteligência-artificial)
-- [🔒 Segurança e Privacidade](#-segurança-e-privacidade)
-- [🧪 Desenvolvimento](#-desenvolvimento)
-- [📈 Roadmap](#-roadmap)
-- [📄 Licença](#-licença)
-- [📞 Contato](#-contato)
+### ✨ Principais Funcionalidades
 
----
+- **💬 Entrada Natural**: "Gastei R$ 50 no mercado" → automaticamente categorizado
+- **📸 OCR de Faturas**: Upload de PDF de cartão → importação automática de transações
+- **📊 Relatórios e Gráficos**: Análises detalhadas de gastos por categoria e período
+- **🎯 Sistema de Metas**: Defina limites de gastos com alertas inteligentes
+- **📅 Agendamentos**: Lançamentos recorrentes (salário, aluguel, etc.)
+- **🎮 Gamificação**: XP, levels e conquistas por uso do sistema
+- **📈 Dashboard Web**: Interface visual para métricas e análises
+- **🤖 IA Conversacional**: Categorização e insights automáticos via Google Gemini
 
-## 🎯 Sobre o Projeto
+## 🛠️ Tecnologias
 
-**MaestroFin** é um bot de Telegram revolucionário para controle financeiro pessoal que combina **Inteligência Artificial Generativa**, **OCR avançado** e **análise de dados** para transformar a forma como você gerencia suas finanças.
+- **Backend**: Python 3.12+, python-telegram-bot, SQLAlchemy, Flask
+- **Banco de Dados**: PostgreSQL (produção), SQLite (desenvolvimento)
+- **IA**: Google Gemini Pro, Google Vision API (OCR)
+- **Deploy**: Render (Gunicorn + worker processes)
+- **Analytics**: Sistema próprio com PostgreSQL
+- **Visualização**: matplotlib, Plotly, dashboard web customizado
 
-### 🌟 **Por que MaestroFin?**
+## 🚀 Instalação Rápida
 
-- **🧠 IA Conversacional**: Converse naturalmente sobre suas finanças
-- **📸 OCR Inteligente**: Extraia dados de faturas em PDF automaticamente  
-- **📊 Análises Avançadas**: Gráficos, relatórios e insights personalizados
-- **⚡ Automação Total**: Categorização, agendamentos e alertas automáticos
-- **🔒 Privacidade Máxima**: Seus dados ficam no seu servidor
+### Pré-requisitos
 
-### 🎪 **Casos de Uso**
+- Python 3.12+
+- PostgreSQL (opcional, usa SQLite por padrão)
+- Contas: Telegram Bot, Google Cloud Platform
 
-- **Freelancers**: Controle de receitas e despesas profissionais
-- **Estudantes**: Gestão de mesada e gastos universitários  
-- **Famílias**: Orçamento doméstico e planejamento financeiro
-- **Investidores**: Acompanhamento de carteira e metas
-- **Empresários**: Análise de fluxo de caixa pessoal
+### 1. Clone e Setup
 
----
+```bash
+git clone https://github.com/henrique-jfp/MaestroFin.git
+cd MaestroFin
 
-## ✨ Funcionalidades Principais
+# Ambiente virtual
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou venv\Scripts\activate  # Windows
 
-### 💬 **Gerenciamento Conversacional**
+# Dependências
+pip install -r requirements.txt
 ```
-👤 "Gastei R$ 45 no almoço no McDonald's"
-🤖 "Registrado! Categoria: Alimentação → Fast Food. 
+
+### 2. Configuração
+
+Crie arquivo `.env`:
+
+```bash
+# Bot
+TELEGRAM_TOKEN=seu_token_aqui
+
+# Google AI
+GEMINI_API_KEY=sua_key_aqui
+GOOGLE_APPLICATION_CREDENTIALS=./credenciais/service-account.json
+
+# Database (opcional - usa SQLite se não definir)
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+
+# Email (opcional)
+EMAIL_HOST_USER=seu@email.com
+EMAIL_HOST_PASSWORD=senha_app
+PIX_KEY=sua_chave_pix
+```
+
+### 3. Credenciais Google
+
+1. Acesse [Google Cloud Console](https://console.cloud.google.com)
+2. Ative APIs: Gemini AI, Vision API
+3. Crie Service Account e baixe JSON
+4. Salve em `credenciais/service-account.json`
+
+### 4. Executar
+
+```bash
+python bot.py
+```
+
+## 📱 Como Usar
+
+### Comandos Principais
+
+| Comando | Descrição |
+|---------|-----------|
+| `/start` | Iniciar e configurar bot |
+| `/gerente` | Menu principal interativo |
+| `/fatura` | Upload de fatura PDF para importação |
+| `/grafico` | Gerar gráficos de gastos |
+| `/relatorio` | Relatório detalhado em HTML |
+| `/metas` | Gerenciar metas de gastos |
+| `/dashboard` | Acesso ao dashboard web |
+
+### Exemplos de Uso
+
+**Entrada Natural:**
+```
+👤 "Paguei R$ 45 de combustível no posto Shell"
+🤖 ✅ Registrado em Transporte → Combustível
+```
+
+**Upload de Fatura:**
+```
+👤 [Envia PDF do cartão]
+🤖 📄 Processando fatura Bradesco...
+    ✅ 23 transações importadas!
+```
+
+**Gráficos e Relatórios:**
+```
+👤 /grafico
+🤖 � [Gráfico de pizza - gastos por categoria]
+    📈 [Evolução mensal]
+```
+
+## 🗂️ Estrutura do Projeto
+
+```
+MaestroFin/
+├── bot.py                    # Ponto de entrada principal
+├── config.py                 # Configurações e variáveis
+├── models.py                 # Modelos do banco (SQLAlchemy)
+├── render_launcher.py        # Launcher para produção (Render)
+├── 
+├── gerente_financeiro/       # Módulo principal
+│   ├── handlers.py           # Handlers principais
+│   ├── services.py           # Lógica de negócio
+│   ├── ocr_handler.py        # Processamento OCR
+│   ├── fatura_handler.py     # Importação de faturas
+│   ├── graficos.py           # Geração de gráficos
+│   ├── metas_handler.py      # Sistema de metas
+│   ├── gamification_*.py     # Sistema de gamificação
+│   └── ...
+├── 
+├── analytics/                # Sistema de analytics
+│   ├── bot_analytics_postgresql.py  # Analytics para produção
+│   ├── dashboard_app_render_fixed.py # Dashboard web
+│   └── ...
+├── 
+├── database/                 # Configuração do banco
+├── templates/                # Templates HTML
+└── static/                   # CSS e assets
+```
+
+## 🎯 Funcionalidades Detalhadas
+
+### 💰 Gerenciamento Financeiro
+
+- **Lançamentos**: Entrada manual, conversacional ou por OCR
+- **Categorização**: Automática via IA (Alimentação, Transporte, etc.)
+- **Contas**: Múltiplas contas/cartões por usuário
+- **Análises**: Gráficos, relatórios, comparativos mensais
+
+### 📸 OCR de Faturas
+
+- **Suporte**: PDFs de cartões dos principais bancos brasileiros
+- **Detecção**: Identificação automática do banco
+- **Extração**: Transações, valores, datas, estabelecimentos
+- **Importação**: Batch de dezenas de transações simultaneamente
+
+### 🎯 Sistema de Metas
+
+- **Limites**: Por categoria e período (mensal/anual)
+- **Alertas**: Notificações ao atingir 80%, 90%, 100%
+- **Análises**: Progresso, histórico, sugestões de economia
+
+### 🎮 Gamificação
+
+- **XP e Levels**: Ganhe experiência usando o bot
+- **Conquistas**: "Primeiro Passo", "Organizador", "Fotógrafo"
+- **Streaks**: Dias consecutivos de uso
+- **Rankings**: Compare com outros usuários (anônimo)
+
+### 📊 Dashboard Analytics
+
+- **Métricas**: Usuários ativos, comandos executados, erros
+- **Visualizações**: Gráficos interativos, tabelas
+- **Monitoramento**: Performance do bot, health checks
+- **APIs**: Endpoints RESTful para integração
+
+## 🚀 Deploy (Render)
+
+O projeto está configurado para deploy automatizado no Render:
+
+### Arquitetura de Produção
+
+- **Web Service**: Dashboard Flask com Gunicorn
+- **Worker Service**: Bot Telegram em processo separado
+- **Database**: PostgreSQL gerenciado
+- **Storage**: Secret Files para credenciais
+
+### Configuração no Render
+
+1. **Conecte o repositório** ao Render
+2. **Configure variáveis de ambiente** no painel
+3. **Upload de Secret Files** para credenciais Google
+4. **Deploy automático** via push no GitHub
+
+O `render.yaml` define dois serviços:
+- `maestrofin-dashboard`: Interface web
+- `maestrofin-bot`: Worker do Telegram bot
+
+## 📈 Roadmap
+
+### Próximas Versões
+
+- **🏦 Open Banking**: Sincronização automática com bancos
+- **📱 App Mobile**: Companion app nativo
+- **🤝 Multi-usuário**: Contas familiares compartilhadas
+- **📊 BI Avançado**: Dashboards empresariais
+- **🎯 IA Preditiva**: Projeções e recomendações automáticas
+
+## 🤝 Contribuição
+
+1. Fork o projeto
+2. Crie uma branch: `git checkout -b feature/nova-funcionalidade`
+3. Commit: `git commit -m 'Adiciona nova funcionalidade'`
+4. Push: `git push origin feature/nova-funcionalidade`
+5. Abra um Pull Request
+
+## � Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+## 👨‍💻 Autor
+
+**Henrique Freitas**
+- 📧 Email: henriquejfp.dev@gmail.com
+- 💼 LinkedIn: [henrique-jfp](https://linkedin.com/in/henrique-jfp)
+- 🐙 GitHub: [henrique-jfp](https://github.com/henrique-jfp)
+
+---
+
+⭐ Se este projeto te ajudou, considere dar uma estrela! 
     Você já gastou R$ 230 em alimentação este mês."
 ```
 
