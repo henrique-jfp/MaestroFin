@@ -1,83 +1,118 @@
-# Python
+# ========================================
+# 🎼 MaestroFin - GitIgnore Otimizado
+# ========================================
+
+# 🐍 Python Core
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
 *.so
-.tox
-.coverage
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis
-.pytest_cache
+.Python
+*.egg-info/
+build/
+dist/
 
-# Virtual Environment
+# 📊 Cache e Coverage
+.cache/
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+.nox/
+
+# 🚀 Virtual Environments
 .venv/
 venv/
-ENV/
 env/
+ENV/
+.env/
 
-# Environment Variables
+# 🔐 Environment & Secrets
 .env
+.env.local
+.env.production
+.env.development
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-.history/
+# 🗃️ Credenciais (CRÍTICO)
+credenciais/
+*.json
+!requirements*.txt
+!package*.json
+!render.yaml
 
-# VSCode Workspace
-*.code-workspace
-.vscode/settings.json
-
-# Logs
-*.log
-logs/
-
-# Databases
+# 💾 Databases
 *.db
+*.sqlite
 *.sqlite3
 analytics.db
 
-# Temporary files
-tmp/
+# 📝 Logs
+*.log
+logs/
+dashboard_handler.log
+
+# 🗂️ Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+.tmp/
 temp/
-.tmp
+tmp/
 
-# OS
+# 💻 IDE & Editors
+.vscode/
+.idea/
+*.sublime-*
+.history/
+*.code-workspace
+
+# 🖥️ OS Specific
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Credentials
-credenciais/
-googlevision.json
-
-# Test files
+# 🧪 Development & Testing
 test_*.py
 debug_*.py
 *_test.py
 *_debug.py
-
-# Temporary development files
 temp_*.py
 rascunho_*.py
 experimento_*.py
-backup_*.py
+cleanup_*.py
+migrate_*.py
+verify_*.py
 
-# Build
+# 📦 Build & Deploy
 build/
 dist/
-*.egg-info/
+.egg-info/
+*.tar.gz
+*.zip
 
-# VSCode specific
-.vscode/launch.json
-.vscode/tasks.json
-.vscode/c_cpp_properties.json
-.vscode/extensions.json
+# 🌐 Web Assets (se não necessário)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Git hooks
-.git/hooks/
+# 📱 Mobile (futuro)
+*.ipa
+*.apk
+*.aab
+
+# 🚀 Deploy Temporário
+launcher_*backup*.py
+*_fixed.py
+dashboard_only.py
+*debug*.py
+*teste*.py
