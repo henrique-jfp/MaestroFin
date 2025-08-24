@@ -15,6 +15,13 @@ services:
         value: 1
       - key: PYTHONDONTWRITEBYTECODE
         value: 1
+      - key: RENDER_DEPLOY
+        value: true
+      # Adicione suas variáveis aqui:
+      # - key: TELEGRAM_TOKEN
+      #   value: seu_token_aqui
+      # - key: GEMINI_API_KEY  
+      #   value: sua_key_aqui
     # Health check endpoint
     healthCheckPath: /
     # Auto-deploy on push
