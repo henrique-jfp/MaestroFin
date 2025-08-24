@@ -1,8 +1,8 @@
-# 🚂 Railway Deploy Configuration
+# 🚂 Railway Deploy Configuration - REDEPLOY FORÇADO
 
 # Especifica a versão do Python
 [build]
-python = "3.11"
+python = "3.12"
 
 # Comando para iniciar o aplicativo
 [deploy]
