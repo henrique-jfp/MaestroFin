@@ -42,7 +42,7 @@ def main():
         setup_analytics_postgresql()
         
         print("📊 Carregando Dashboard Analytics...")
-        from analytics.dashboard_app import app
+        from analytics.dashboard_app_render_fixed import app
         
         # Render usa PORT automaticamente
         port = int(os.environ.get('PORT', 10000))

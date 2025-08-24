@@ -67,48 +67,90 @@ def health():
 
 @app.route('/api/realtime')
 def realtime_stats():
-    """API para métricas em tempo real - CORRIGIDA"""
+    """API para métricas em tempo real - CORRIGIDA RENDER"""
     if not analytics_available:
         return jsonify({'error': 'Analytics não disponível'})
     
     now = datetime.now()
     
     try:
-        # Conectar ao banco de dados
-        import sqlite3
-        conn = sqlite3.connect(analytics.db_path)
-        
-        # Estatísticas em tempo real
-        realtime_stats = {}
-        
-        # Total de usuários únicos (últimas 24h)
-        total_users = conn.execute("""
-            SELECT COUNT(DISTINCT username) 
-            FROM command_usage 
-            WHERE timestamp >= datetime('now', '-24 hours')
-        """).fetchone()[0]
-        
-        # Total de comandos (últimas 24h)
-        total_commands = conn.execute("""
-            SELECT COUNT(*) 
-            FROM command_usage 
-            WHERE timestamp >= datetime('now', '-24 hours')
-        """).fetchone()[0]
-        
-        # Tempo médio de resposta (últimas 24h)
-        avg_response = conn.execute("""
-            SELECT AVG(execution_time_ms) 
-            FROM command_usage 
-            WHERE timestamp >= datetime('now', '-24 hours')
-            AND execution_time_ms IS NOT NULL
-        """).fetchone()[0]
-        
-        # Contagem de erros (últimas 24h)
-        error_count = conn.execute("""
-            SELECT COUNT(*) 
-            FROM error_logs 
-            WHERE timestamp >= datetime('now', '-24 hours')
-        """).fetchone()[0]
+        # 🚀 RENDER: PostgreSQL vs LOCAL: SQLite
+        if os.getenv('DATABASE_URL'):
+            # PostgreSQL (Render)
+            from analytics.bot_analytics_postgresql import get_session
+            session = get_session()
+            
+            try:
+                # Consultar dados do PostgreSQL
+                from analytics.bot_analytics_postgresql import CommandUsage, ErrorLogs
+                
+                # Total de usuários únicos (últimas 24h)
+                from sqlalchemy import func
+                total_users = session.query(func.count(func.distinct(CommandUsage.username))).filter(
+                    CommandUsage.timestamp >= now - timedelta(hours=24)
+                ).scalar() or 0
+                
+                # Total de comandos (últimas 24h)
+                total_commands = session.query(func.count(CommandUsage.id)).filter(
+                    CommandUsage.timestamp >= now - timedelta(hours=24)
+                ).scalar() or 0
+                
+                # Tempo médio de resposta (últimas 24h)
+                avg_response = session.query(func.avg(CommandUsage.execution_time_ms)).filter(
+                    CommandUsage.timestamp >= now - timedelta(hours=24),
+                    CommandUsage.execution_time_ms.isnot(None)
+                ).scalar() or 0
+                
+                # Contagem de erros (últimas 24h)
+                error_count = session.query(func.count(ErrorLogs.id)).filter(
+                    ErrorLogs.timestamp >= now - timedelta(hours=24)
+                ).scalar() or 0
+                
+                session.close()
+                
+            except Exception as e:
+                print(f"❌ Erro PostgreSQL realtime: {e}")
+                if session:
+                    session.close()
+                # Dados default se falhar
+                total_users = total_commands = error_count = 0
+                avg_response = 0.0
+                
+        else:
+            # SQLite (Local)
+            import sqlite3
+            conn = sqlite3.connect(analytics.db_path)
+            
+            # Total de usuários únicos (últimas 24h)
+            total_users = conn.execute("""
+                SELECT COUNT(DISTINCT username) 
+                FROM command_usage 
+                WHERE timestamp >= datetime('now', '-24 hours')
+            """).fetchone()[0]
+            
+            # Total de comandos (últimas 24h)
+            total_commands = conn.execute("""
+                SELECT COUNT(*) 
+                FROM command_usage 
+                WHERE timestamp >= datetime('now', '-24 hours')
+            """).fetchone()[0]
+            
+            # Tempo médio de resposta (últimas 24h)
+            avg_response = conn.execute("""
+                SELECT AVG(execution_time_ms) 
+                FROM command_usage 
+                WHERE timestamp >= datetime('now', '-24 hours')
+                AND execution_time_ms IS NOT NULL
+            """).fetchone()[0]
+            
+            # Contagem de erros (últimas 24h)
+            error_count = conn.execute("""
+                SELECT COUNT(*) 
+                FROM error_logs 
+                WHERE timestamp >= datetime('now', '-24 hours')
+            """).fetchone()[0]
+            
+            conn.close()
         
         realtime_stats = {
             'total_users': total_users or 0,
