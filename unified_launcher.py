@@ -4,6 +4,7 @@
 Solução para plano gratuito do Render que não permite Background Workers
 """
 
+import asyncio
 import os
 import logging
 import threading
@@ -17,27 +18,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def run_bot_async():
-    """Executa o bot do Telegram de forma assíncrona e não bloqueante."""
+def run_bot_thread_safe():
+    """
+    Executa o bot do Telegram em uma thread, aplicando um patch para
+    desabilitar os signal handlers que causam erro fora da thread principal.
+    Esta é a abordagem correta para rodar em produção no Render Free Tier.
+    """
+    logger.info("🤖 Iniciando bot do Telegram em thread (modo de produção)...")
     try:
-        from bot import application  # Supondo que 'application' seja o seu ApplicationBuilder
-        logger.info("🤖 Configurando o bot para execução assíncrona...")
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling()
-        logger.info("✅ Bot está online e recebendo updates.")
-        # Mantém a função rodando para sempre
-        while True:
-            await asyncio.sleep(3600) # Dorme por 1h, apenas para manter a corrotina viva
-    except Exception as e:
-        logger.error(f"❌ Erro crítico no loop do bot: {e}", exc_info=True)
+        # Monkey-patch para desabilitar os signal handlers no run_polling.
+        # Isso é necessário para rodar em uma thread que não é a principal,
+        # evitando o erro "ValueError: set_wakeup_fd only works in main thread".
+        from telegram.ext import Application
+        
+        original_run_polling = Application.run_polling
+        
+        def thread_safe_run_polling(self, *args, **kwargs):
+            logger.info("🔧 Aplicando patch para `run_polling` em thread.")
+            # Força a desativação dos signal handlers, que só funcionam na thread principal.
+            kwargs['stop_signals'] = []
+            return original_run_polling(self, *args, **kwargs)
 
-def start_bot_thread():
-    """Inicia o loop de eventos do asyncio para o bot em uma nova thread."""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_bot_async())
+        Application.run_polling = thread_safe_run_polling
+        logger.info("✅ Patch de `run_polling` aplicado com sucesso.")
+
+        # Agora podemos chamar bot.main() com segurança, pois ele usará nossa versão corrigida.
+        import bot
+        bot.main()
+
+    except Exception as e:
+        logger.error(f"❌ Erro crítico ao iniciar o bot na thread: {e}", exc_info=True)
 
 def run_bot_process():
     """Executa o bot do Telegram em um processo separado (para dev local)."""
@@ -74,22 +84,14 @@ def main():
         logger.info("🏭 Ambiente de produção detectado (Render)")
         
         # Em produção, usar threading para rodar ambos
-        bot_thread = threading.Thread(target=start_bot_thread, daemon=True)
-        dashboard_thread = threading.Thread(target=run_dashboard, daemon=True) # daemon=True para encerrar com o principal
-        
-        # Iniciar bot em background
+        bot_thread = threading.Thread(target=run_bot_thread_safe, daemon=True)
         bot_thread.start()
         logger.info("✅ Bot iniciado em thread separada")
         
-        # Dashboard roda na thread principal (para manter o processo vivo)
-        dashboard_thread.start()
-        
-        # Mantém a thread principal viva, monitorando as outras
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("🛑 Encerrando launcher unificado...")
+        # O dashboard agora roda diretamente na thread principal.
+        # Como app.run() é bloqueante, ele manterá o processo vivo
+        # enquanto o bot roda na thread em segundo plano.
+        run_dashboard()
         
     else:
         logger.info("🏠 Ambiente local detectado")

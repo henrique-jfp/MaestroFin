@@ -62,25 +62,22 @@ class DashboardHandler:
     """Handler para funcionalidades do dashboard"""
     
     def __init__(self, dashboard_url: str = None):
-        # Detectar ambiente baseado nas variáveis de ambiente
-        environment = os.getenv('DASHBOARD_ENV', 'development')
-        
-        if dashboard_url is None:
-            # Configurações por ambiente
-            if environment == 'production':
-                self.dashboard_url = "https://maestrofin.henriquedejesus.dev"
-            elif environment == 'staging':
-                self.dashboard_url = "https://maestrofin-dev.henriquedejesus.dev" 
-            else:
-                # TEMPORÁRIO: usando analytics até recriar dashboard financeiro
-                self.dashboard_url = "http://localhost:5001"
-        else:
+        # 🚀 CORREÇÃO: Usar variável de ambiente para a URL base do dashboard.
+        # Isso torna o código portátil e configurável para qualquer ambiente.
+        # Fallback para localhost para desenvolvimento local.
+        self.dashboard_url = os.getenv(
+            'DASHBOARD_BASE_URL', 
+            'http://localhost:5000'
+        )
+        if dashboard_url: # Permite sobrescrever, se necessário
             self.dashboard_url = dashboard_url
+        else:
+            logger.info(f"✅ URL do Dashboard configurada para: {self.dashboard_url}")
     
     def verificar_dashboard_online(self) -> bool:
         """Verifica se o dashboard está online"""
         try:
-            response = requests.get(f"{self.dashboard_url}/api/status", timeout=3)
+            response = requests.get(f"{self.dashboard_url}/api/status", timeout=5)
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Erro ao verificar dashboard: {e}")
@@ -162,9 +159,9 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await loading_msg.edit_text(
                 "⚠️ <b>Link Temporário Indisponível</b>\n\n"
                 "Não foi possível gerar um link personalizado,\n"
-                "mas você pode acessar o dashboard diretamente:\n\n"
-                "🌐 <b>Dashboard:</b> http://localhost:5000\n"
-                "📱 <b>Demo:</b> http://localhost:5000/dashboard/demo\n\n"
+                "mas você pode acessar o dashboard diretamente.\n\n"
+                f"🌐 <b>Dashboard:</b> {dashboard_handler.dashboard_url}\n"
+                f"📱 <b>Demo:</b> {dashboard_handler.dashboard_url}/dashboard/demo\n\n"
                 "💡 <i>Use seu ID de usuário para filtrar seus dados.</i>",
                 parse_mode='HTML',
                 reply_markup=reply_markup

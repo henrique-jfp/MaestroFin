@@ -56,6 +56,12 @@ def dashboard():
         <p><strong>Template exists:</strong> {os.path.exists(os.path.join(template_dir, 'dashboard_analytics_clean.html'))}</p>
         """
 
+@app.route('/api/status')
+def api_status():
+    """Endpoint simples para verificar se a API está online e fornecer dados básicos."""
+    # Em um futuro, podemos adicionar mais verificações aqui (ex: conexão com DB)
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat(), 'version': '1.0.0'})
+
 @app.route('/api/realtime')
 def realtime_stats():
     """API para métricas em tempo real - ULTRA ROBUSTO com RETRY"""
