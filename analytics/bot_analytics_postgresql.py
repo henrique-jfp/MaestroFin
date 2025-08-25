@@ -62,11 +62,29 @@ class BotAnalyticsPostgreSQL:
             return
             
         try:
-            # Configurar engine PostgreSQL
+            # Configurar engine PostgreSQL com SSL fix
             if self.db_url.startswith('postgres://'):
                 self.db_url = self.db_url.replace('postgres://', 'postgresql://', 1)
-                
-            self.engine = create_engine(self.db_url)
+            
+            # 🔧 FIX SSL para Render PostgreSQL
+            ssl_args = {}
+            if 'render' in self.db_url.lower() or 'amazonaws' in self.db_url.lower():
+                ssl_args = {
+                    'pool_pre_ping': True,
+                    'pool_recycle': 3600,
+                    'connect_args': {
+                        'sslmode': 'require',
+                        'sslcert': None,
+                        'sslkey': None,
+                        'sslrootcert': None
+                    }
+                }
+                logging.info("🔐 Configurando SSL para PostgreSQL em produção")
+            
+            self.engine = create_engine(
+                self.db_url, 
+                **ssl_args
+            )
             self.Session = sessionmaker(bind=self.engine)
             
             # Criar tabelas

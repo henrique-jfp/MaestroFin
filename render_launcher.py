@@ -20,6 +20,14 @@ print("="*70)
 def main():
     """Função principal do launcher"""
     
+    # 🔥 APLICAR HOTFIX CRÍTICO PRIMEIRO
+    print("⚡ Executando hotfix crítico...")
+    try:
+        exec(open('render_hotfix.py').read())
+        print("✅ Hotfix aplicado com sucesso!")
+    except Exception as hotfix_error:
+        print(f"⚠️ Hotfix error (continuando): {hotfix_error}")
+    
     # Verificar variáveis de ambiente do Render
     render_service_type = os.getenv('RENDER_SERVICE_TYPE', '').lower()
     render_service_name = os.getenv('RENDER_SERVICE_NAME', '')

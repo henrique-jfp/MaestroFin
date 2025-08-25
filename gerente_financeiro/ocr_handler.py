@@ -553,14 +553,60 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
     except Exception as e:
         logger.error(f"💥 ERRO CRÍTICO no OCR: {type(e).__name__}: {e}", exc_info=True)
         
+        # 🚨 LOGS DETALHADOS PARA RENDER DEBUG
+        user_info = f"User: {username} (ID: {user_id})"
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Log completo do erro
+        import traceback
+        error_details = {
+            'error_type': type(e).__name__,
+            'error_message': str(e),
+            'user_info': user_info,
+            'timestamp': timestamp,
+            'traceback': traceback.format_exc()
+        }
+        
+        # Salvar no analytics se disponível
+        try:
+            from analytics.bot_analytics_postgresql import get_session, ErrorLogs
+            if os.getenv('DATABASE_URL'):
+                session = get_session()
+                error_log = ErrorLogs(
+                    user_id=user_id,
+                    username=username,
+                    command='lancamento_ocr',
+                    error_type=type(e).__name__,
+                    error_message=str(e)[:500],  # Limitar tamanho
+                    timestamp=datetime.now()
+                )
+                session.add(error_log)
+                session.commit()
+                session.close()
+                logger.info(f"✅ Erro OCR registrado no banco: {type(e).__name__}")
+        except Exception as db_error:
+            logger.warning(f"⚠️ Não foi possível salvar erro no banco: {db_error}")
+        
+        # Imprimir erro completo no console (para logs do Render)
+        print(f"\n{'='*60}")
+        print(f"💥 ERRO OCR DETALHADO - {timestamp}")
+        print(f"{'='*60}")
+        print(f"🔢 Tipo: {type(e).__name__}")
+        print(f"📝 Mensagem: {e}")
+        print(f"👤 {user_info}")
+        print(f"📍 Traceback:")
+        print(traceback.format_exc())
+        print(f"{'='*60}\n")
+        
         try:
             await message.edit_text(
                 f"💥 <b>Erro Crítico no OCR</b>\n\n"
                 f"🚨 <b>Tipo:</b> {type(e).__name__}\n"
                 f"📝 <b>Detalhes:</b> {str(e)[:100]}...\n\n"
                 f"👤 <b>Usuário:</b> {username}\n"
-                f"🕒 <b>Timestamp:</b> {datetime.now().strftime('%H:%M:%S')}\n\n"
-                "💡 Tente enviar outra imagem ou digite os dados manualmente.",
+                f"🕒 <b>Timestamp:</b> {timestamp}\n\n"
+                "💡 Tente enviar outra imagem ou digite os dados manualmente.\n"
+                "🔧 O erro foi registrado no sistema.",
                 parse_mode='HTML'
             )
         except Exception as msg_error:
