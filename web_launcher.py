@@ -46,7 +46,7 @@ def setup_analytics():
     print("🔧 Configurando Analytics PostgreSQL para o Web Service...")
     try:
         if not os.getenv('DATABASE_URL'):
-            print("⚠️ DATABASE_URL não configurado.")
+            print("⚠️ DATABASE_URL não configurado - pulando analytics.")
             return
 
         # Apenas importar para garantir que a conexão funciona
@@ -56,6 +56,8 @@ def setup_analytics():
             print("✅ Conexão com Analytics PostgreSQL verificada.")
         else:
             print("❌ Falha ao verificar Analytics PostgreSQL.")
+    except ImportError as e:
+        print(f"❌ Erro na importação do Analytics: {e}")
     except Exception as e:
         print(f"❌ Erro na configuração do Analytics: {e}")
 

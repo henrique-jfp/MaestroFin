@@ -26,7 +26,7 @@ app = Flask(__name__,
 
 # Importar analytics após configurar paths
 try:
-    # 🚀 RENDER: PostgreSQL, LOCAL: SQLite  
+    # 🚀 RENDER: PostgreSQL sempre (removendo SQLite para simplificar)
     if os.getenv('DATABASE_URL'):
         from analytics.bot_analytics_postgresql import get_analytics
         analytics = get_analytics()
@@ -34,10 +34,10 @@ try:
         is_render = True
         print("✅ Analytics PostgreSQL carregado para dashboard (RENDER)")
     else:
-        from analytics.bot_analytics import analytics
-        analytics_available = True
+        # Para ambiente local sem PostgreSQL, criar mock básico
+        print("⚠️ Ambiente local sem PostgreSQL - usando modo mock")
+        analytics_available = False
         is_render = False
-        print("✅ Analytics SQLite carregado para dashboard (LOCAL)")
 except ImportError as e:
     print(f"⚠️ Analytics não disponível: {e}")
     analytics_available = False
