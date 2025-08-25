@@ -19,12 +19,16 @@ logger = logging.getLogger(__name__)
 
 def run_bot():
     """Executa o bot do Telegram"""
+    import asyncio
+    # Define um novo event loop para esta thread, essencial para o asyncio do bot
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     try:
         logger.info("🤖 Iniciando bot do Telegram...")
         import bot
         bot.main()
     except Exception as e:
-        logger.error(f"❌ Erro no bot: {e}")
+        logger.error(f"❌ Erro no bot: {e}", exc_info=True)
         # Reiniciar bot em caso de erro
         time.sleep(5)
         run_bot()
