@@ -66,20 +66,26 @@ class BotAnalyticsPostgreSQL:
             if self.db_url.startswith('postgres://'):
                 self.db_url = self.db_url.replace('postgres://', 'postgresql://', 1)
             
-            # 🔧 FIX SSL para Render PostgreSQL
-            ssl_args = {}
+            # 🔧 ULTRA ROBUST SSL FIX para Render PostgreSQL
+            ssl_args = {
+                'pool_pre_ping': True,
+                'pool_recycle': 1800,  # Renovar conexões a cada 30 min
+                'pool_size': 2,         # Pool menor mas mais estável
+                'max_overflow': 1,      # Menos overflow para evitar SSL race conditions
+                'pool_timeout': 20,     # Timeout razoável
+                'echo': False           # Sem logs verbosos
+            }
+            
             if 'render' in self.db_url.lower() or 'amazonaws' in self.db_url.lower():
-                ssl_args = {
-                    'pool_pre_ping': True,
-                    'pool_recycle': 3600,
-                    'connect_args': {
-                        'sslmode': 'require',
-                        'sslcert': None,
-                        'sslkey': None,
-                        'sslrootcert': None
-                    }
+                ssl_args['connect_args'] = {
+                    'sslmode': 'require',
+                    'sslcert': None,
+                    'sslkey': None,
+                    'sslrootcert': None,
+                    'connect_timeout': 10,
+                    'application_name': 'maestrofin_analytics'
                 }
-                logging.info("🔐 Configurando SSL para PostgreSQL em produção")
+                logging.info("🔐 Configurando SSL Ultra Robusto para PostgreSQL em produção")
             
             self.engine = create_engine(
                 self.db_url, 
@@ -99,28 +105,38 @@ class BotAnalyticsPostgreSQL:
     def track_command_usage(self, user_id: int, username: str, command: str, 
                            success: bool = True, execution_time_ms: int = 0,
                            parameters: Dict = None):
-        """Registra uso de comando"""
+        """Registra uso de comando com retry automático"""
         if not self.Session:
             return
             
-        try:
-            with self.Session() as session:
-                usage = CommandUsage(
-                    user_id=user_id,
-                    username=username,
-                    command=command,
-                    success=success,
-                    execution_time_ms=execution_time_ms,
-                    parameters=json.dumps(parameters) if parameters else None
-                )
-                session.add(usage)
-                session.commit()
-                
-                # Atualizar usuários diários
-                self._update_daily_user(session, user_id, username, command)
-                
-        except Exception as e:
-            logging.error(f"❌ Erro ao registrar comando: {e}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with self.Session() as session:
+                    usage = CommandUsage(
+                        user_id=user_id,
+                        username=username,
+                        command=command,
+                        success=success,
+                        execution_time_ms=execution_time_ms,
+                        parameters=json.dumps(parameters) if parameters else None
+                    )
+                    session.add(usage)
+                    session.commit()
+                    
+                    # Atualizar usuários diários
+                    self._update_daily_user(session, user_id, username, command)
+                    return  # Sucesso, sair do loop
+                    
+            except Exception as e:
+                logging.error(f"❌ Erro ao registrar comando (tentativa {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    # Última tentativa, log detalhado
+                    logging.error(f"💥 Falha definitiva ao registrar comando após {max_retries} tentativas")
+                else:
+                    # Aguarda antes da próxima tentativa
+                    import time
+                    time.sleep(0.5 * (attempt + 1))  # Backoff progressivo
     
     def _update_daily_user(self, session: Session, user_id: int, username: str, command: str):
         """Atualiza estatísticas de usuário diário"""
@@ -156,26 +172,34 @@ class BotAnalyticsPostgreSQL:
     def log_error(self, error_type: str, error_message: str, stack_trace: str = None,
                   user_id: int = None, username: str = None, command: str = None,
                   metadata: Dict = None):
-        """Registra erro no sistema"""
+        """Registra erro no sistema com retry automático"""
         if not self.Session:
             return
             
-        try:
-            with self.Session() as session:
-                error_log = ErrorLogs(
-                    user_id=user_id,
-                    username=username,
-                    command=command,
-                    error_type=error_type,
-                    error_message=error_message,
-                    stack_trace=stack_trace,
-                    extra_data=json.dumps(metadata) if metadata else None
-                )
-                session.add(error_log)
-                session.commit()
-                
-        except Exception as e:
-            logging.error(f"❌ Erro ao registrar erro: {e}")
+        max_retries = 2  # Menos tentativas para erros
+        for attempt in range(max_retries):
+            try:
+                with self.Session() as session:
+                    error_log = ErrorLogs(
+                        user_id=user_id,
+                        username=username,
+                        command=command,
+                        error_type=error_type,
+                        error_message=error_message,
+                        stack_trace=stack_trace,
+                        extra_data=json.dumps(metadata) if metadata else None
+                    )
+                    session.add(error_log)
+                    session.commit()
+                    return  # Sucesso
+                    
+            except Exception as e:
+                logging.error(f"❌ Erro ao registrar erro (tentativa {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    logging.error(f"💥 Falha ao registrar erro após {max_retries} tentativas")
+                else:
+                    import time
+                    time.sleep(0.3)
     
     def get_daily_stats(self, date: str = None) -> Dict[str, Any]:
         """Retorna estatísticas do dia"""

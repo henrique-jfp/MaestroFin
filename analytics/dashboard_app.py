@@ -58,7 +58,7 @@ def dashboard():
 
 @app.route('/api/realtime')
 def realtime_stats():
-    """API para métricas em tempo real - ULTRA ROBUSTO"""
+    """API para métricas em tempo real - ULTRA ROBUSTO com RETRY"""
     
     # Fallback data que sempre funciona
     fallback_data = {
@@ -72,115 +72,109 @@ def realtime_stats():
     if not analytics_available:
         return jsonify(fallback_data)
     
-    try:
-        if is_render:
-            # 🚀 RENDER: PostgreSQL com proteção SSL
-            from analytics.bot_analytics_postgresql import get_session, CommandUsage, ErrorLogs
-            from sqlalchemy import func
-            import traceback
-            
-            session = None
-            
-            try:
-                session = get_session()
-                if not session:
-                    raise Exception("Sessão PostgreSQL não pôde ser criada")
+    # 🔄 RETRY AUTOMÁTICO para consultas SQL
+    max_retries = 3
+    retry_delay = 0.5
+    
+    for attempt in range(max_retries):
+        try:
+            if is_render:
+                # 🚀 RENDER: PostgreSQL com proteção SSL ULTRA ROBUSTA
+                from analytics.bot_analytics_postgresql import get_session, CommandUsage, ErrorLogs
+                from sqlalchemy import func, exc
+                import traceback
+                import time
                 
-                now = datetime.now()
+                session = None
                 
-                print(f"🔍 Debug SQL - Consultando dados de {now - timedelta(hours=24)} até {now}")
-                
-                # Total de usuários únicos (últimas 24h) - COM TIMEOUT
                 try:
-                    total_users = session.query(func.count(func.distinct(CommandUsage.username))).filter(
-                        CommandUsage.timestamp >= now - timedelta(hours=24)
-                    ).scalar() or 0
-                    print(f"✅ Usuários únicos: {total_users}")
-                except Exception as users_error:
-                    print(f"⚠️ Erro ao consultar usuários: {users_error}")
-                    total_users = fallback_data['total_users']
+                    print(f"🔄 Tentativa {attempt + 1}/{max_retries} de conexão PostgreSQL...")
+                    
+                    session = get_session()
+                    if not session:
+                        raise Exception("Sessão PostgreSQL não pôde ser criada")
+                    
+                    now = datetime.now()
+                    
+                    # Usar uma única query mais eficiente para reduzir SSL overhead
+                    query_result = session.execute("""
+                        SELECT 
+                            COUNT(DISTINCT cu.username) as total_users,
+                            COUNT(cu.id) as total_commands,
+                            AVG(COALESCE(cu.execution_time_ms, 0)) as avg_response,
+                            (SELECT COUNT(*) FROM analytics_error_logs WHERE timestamp >= %s) as error_count
+                        FROM analytics_command_usage cu 
+                        WHERE cu.timestamp >= %s
+                    """, (now - timedelta(hours=24), now - timedelta(hours=24))).fetchone()
+                    
+                    if query_result:
+                        total_users, total_commands, avg_response, error_count = query_result
+                        print(f"✅ Query SQL bem-sucedida - Usuários: {total_users}, Comandos: {total_commands}")
+                        
+                        result_data = {
+                            'total_users': int(total_users or 0),
+                            'total_commands': int(total_commands or 0),
+                            'avg_response_time': round(float(avg_response or 0), 2),
+                            'error_count': int(error_count or 0),
+                            'status': 'success',
+                            'timestamp': datetime.now().isoformat(),
+                            'attempt': attempt + 1
+                        }
+                        
+                        if session:
+                            session.close()
+                            print("✅ Sessão PostgreSQL fechada")
+                        
+                        return jsonify(result_data)
+                    else:
+                        raise Exception("Query não retornou resultados")
+                        
+                except (exc.OperationalError, Exception) as db_error:
+                    print(f"❌ Erro PostgreSQL tentativa {attempt + 1}: {db_error}")
+                    
+                    if session:
+                        try:
+                            session.close()
+                        except:
+                            pass
+                    
+                    # Se não é a última tentativa, aguarda e tenta novamente
+                    if attempt < max_retries - 1:
+                        print(f"⏳ Aguardando {retry_delay}s antes da próxima tentativa...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Backoff exponencial
+                        continue
+                    else:
+                        # Última tentativa falhou, usar fallback
+                        print("💥 Todas as tentativas falharam - usando dados fallback")
+                        break
+                        
+            else:
+                # Mock data para ambiente local
+                return jsonify({
+                    'total_users': 5,
+                    'total_commands': 42,
+                    'avg_response_time': 125.0,
+                    'error_count': 1,
+                    'status': 'local_mock',
+                    'timestamp': datetime.now().isoformat()
+                })
                 
-                # Total de comandos (últimas 24h)
-                try:
-                    total_commands = session.query(func.count(CommandUsage.id)).filter(
-                        CommandUsage.timestamp >= now - timedelta(hours=24)
-                    ).scalar() or 0
-                    print(f"✅ Total comandos: {total_commands}")
-                except Exception as commands_error:
-                    print(f"⚠️ Erro ao consultar comandos: {commands_error}")
-                    total_commands = fallback_data['total_commands']
-                
-                # Tempo médio de resposta (últimas 24h)
-                try:
-                    avg_response = session.query(func.avg(CommandUsage.execution_time_ms)).filter(
-                        CommandUsage.timestamp >= now - timedelta(hours=24),
-                        CommandUsage.execution_time_ms.isnot(None)
-                    ).scalar() or fallback_data['avg_response_time']
-                    print(f"✅ Tempo médio: {avg_response}")
-                except Exception as response_error:
-                    print(f"⚠️ Erro ao consultar tempo de resposta: {response_error}")
-                    avg_response = fallback_data['avg_response_time']
-                
-                # Contagem de erros (últimas 24h)
-                try:
-                    error_count = session.query(func.count(ErrorLogs.id)).filter(
-                        ErrorLogs.timestamp >= now - timedelta(hours=24)
-                    ).scalar() or 0
-                    print(f"✅ Contagem de erros: {error_count}")
-                except Exception as errors_error:
-                    print(f"⚠️ Erro ao consultar erros: {errors_error}")
-                    error_count = fallback_data['error_count']
-                
-                print("✅ Todas as consultas concluídas com sucesso")
-                
-            except Exception as db_error:
-                print(f"❌ Erro PostgreSQL realtime: {db_error}")
-                print(f"❌ Traceback: {traceback.format_exc()}")
-                
-                # Usar dados fallback
-                total_users = fallback_data['total_users']
-                total_commands = fallback_data['total_commands']
-                avg_response = fallback_data['avg_response_time']
-                error_count = fallback_data['error_count']
-                
-            finally:
-                if session:
-                    try:
-                        session.close()
-                        print("✅ Sessão PostgreSQL fechada")
-                    except:
-                        print("⚠️ Erro ao fechar sessão")
-        else:
-            # Mock data para ambiente local
-            total_users = 5
-            total_commands = 42
-            error_count = 1
-            avg_response = 125.0
-        
-        # Garantir que os dados são válidos
-        result_data = {
-            'total_users': max(0, int(total_users or 0)),
-            'total_commands': max(0, int(total_commands or 0)),
-            'avg_response_time': round(max(0, float(avg_response or 0)), 2),
-            'error_count': max(0, int(error_count or 0)),
-            'status': 'success' if is_render else 'local_mock',
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        return jsonify(result_data)
-        
-    except Exception as critical_error:
-        print(f"💥 Erro crítico em realtime_stats: {critical_error}")
-        import traceback
-        print(f"💥 Traceback completo: {traceback.format_exc()}")
-        
-        # Retornar fallback em qualquer caso
-        return jsonify({
-            **fallback_data,
-            'status': 'critical_error',
-            'error_message': str(critical_error)[:100],
-            'timestamp': datetime.now().isoformat()
-        })
+        except Exception as critical_error:
+            print(f"💥 Erro crítico tentativa {attempt + 1}: {critical_error}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            else:
+                break
+    
+    # Se chegou até aqui, todas as tentativas falharam
+    print("🛟 Retornando dados fallback após esgotamento de tentativas")
+    return jsonify({
+        **fallback_data,
+        'status': 'all_retries_failed',
+        'timestamp': datetime.now().isoformat()
+    })
 
 @app.route('/api/users/active')
 def active_users():
@@ -191,6 +185,127 @@ def active_users():
         'status': 'mock'
     })
 
+@app.route('/api/debug')
+def debug_info():
+    """Endpoint de debug para diagnosticar problemas"""
+    debug_data = {
+        'timestamp': datetime.now().isoformat(),
+        'analytics_available': analytics_available,
+        'is_render': is_render,
+        'environment': {
+            'DATABASE_URL': 'SET' if os.getenv('DATABASE_URL') else 'NOT_SET',
+            'PORT': os.getenv('PORT', 'NOT_SET'),
+            'RENDER_SERVICE_NAME': os.getenv('RENDER_SERVICE_NAME', 'NOT_SET')
+        },
+        'ssl_tests': []
+    }
+    
+    # Teste rápido de conectividade PostgreSQL
+    if analytics_available and is_render:
+        try:
+            from analytics.bot_analytics_postgresql import get_session
+            
+            # Teste 1: Criar sessão
+            debug_data['ssl_tests'].append({
+                'test': 'create_session',
+                'status': 'attempting'
+            })
+            
+            session = get_session()
+            if session:
+                debug_data['ssl_tests'][-1]['status'] = 'success'
+                
+                # Teste 2: Query simples
+                debug_data['ssl_tests'].append({
+                    'test': 'simple_query',
+                    'status': 'attempting'
+                })
+                
+                result = session.execute("SELECT 1 as test").fetchone()
+                debug_data['ssl_tests'][-1]['status'] = 'success'
+                debug_data['ssl_tests'][-1]['result'] = str(result)
+                
+                # Teste 3: Query das tabelas de analytics
+                debug_data['ssl_tests'].append({
+                    'test': 'analytics_tables',
+                    'status': 'attempting'
+                })
+                
+                tables = session.execute("""
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_name LIKE 'analytics_%'
+                """).fetchall()
+                
+                debug_data['ssl_tests'][-1]['status'] = 'success'
+                debug_data['ssl_tests'][-1]['tables'] = [t[0] for t in tables]
+                
+                session.close()
+            else:
+                debug_data['ssl_tests'][-1]['status'] = 'failed'
+                debug_data['ssl_tests'][-1]['error'] = 'session_is_none'
+                
+        except Exception as debug_error:
+            debug_data['ssl_tests'].append({
+                'test': 'error_caught',
+                'status': 'failed',
+                'error': str(debug_error)[:200]
+            })
+    
+    return jsonify(debug_data)
+
+@app.route('/api/errors/detailed')
+def detailed_errors():
+    """API para erros detalhados"""
+    try:
+        days = int(request.args.get('days', 7))
+        
+        if analytics_available and is_render:
+            from analytics.bot_analytics_postgresql import get_session, ErrorLogs
+            from sqlalchemy import func
+            
+            session = get_session()
+            if session:
+                errors = session.query(ErrorLogs).filter(
+                    ErrorLogs.timestamp >= datetime.now() - timedelta(days=days)
+                ).order_by(ErrorLogs.timestamp.desc()).limit(50).all()
+                
+                error_list = [{
+                    'timestamp': error.timestamp.isoformat(),
+                    'error_type': error.error_type,
+                    'message': error.error_message[:100],
+                    'command': error.command,
+                    'username': error.username
+                } for error in errors]
+                
+                session.close()
+                
+                return jsonify({
+                    'errors': error_list,
+                    'count': len(error_list),
+                    'status': 'success'
+                })
+        
+        # Fallback/mock
+        return jsonify({
+            'errors': [
+                {
+                    'timestamp': datetime.now().isoformat(),
+                    'error_type': 'MockError', 
+                    'message': 'Erro de exemplo para teste',
+                    'command': '/test',
+                    'username': 'usuario_teste'
+                }
+            ],
+            'count': 1,
+            'status': 'mock'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        })
+
 @app.route('/api/commands')
 def commands_stats():
     """API simplificada para comandos"""
@@ -200,49 +315,38 @@ def commands_stats():
             from sqlalchemy import func
             session = get_session()
             
-            top_commands = session.query(
-                CommandUsage.command, 
-                func.count(CommandUsage.id).label('count')
-            ).filter(
-                CommandUsage.timestamp >= datetime.now() - timedelta(days=7)
-            ).group_by(CommandUsage.command).order_by(
-                func.count(CommandUsage.id).desc()
-            ).limit(10).all()
-            
-            session.close()
-            
-            return jsonify({
-                'top_commands': [{'command': cmd, 'count': int(cnt)} for cmd, cnt in top_commands],
-                'status': 'ok'
-            })
-        else:
-            # Mock data
-            return jsonify({
-                'top_commands': [
-                    {'command': '/start', 'count': 25},
-                    {'command': '/help', 'count': 18},
-                    {'command': '/extrato', 'count': 12},
-                    {'command': '/ocr', 'count': 8},
-                    {'command': '/contact', 'count': 5}
-                ],
-                'status': 'mock'
-            })
+            if session:
+                top_commands = session.query(
+                    CommandUsage.command, 
+                    func.count(CommandUsage.id).label('count')
+                ).filter(
+                    CommandUsage.timestamp >= datetime.now() - timedelta(days=7)
+                ).group_by(CommandUsage.command).order_by(
+                    func.count(CommandUsage.id).desc()
+                ).limit(10).all()
+                
+                session.close()
+                
+                return jsonify({
+                    'top_commands': [{'command': cmd, 'count': int(cnt)} for cmd, cnt in top_commands],
+                    'status': 'ok'
+                })
+        
+        # Mock data
+        return jsonify({
+            'top_commands': [
+                {'command': '/start', 'count': 25},
+                {'command': '/help', 'count': 18},
+                {'command': '/extrato', 'count': 12},
+                {'command': '/ocr', 'count': 8},
+                {'command': '/contact', 'count': 5}
+            ],
+            'status': 'mock'
+        })
             
     except Exception as e:
         print(f"❌ Erro commands API: {e}")
         return jsonify({'error': str(e), 'status': 'error'})
-
-@app.route('/api/errors')
-def errors_stats():
-    """API simplificada para erros"""
-    try:
-        return jsonify({
-            'recent_errors': [],
-            'error_count': 0,
-            'status': 'simplified'
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)})
 
 @app.route('/api/users')
 def users_stats():
