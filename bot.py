@@ -8,25 +8,25 @@ from telegram.warnings import PTBUserWarning
 import threading
 from flask import Flask, jsonify
 
-# 🔐 CARREGAR SECRET FILES PRIMEIRO (antes de tudo)
+# 🔐 CARREGAR SECRET FILES PRIMEIRO
 try:
     from secret_loader import setup_environment
     setup_environment()
-    logging.info("✅ Secret Files/Environment carregado com sucesso")
+    logging.info("✅ Secret Files carregado com sucesso")
 except ImportError:
-    logging.warning("⚠️ secret_loader não encontrado - usando env vars padrão")
+    logging.warning("⚠️ secret_loader não encontrado")
 except Exception as e:
     logging.error(f"❌ Erro ao carregar Secret Files: {e}")
 
-# Suprimir warnings específicos do python-telegram-bot sobre ConversationHandler
+# Suprimir warnings do python-telegram-bot
 warnings.filterwarnings("ignore", category=PTBUserWarning, module="telegram")
 
-# 🚀 INICIALIZAR OCR CREDENCIAIS NO STARTUP
+# 🚀 INICIALIZAR OCR
 try:
     from gerente_financeiro.ocr_handler import setup_google_credentials
     setup_success = setup_google_credentials()
     if setup_success:
-        logging.info("✅ OCR: Credenciais Google Vision configuradas no startup")
+        logging.info("✅ OCR: Credenciais Google Vision configuradas")
     else:
         logging.warning("⚠️ OCR: Usando apenas fallback Gemini")
 except Exception as ocr_init_error:
@@ -34,20 +34,19 @@ except Exception as ocr_init_error:
 
 # Inicializar Analytics
 try:
-    # 🚀 RENDER: Usar PostgreSQL, LOCAL: Usar SQLite
-    if os.getenv('DATABASE_URL'):  # Render tem DATABASE_URL
+    if os.getenv('DATABASE_URL'):  # Render
         from analytics.bot_analytics_postgresql import get_analytics, track_command
         analytics = get_analytics()
-        logging.info("✅ Sistema de Analytics PostgreSQL integrado ao bot (RENDER)")
-    else:  # Local usa SQLite
+        logging.info("✅ Analytics PostgreSQL integrado (RENDER)")
+    else:  # Local
         from analytics.bot_analytics import BotAnalytics, track_command
         analytics = BotAnalytics()
-        logging.info("✅ Sistema de Analytics SQLite integrado ao bot (LOCAL)")
+        logging.info("✅ Analytics SQLite integrado (LOCAL)")
     
     ANALYTICS_ENABLED = True
 except ImportError as e:
     ANALYTICS_ENABLED = False
-    logging.warning(f"⚠️ Sistema de Analytics não encontrado: {e}")
+    logging.warning(f"⚠️ Analytics não disponível: {e}")
 
 def track_analytics(command_name):
     """Decorator para tracking de comandos"""
@@ -74,7 +73,7 @@ def track_analytics(command_name):
         return wrapper
     return decorator
 
-# Servidor web para health check
+# Health check server
 health_app = Flask(__name__)
 
 @health_app.route('/health')
@@ -137,54 +136,36 @@ from gerente_financeiro.gamification_handler import show_profile, show_rankings,
 # 🔧 HANDLER GENÉRICO DE DOCUMENTOS
 from document_handler_addon import create_document_handlers
 
-# TESTE: Função simples para debug do dashboard
+# --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("dashboarddebug")
 async def debug_dashboard(update, context):
-    """Versão debug do comando dashboard"""
+    """Comando de debug do dashboard"""
     try:
         user_id = update.effective_user.id
         
-        # Testar se dashboard está online
+        # Testar dashboard
         import requests
         try:
             response = requests.get("http://localhost:5001/api/status", timeout=3)
             if response.status_code == 200:
-                dashboard_online = "✅ Online"
+                dashboard_status = "✅ Online"
                 data = response.json()
                 status_info = f"Status: {data.get('status', 'unknown')}"
             else:
-                dashboard_online = "❌ Erro HTTP"
+                dashboard_status = "❌ Erro HTTP"
                 status_info = f"Código: {response.status_code}"
         except Exception as e:
-            dashboard_online = "❌ Offline"
+            dashboard_status = "❌ Offline"
             status_info = f"Erro: {str(e)[:50]}"
         
-        # Testar geração de token
-        try:
-            token_response = requests.get(f"http://localhost:5001/api/gerar-token/{user_id}", timeout=5)
-            if token_response.status_code == 200:
-                token_data = token_response.json()
-                token_info = f"✅ Token: {token_data.get('token', 'N/A')[:10]}..."
-                url_info = f"URL: {token_data.get('url', 'N/A')}"
-            else:
-                token_info = f"❌ Erro token: {token_response.status_code}"
-                url_info = ""
-        except Exception as e:
-            token_info = f"❌ Erro token: {str(e)[:50]}"
-            url_info = ""
-        
-        # Enviar resultado
         message = f"""🔍 **DEBUG DASHBOARD**
 
-📊 **Dashboard**: {dashboard_online}
+📊 **Dashboard**: {dashboard_status}
 {status_info}
-
-🔑 **Token**: {token_info}
-{url_info}
 
 👤 **User ID**: {user_id}
 
-🌐 **URLs Diretas**:
+🌐 **URLs**:
 • Dashboard: http://localhost:5000
 • Demo: http://localhost:5000/dashboard/demo"""
 
@@ -192,34 +173,6 @@ async def debug_dashboard(update, context):
         
     except Exception as e:
         await update.message.reply_text(f"🚨 **ERRO DEBUG**: {str(e)}")
-
-# TESTE: Comando para debug com logs detalhados
-@track_analytics("dashboard")
-async def dashboard_com_logs(update, context):
-    """Comando dashboard com logs detalhados para debug"""
-    import traceback
-    try:
-        print("\n🔍 DEBUG: Iniciando comando dashboard...")
-        user_id = update.effective_user.id
-        print(f"📋 DEBUG: User ID: {user_id}")
-        
-        # Importar o handler original
-        from gerente_financeiro.dashboard_handler import cmd_dashboard
-        print("✅ DEBUG: Handler importado com sucesso")
-        
-        # Executar o comando original com captura de exceção
-        await cmd_dashboard(update, context)
-        print("✅ DEBUG: Comando executado sem erros")
-        
-    except Exception as e:
-        print(f"\n❌ ERRO CAPTURADO:")
-        print(f"Tipo: {type(e).__name__}")
-        print(f"Mensagem: {str(e)}")
-        print(f"Traceback completo:")
-        print(traceback.format_exc())
-        
-        # Enviar erro para o usuário
-        await update.message.reply_text(f"🚨 **ERRO CAPTURADO**:\n`{type(e).__name__}: {str(e)}`", parse_mode='Markdown')
 
 # --- CONFIGURAÇÃO INICIAL ---
 warnings.filterwarnings("ignore", category=PTBUserWarning)
