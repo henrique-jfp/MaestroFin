@@ -134,6 +134,9 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
+# 🔧 HANDLER GENÉRICO DE DOCUMENTOS
+from document_handler_addon import create_document_handlers
+
 # TESTE: Função simples para debug do dashboard
 @track_analytics("dashboarddebug")
 async def debug_dashboard(update, context):
@@ -312,7 +315,7 @@ def main() -> None:
     application.add_handler(CommandHandler("ranking", show_rankings))
     
     # �🌐 DASHBOARD HANDLERS
-    application.add_handler(CommandHandler("dashboard", dashboard_com_logs))  # COM LOGS DETALHADOS
+    application.add_handler(CommandHandler("dashboard", cmd_dashboard))  # DASHBOARD PRINCIPAL
     application.add_handler(CommandHandler("dashstatus", cmd_dashstatus))
     application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))  # DEBUG
     
@@ -332,6 +335,12 @@ def main() -> None:
     # 🆕 NOVOS: Handlers independentes para callbacks de agendamento de parcelas
     application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$"))
     application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$"))
+    
+    # 🔧 HANDLER GENÉRICO DE DOCUMENTOS/FOTOS
+    document_handlers = create_document_handlers()
+    for handler in document_handlers:
+        application.add_handler(handler)
+    logger.info("✅ Handlers genéricos de documentos adicionados")
     
     # Handler de Erro
     application.add_error_handler(error_handler)

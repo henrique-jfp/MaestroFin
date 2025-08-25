@@ -2,13 +2,13 @@
 # Arquitetura de Serviços Web + Worker para estabilidade máxima.
 
 services:
-  # --- Serviço Web: Dashboard com Gunicorn ---
+  # --- Serviço Principal: Auto-detecta Web ou Worker ---
   - type: web
-    name: maestrofin-dashboard
+    name: maestrofin
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --config gunicorn_config.py web_launcher:app
+    startCommand: python render_launcher.py
     healthCheckPath: /
     envVars:
       - key: PYTHON_VERSION
@@ -19,7 +19,9 @@ services:
         value: 1
       - key: RENDER_DEPLOY
         value: "true"
-      # Adicione suas variáveis de ambiente aqui (serão compartilhadas com o bot)
+      - key: MAESTROFIN_MODE
+        value: "web"  # "web" para dashboard, "bot" para worker
+      # Adicione suas variáveis de ambiente aqui
       # - key: TELEGRAM_TOKEN
       #   fromSecret: true
       # - key: GEMINI_API_KEY
@@ -29,13 +31,13 @@ services:
       # - key: GOOGLE_VISION_CREDENTIALS_JSON
       #   fromSecret: true
 
-  # --- Serviço Worker: Bot do Telegram ---
+  # --- Worker Service: Bot do Telegram ---
   - type: worker
     name: maestrofin-bot
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    startCommand: python bot_launcher.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
@@ -45,3 +47,5 @@ services:
         value: 1
       - key: RENDER_DEPLOY
         value: "true"
+      - key: MAESTROFIN_MODE
+        value: "bot"
