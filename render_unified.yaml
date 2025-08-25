@@ -1,0 +1,32 @@
+# 🎨 Render Deploy Configuration - UNIFIED SERVICE (Free Plan Compatible)
+# Executa bot + dashboard no mesmo processo para compatibilidade com plano gratuito
+
+services:
+  # 🌐 UNIFIED SERVICE - Bot + Dashboard juntos (compatível com Free Plan)
+  - type: web
+    name: maestrofin-unified
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python unified_launcher.py
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PYTHONDONTWRITEBYTECODE
+        value: 1
+      - key: RENDER_DEPLOY
+        value: "true"
+      - key: MAESTROFIN_MODE
+        value: "unified"  # Modo unificado: bot + dashboard
+      # Adicione suas variáveis de ambiente aqui
+      # - key: TELEGRAM_TOKEN
+      #   fromSecret: true
+      # - key: GEMINI_API_KEY
+      #   fromSecret: true
+      # - key: DATABASE_URL
+      #   fromSecret: true
+      # - key: GOOGLE_VISION_CREDENTIALS_JSON
+      #   fromSecret: true
