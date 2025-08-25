@@ -73,8 +73,8 @@ def main():
             print(f"❌ Erro ao iniciar Gunicorn: {e}")
             # Fallback para Flask direto
             print("🔄 Tentando Flask direto...")
-            import os
-            subprocess.run(['python', '-c', f'import os; from analytics.dashboard_app_render_fixed import app; app.run(host="0.0.0.0", port={os.environ.get("PORT", 10000)})'])
+            port_value = os.environ.get("PORT", "10000")
+            subprocess.run(['python', '-c', f'import os; from analytics.dashboard_app_render_fixed import app; app.run(host="0.0.0.0", port={port_value})'])
         
     elif start_bot:
         print("🤖 INICIANDO BOT TELEGRAM")
