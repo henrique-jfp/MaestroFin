@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import io
 
 from pdf2image import convert_from_bytes
+from PIL import Image
 import google.generativeai as genai
 from google.cloud import vision
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Configurar credenciais do Google Vision
 def setup_google_credentials():
-    """🚀 RENDER FIX - Configuração ultra-robusta: Secret Files > Env Vars > Local"""
+    """🚀 CONFIGURAÇÃO ROBUSTA: Secret Files > Env Vars > Local Files"""
     try:
         logger.info("🔧 Configurando credenciais Google Vision...")
         
@@ -104,39 +105,37 @@ def setup_google_credentials():
         # 🗂️ LOCAL: Tentar arquivos de credenciais locais
         base_dir = os.path.dirname(os.path.dirname(__file__))
         possible_paths = [
-            os.path.join(base_dir, 'credenciais', 'googlevision2.json'),
-            os.path.join(base_dir, 'credenciais', 'service-account-key.json'),
+            os.path.join(base_dir, 'credenciais', 'google_vision_credentials.json'),
+            os.path.join(base_dir, 'credenciais', 'service-account-key.json'), 
             os.path.join(base_dir, 'credenciais', 'credentials.json'),
         ]
         
         for credentials_path in possible_paths:
             if os.path.exists(credentials_path):
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-                logger.info(f"✅ LOCAL: Credenciais configuradas: {credentials_path}")
-                return True
+                # Validar se o JSON é válido
+                try:
+                    with open(credentials_path, 'r') as f:
+                        creds_data = json.load(f)
+                    
+                    if creds_data.get('type') == 'service_account':
+                        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+                        logger.info(f"✅ LOCAL: Credenciais válidas configuradas: {credentials_path}")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Arquivo não é service account: {credentials_path}")
+                        
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ JSON inválido em {credentials_path}: {e}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Erro ao validar {credentials_path}: {e}")
                 
         # ⚠️ Nenhuma credencial encontrada
         logger.warning("⚠️ Nenhuma credencial Google Vision encontrada")
-        logger.info("🔄 Sistema continuará com fallback Gemini apenas")
+        logger.info("� Sistema continuará com fallback Gemini apenas")
         return False
         
     except Exception as e:
         logger.error(f"❌ Erro crítico ao configurar credenciais: {e}")
-        return False
-        
-        for credentials_path in possible_paths:
-            if os.path.exists(credentials_path):
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-                logger.info(f"✅ LOCAL: Credenciais configuradas: {credentials_path}")
-                return True
-                
-        # 4. Se nenhum método funcionou
-        logger.warning("⚠️ Nenhuma credencial Google Vision encontrada (local ou Render)")
-        logger.info("📋 Tentando usar credenciais do ambiente Render...")
-        return True  # Continua mesmo sem arquivo local (para Render)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao configurar credenciais: {e}")
         return False
 
 # Configurar credenciais na inicialização
@@ -279,15 +278,24 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             
             try:
                 from pdf2image import convert_from_bytes
-                images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt='png')
+                images = convert_from_bytes(file_bytes, first_page=1, last_page=1, fmt='png', dpi=150)
                 
                 if not images:
                     logger.error("❌ Falha na conversão PDF->Imagem")
                     await message.edit_text("❌ PDF não pôde ser convertido.")
                     return ConversationHandler.END
                 
+                # Redimensionar se muito grande
+                img = images[0]
+                max_size = 2048
+                if img.width > max_size or img.height > max_size:
+                    ratio = min(max_size / img.width, max_size / img.height)
+                    new_size = (int(img.width * ratio), int(img.height * ratio))
+                    img = img.resize(new_size, Image.LANCZOS)
+                    logger.info(f"📏 PDF redimensionado: {img.size}")
+                
                 with io.BytesIO() as output:
-                    images[0].save(output, format="PNG")
+                    img.save(output, format="PNG", optimize=True, quality=85)
                     image_content_for_vision = output.getvalue()
                     
                 logger.info(f"✅ PDF convertido: {len(image_content_for_vision)} bytes")
@@ -297,8 +305,47 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                 await message.edit_text(f"❌ Erro ao processar PDF: {str(pdf_error)}")
                 return ConversationHandler.END
         else:
-            image_content_for_vision = file_bytes
-            logger.info(f"✅ Imagem direta: {len(image_content_for_vision)} bytes")
+            # Processar imagem direta com validações
+            logger.info("🖼️ Processando imagem direta...")
+            
+            try:
+                # Abrir com PIL para validação e otimização
+                from PIL import Image
+                img = Image.open(io.BytesIO(file_bytes))
+                
+                logger.info(f"📸 Imagem original: {img.size} - Modo: {img.mode} - Formato: {img.format}")
+                
+                # Converter para RGB se necessário
+                if img.mode not in ('RGB', 'L'):
+                    img = img.convert('RGB')
+                    logger.info("🎨 Convertido para RGB")
+                
+                # Redimensionar se muito grande (Google Vision tem limite)
+                max_size = 2048
+                if img.width > max_size or img.height > max_size:
+                    ratio = min(max_size / img.width, max_size / img.height)
+                    new_size = (int(img.width * ratio), int(img.height * ratio))
+                    img = img.resize(new_size, Image.LANCZOS)
+                    logger.info(f"📏 Imagem redimensionada: {img.size}")
+                
+                # Salvar como JPEG otimizado
+                with io.BytesIO() as output:
+                    img.save(output, format="JPEG", optimize=True, quality=85)
+                    image_content_for_vision = output.getvalue()
+                
+                logger.info(f"✅ Imagem processada: {len(image_content_for_vision)} bytes")
+                
+            except Exception as img_error:
+                logger.error(f"❌ Erro ao processar imagem: {img_error}")
+                await message.edit_text(f"❌ Formato de imagem não suportado: {str(img_error)}")
+                return ConversationHandler.END
+        
+        # Verificar tamanho máximo (Google Vision limit: 20MB)
+        max_size_bytes = 20 * 1024 * 1024  # 20MB
+        if len(image_content_for_vision) > max_size_bytes:
+            logger.error(f"❌ Imagem muito grande: {len(image_content_for_vision)} bytes > {max_size_bytes}")
+            await message.edit_text("❌ Imagem muito grande. Use uma imagem menor.")
+            return ConversationHandler.END
         
         if not image_content_for_vision:
             logger.error("❌ Conteúdo da imagem está vazio")
@@ -315,38 +362,86 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
         # 🥇 MÉTODO 1: Google Vision (Primário)
         logger.info("🔍 Tentativa 1: Google Vision API")
         try:
-            setup_google_credentials()
+            # Verificar se as credenciais foram configuradas corretamente
+            creds_status = setup_google_credentials()
+            if not creds_status:
+                raise Exception("Credenciais Google Vision não configuradas")
             
+            # Verificar se GOOGLE_APPLICATION_CREDENTIALS está definida
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if not creds_path or not os.path.exists(creds_path):
+                raise Exception(f"Arquivo de credenciais não encontrado: {creds_path}")
+            
+            logger.info(f"✅ Usando credenciais: {creds_path}")
+            
+            # Criar cliente com timeout
+            logger.info("🔌 Criando cliente Google Vision...")
             client = vision.ImageAnnotatorClient()
-            vision_image = vision.Image(content=image_content_for_vision)
-            response = client.document_text_detection(image=vision_image)
             
+            # Preparar imagem
+            logger.info(f"📸 Preparando imagem para análise ({len(image_content_for_vision)} bytes)")
+            vision_image = vision.Image(content=image_content_for_vision)
+            
+            # Fazer requisição com timeout
+            logger.info("🚀 Enviando para Google Vision API...")
+            await message.edit_text("🔎 Enviando para Google Vision API...")
+            
+            # Requisição síncrona (Google Vision não tem versão async nativa)
+            import asyncio
+            
+            def make_vision_request():
+                return client.document_text_detection(image=vision_image)
+            
+            # Executar em thread pool para evitar blocking
+            response = await asyncio.get_event_loop().run_in_executor(
+                None, make_vision_request
+            )
+            
+            logger.info("📥 Resposta recebida do Google Vision")
+            
+            # Verificar erros na resposta
             if response.error.message:
                 logger.error(f"❌ Google Vision API Error: {response.error.message}")
                 raise Exception(f"Google Vision API: {response.error.message}")
             
-            texto_ocr = response.full_text_annotation.text
+            # Extrair texto
+            texto_ocr = response.full_text_annotation.text if response.full_text_annotation else ""
             ocr_method_used = "Google Vision"
             
             logger.info(f"✅ Google Vision: {len(texto_ocr)} caracteres extraídos")
+            
+            if texto_ocr and len(texto_ocr.strip()) >= 10:
+                logger.info("🎉 Google Vision SUCESSO!")
+            else:
+                logger.warning(f"⚠️ Google Vision: texto insuficiente ('{texto_ocr[:50]}...')")
+                raise Exception("Texto extraído muito curto ou vazio")
             
         except Exception as vision_error:
             logger.warning(f"⚠️ Google Vision falhou: {vision_error}")
             
             # 🥈 MÉTODO 2: Gemini Vision (Fallback)
             logger.info("🔄 Tentativa 2: Gemini Vision (Fallback)")
-            await message.edit_text("🔄 Tentando método alternativo...")
+            await message.edit_text("🔄 Tentando método alternativo (Gemini)...")
             
             try:
                 if not config.GEMINI_API_KEY:
                     raise Exception("GEMINI_API_KEY não configurado")
                 
+                logger.info("🤖 Configurando Gemini...")
                 genai.configure(api_key=config.GEMINI_API_KEY)
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 # Converter para PIL Image
+                logger.info("🖼️ Convertendo para PIL Image...")
                 from PIL import Image
                 pil_image = Image.open(io.BytesIO(image_content_for_vision))
+                
+                logger.info(f"✅ PIL Image: {pil_image.size} - Modo: {pil_image.mode}")
+                
+                # Converter para RGB se necessário
+                if pil_image.mode != 'RGB':
+                    pil_image = pil_image.convert('RGB')
+                    logger.info("🎨 Convertido para RGB")
                 
                 prompt = """
                 TAREFA: Extrair TODO o texto visível desta imagem de nota fiscal ou comprovante.
@@ -360,8 +455,11 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                 RESPOSTA: Apenas o texto extraído, sem comentários.
                 """
                 
+                logger.info("🚀 Enviando para Gemini Vision...")
                 response = await model.generate_content_async([prompt, pil_image])
                 texto_gemini = response.text.strip()
+                
+                logger.info(f"📥 Gemini Response: '{texto_gemini[:100]}...' (len: {len(texto_gemini)})")
                 
                 if texto_gemini and texto_gemini != 'ERRO_OCR' and len(texto_gemini) > 10:
                     texto_ocr = texto_gemini
