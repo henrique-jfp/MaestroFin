@@ -17,21 +17,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_bot():
-    """Executa o bot do Telegram"""
-    import asyncio
-    # Define um novo event loop para esta thread, essencial para o asyncio do bot
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
+async def run_bot_async():
+    """Executa o bot do Telegram de forma assíncrona e não bloqueante."""
     try:
-        logger.info("🤖 Iniciando bot do Telegram...")
-        import bot
-        bot.main()
+        from bot import application  # Supondo que 'application' seja o seu ApplicationBuilder
+        logger.info("🤖 Configurando o bot para execução assíncrona...")
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        logger.info("✅ Bot está online e recebendo updates.")
+        # Mantém a função rodando para sempre
+        while True:
+            await asyncio.sleep(3600) # Dorme por 1h, apenas para manter a corrotina viva
     except Exception as e:
-        logger.error(f"❌ Erro no bot: {e}", exc_info=True)
-        # Reiniciar bot em caso de erro
-        time.sleep(5)
-        run_bot()
+        logger.error(f"❌ Erro crítico no loop do bot: {e}", exc_info=True)
+
+def start_bot_thread():
+    """Inicia o loop de eventos do asyncio para o bot em uma nova thread."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(run_bot_async())
+
+def run_bot_process():
+    """Executa o bot do Telegram em um processo separado (para dev local)."""
+    logger.info("🤖 Iniciando bot do Telegram em processo separado...")
+    import bot
+    bot.main()
 
 def run_dashboard():
     """Executa o dashboard Flask"""
@@ -49,9 +61,7 @@ def run_dashboard():
             use_reloader=False  # Evitar conflitos com threading
         )
     except Exception as e:
-        logger.error(f"❌ Erro no dashboard: {e}")
-        time.sleep(5)
-        run_dashboard()
+        logger.error(f"❌ Erro no dashboard: {e}", exc_info=True)
 
 def main():
     """Função principal que inicia bot e dashboard simultaneamente"""
@@ -64,8 +74,8 @@ def main():
         logger.info("🏭 Ambiente de produção detectado (Render)")
         
         # Em produção, usar threading para rodar ambos
-        bot_thread = threading.Thread(target=run_bot, daemon=True)
-        dashboard_thread = threading.Thread(target=run_dashboard, daemon=False)
+        bot_thread = threading.Thread(target=start_bot_thread, daemon=True)
+        dashboard_thread = threading.Thread(target=run_dashboard, daemon=True) # daemon=True para encerrar com o principal
         
         # Iniciar bot em background
         bot_thread.start()
@@ -73,13 +83,19 @@ def main():
         
         # Dashboard roda na thread principal (para manter o processo vivo)
         dashboard_thread.start()
-        dashboard_thread.join()
+        
+        # Mantém a thread principal viva, monitorando as outras
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("🛑 Encerrando launcher unificado...")
         
     else:
         logger.info("🏠 Ambiente local detectado")
         
-        # Localmente, usar processos separados
-        bot_process = Process(target=run_bot)
+        # Localmente, usar processos separados para melhor isolamento
+        bot_process = Process(target=run_bot_process)
         dashboard_process = Process(target=run_dashboard)
         
         try:
