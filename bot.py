@@ -8,6 +8,16 @@ from telegram.warnings import PTBUserWarning
 import threading
 from flask import Flask, jsonify
 
+# 🔐 CARREGAR SECRET FILES PRIMEIRO (antes de tudo)
+try:
+    from secret_loader import setup_environment
+    setup_environment()
+    logging.info("✅ Secret Files/Environment carregado com sucesso")
+except ImportError:
+    logging.warning("⚠️ secret_loader não encontrado - usando env vars padrão")
+except Exception as e:
+    logging.error(f"❌ Erro ao carregar Secret Files: {e}")
+
 # Suprimir warnings específicos do python-telegram-bot sobre ConversationHandler
 warnings.filterwarnings("ignore", category=PTBUserWarning, module="telegram")
 

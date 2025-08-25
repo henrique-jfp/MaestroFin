@@ -10,6 +10,14 @@ import os
 import json
 import logging
 
+# 🔐 CARREGAR SECRET FILES PRIMEIRO
+try:
+    from secret_loader import setup_environment
+    setup_environment()
+    logging.info("✅ Web Service: Secret Files carregado")
+except Exception as e:
+    logging.warning(f"⚠️ Web Service: Erro ao carregar Secret Files: {e}")
+
 print("\n" + "="*60)
 print("╭────────────────────────────────────────────────────────╮")
 print("│              🎼 MAESTROFIN DASHBOARD 🎼                │")
