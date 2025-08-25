@@ -95,17 +95,19 @@ def realtime_stats():
                         raise Exception("Sessão PostgreSQL não pôde ser criada")
                     
                     now = datetime.now()
+                    cutoff = now - timedelta(hours=24)
                     
-                    # Usar uma única query mais eficiente para reduzir SSL overhead
-                    query_result = session.execute("""
+                    # 🔧 QUERY CORRIGIDA - usando text() para SQL raw
+                    from sqlalchemy import text
+                    query_result = session.execute(text("""
                         SELECT 
                             COUNT(DISTINCT cu.username) as total_users,
                             COUNT(cu.id) as total_commands,
                             AVG(COALESCE(cu.execution_time_ms, 0)) as avg_response,
-                            (SELECT COUNT(*) FROM analytics_error_logs WHERE timestamp >= %s) as error_count
+                            (SELECT COUNT(*) FROM analytics_error_logs WHERE timestamp >= :cutoff2) as error_count
                         FROM analytics_command_usage cu 
-                        WHERE cu.timestamp >= %s
-                    """, (now - timedelta(hours=24), now - timedelta(hours=24))).fetchone()
+                        WHERE cu.timestamp >= :cutoff1
+                    """), {"cutoff1": cutoff, "cutoff2": cutoff}).fetchone()
                     
                     if query_result:
                         total_users, total_commands, avg_response, error_count = query_result
@@ -221,7 +223,8 @@ def debug_info():
                     'status': 'attempting'
                 })
                 
-                result = session.execute("SELECT 1 as test").fetchone()
+                from sqlalchemy import text
+                result = session.execute(text("SELECT 1 as test")).fetchone()
                 debug_data['ssl_tests'][-1]['status'] = 'success'
                 debug_data['ssl_tests'][-1]['result'] = str(result)
                 
@@ -231,10 +234,10 @@ def debug_info():
                     'status': 'attempting'
                 })
                 
-                tables = session.execute("""
+                tables = session.execute(text("""
                     SELECT table_name FROM information_schema.tables 
                     WHERE table_name LIKE 'analytics_%'
-                """).fetchall()
+                """)).fetchall()
                 
                 debug_data['ssl_tests'][-1]['status'] = 'success'
                 debug_data['ssl_tests'][-1]['tables'] = [t[0] for t in tables]
