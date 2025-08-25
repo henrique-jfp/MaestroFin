@@ -78,11 +78,11 @@ setup_analytics()
 try:
     # A variável 'app' precisa estar no escopo global para o Gunicorn encontrá-la.
     # O nome do arquivo é 'web_launcher' e o Gunicorn vai procurar por 'web_launcher:app'.
-    from analytics.dashboard_app_render_fixed import app
-    print("✅ Aplicação Flask carregada e pronta para Gunicorn.")
+    from analytics.dashboard_app import app  # ← CORRIGIDO: usando versão ultra robusta
+    print("✅ Aplicação Flask Ultra Robusta carregada e pronta para Gunicorn.")
 except ImportError as e:
     print(f"❌ Erro CRÍTICO ao carregar aplicação Flask: {e}")
-    logging.critical(f"Não foi possível importar 'app' de 'dashboard_app_render_fixed': {e}")
+    logging.critical(f"Não foi possível importar 'app' de 'dashboard_app': {e}")
     # Cria um app dummy para evitar que o Gunicorn falhe completamente no deploy
     from flask import Flask
     app = Flask("error_app")

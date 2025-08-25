@@ -79,10 +79,10 @@ def main():
             subprocess.run(['gunicorn', '--config', 'gunicorn_config.py', 'web_launcher:app'], check=True)
         except subprocess.CalledProcessError as e:
             print(f"❌ Erro ao iniciar Gunicorn: {e}")
-            # Fallback para Flask direto
+            # Fallback para Flask direto usando versão ultra robusta
             print("🔄 Tentando Flask direto...")
             port_value = os.environ.get("PORT", "10000")
-            subprocess.run(['python', '-c', f'import os; from analytics.dashboard_app_render_fixed import app; app.run(host="0.0.0.0", port={port_value})'])
+            subprocess.run(['python', '-c', f'import os; from analytics.dashboard_app import app; app.run(host="0.0.0.0", port={port_value})'])
         
     elif start_bot:
         print("🤖 INICIANDO BOT TELEGRAM")
