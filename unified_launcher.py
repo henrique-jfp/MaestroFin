@@ -61,24 +61,30 @@ def setup_bot_webhook(flask_app):
                     # Converter para objeto Update
                     update = Update.de_json(update_data, bot_application.bot)
                     
-                    # Processar update de forma síncrona (Flask não suporta async diretamente)
-                    import threading
-                    
-                    def process_update_thread():
+                    # Processar update de forma robusta
+                    def process_update_sync():
                         try:
-                            # Criar novo event loop para a thread
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
+                            # Criar event loop dedicado para o update
+                            update_loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(update_loop)
                             
                             # Processar update
-                            loop.run_until_complete(bot_application.process_update(update))
-                            loop.close()
+                            update_loop.run_until_complete(bot_application.process_update(update))
+                            
+                            # Limpar loop após uso
+                            update_loop.close()
+                            
                         except Exception as e:
                             logger.error(f"❌ Erro ao processar update: {e}")
+                            # Log adicional para debug
+                            import traceback
+                            logger.error(f"❌ Traceback: {traceback.format_exc()}")
                     
-                    # Executar em thread separada para não bloquear Flask
-                    thread = threading.Thread(target=process_update_thread, daemon=True)
+                    # Executar em thread separada
+                    import threading
+                    thread = threading.Thread(target=process_update_sync, daemon=True)
                     thread.start()
+                    thread.join(timeout=10)  # Timeout de 10 segundos
                     
                 return "OK", 200
                 

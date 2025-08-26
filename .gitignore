@@ -1,10 +1,10 @@
 # ========================================
-# 🎼 MaestroFin - GitIgnore Otimizado
+# 🎼 MaestroFin - GitIgnore Limpo
 # ========================================
 
-# 📋 POLÍTICA: APENAS ESSENCIAL PARA PRODUÇÃO NO GITHUB
-# ✅ Incluído: bot.py, config.py, models.py, handlers, templates
-# ❌ Excluído: testes, debug, análises, documentação técnica
+# 📋 PRODUÇÃO: Apenas arquivos essenciais
+# ✅ Core: bot.py, config.py, models.py, handlers
+# ❌ Removido: testes, debug, launchers obsoletos
 
 # ===========================================
 # 🚫 ARQUIVOS DE DESENVOLVIMENTO (NÃO COMMITTAR)
