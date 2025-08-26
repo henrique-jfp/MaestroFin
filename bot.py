@@ -446,10 +446,23 @@ def main() -> None:
     configurar_jobs(job_queue)
     logger.info("Jobs de metas e agendamentos configurados.")
     
-    # Inicia o bot
+    return application
+
+def create_application():
+    """Cria e configura a aplicação do bot (sem executar)"""
+    return main()
+
+def run_bot():
+    """Executa o bot com polling"""
+    application = main()
     logger.info("Bot pronto. Iniciando polling...")
     application.run_polling()
     logger.info("Bot foi encerrado.")
 
+def main():
+    """Função principal - configura tudo e retorna a aplicação"""
+    application.run_polling()
+    logger.info("Bot foi encerrado.")
+
 if __name__ == '__main__':
-    main()
+    run_bot()
