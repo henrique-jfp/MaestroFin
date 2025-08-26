@@ -83,55 +83,47 @@ def setup_bot_webhook(flask_app):
                     # Converter para objeto Update
                     update = Update.de_json(update_data, bot_application.bot)
                     
-                    # ✅ SOLUÇÃO: Usar o contexto de aplicação diretamente
-                    # sem criar novos event loops que causam conflitos
-                    def process_update_safely():
-                        """Processa update usando queue da aplicação"""
+                    # ✅ SOLUÇÃO DEFINITIVA: Processar diretamente
+                    def process_update_directly():
+                        """Processa update diretamente sem usar queue"""
                         try:
-                            # Usar o update queue interno da aplicação
-                            # Isso evita conflitos de event loop
-                            bot_application.update_queue.put_nowait(update)
-                            logger.info("✅ Update adicionado à queue da aplicação")
+                            # Criar loop dedicado para este update
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
                             
-                        except Exception as e:
-                            logger.error(f"❌ Erro ao adicionar update à queue: {e}")
-                            
-                            # Fallback: Usar approach alternativo
                             try:
-                                # Processar diretamente via context
-                                import asyncio
+                                # Processar update diretamente
+                                loop.run_until_complete(bot_application.process_update(update))
+                                logger.info("✅ Update processado com sucesso")
                                 
-                                # Verificar se há loop ativo
-                                try:
-                                    loop = asyncio.get_running_loop()
-                                    # Se há loop ativo, criar task
-                                    loop.create_task(bot_application.process_update(update))
-                                    logger.info("✅ Update processado via loop ativo")
-                                    
-                                except RuntimeError:
-                                    # Não há loop ativo, criar novo
-                                    loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(loop)
-                                    try:
-                                        loop.run_until_complete(bot_application.process_update(update))
-                                        logger.info("✅ Update processado via novo loop")
-                                    finally:
-                                        loop.close()
-                                        
-                            except Exception as fallback_error:
-                                logger.error(f"❌ Erro no fallback: {fallback_error}")
-                                # Log completo para debug
+                            except Exception as process_error:
+                                logger.error(f"❌ Erro ao processar update: {process_error}")
+                                # Log detalhado para debug
                                 import traceback
-                                print("\n🚨 ERRO GLOBAL CAPTURADO:")
-                                print(f"Tipo: {type(fallback_error).__name__}")
-                                print(f"Mensagem: {fallback_error}")
-                                print("Traceback:")
-                                traceback.print_exc()
+                                logger.error(f"❌ Traceback detalhado: {traceback.format_exc()}")
+                                
+                            finally:
+                                # Limpar loop
+                                try:
+                                    loop.close()
+                                except:
+                                    pass
+                                    
+                        except Exception as e:
+                            logger.error(f"❌ Erro crítico no processamento: {e}")
+                            import traceback
+                            print("\n🚨 ERRO CRÍTICO CAPTURADO:")
+                            print(f"Tipo: {type(e).__name__}")
+                            print(f"Mensagem: {e}")
+                            print("Traceback:")
+                            traceback.print_exc()
                     
-                    # Executar em thread separada para evitar bloqueio
+                    # Executar em thread separada para não bloquear Flask
                     import threading
-                    thread = threading.Thread(target=process_update_safely, daemon=True)
+                    thread = threading.Thread(target=process_update_directly, daemon=True)
                     thread.start()
+                    # Dar um tempo para o thread começar
+                    thread.join(timeout=0.1)
                     
                 return "OK", 200
                 
@@ -236,21 +228,34 @@ def setup_bot_webhook(flask_app):
             """Verifica status do bot"""
             try:
                 if bot_application:
-                    return """
+                    # Verificar se está inicializado
+                    is_initialized = hasattr(bot_application, '_initialized') and bot_application._initialized
+                    
+                    status_info = f"""
                     <!DOCTYPE html>
                     <html>
                     <head><title>🤖 Status do Bot</title></head>
                     <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
                         <h2 style="color: green;">🤖 Status do Bot</h2>
-                        <p>✅ Bot configurado e pronto</p>
-                        <p>📡 Webhook ativo</p>
-                        <p>🔍 Debug commands disponíveis: /debugocr, /debuglogs</p>
-                        <p>💰 Comando /lancamento funcional</p>
+                        <p>✅ Bot configurado: <strong>Sim</strong></p>
+                        <p>🔧 Bot inicializado: <strong>{"Sim" if is_initialized else "Não"}</strong></p>
+                        <p>📡 Webhook ativo: <strong>Sim</strong></p>
+                        <p>🏃‍♂️ Application running: <strong>{bool(bot_application.running)}</strong></p>
+                        <p>🔍 Debug commands: /debugocr, /debuglogs</p>
+                        <p>💰 Comando /lancamento disponível</p>
+                        
+                        <hr>
+                        <h3>🧪 Teste Manual</h3>
+                        <p>1. Digite <code>/help</code> no bot</p>
+                        <p>2. Se não responder, clique no botão abaixo:</p>
+                        <p><a href="/fix_bot" style="color: red; font-weight: bold;">🔧 FORÇAR REINICIALIZAÇÃO</a></p>
+                        
                         <p><a href="/set_webhook" style="color: blue;">🔧 Configurar Webhook</a></p>
                         <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
                     </body>
                     </html>
-                    """, 200
+                    """
+                    return status_info, 200
                 else:
                     return """
                     <!DOCTYPE html>
@@ -274,6 +279,94 @@ def setup_bot_webhook(flask_app):
                     <h2 style="color: red;">❌ Erro</h2>
                     <p><strong>Erro:</strong> {e}</p>
                     <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                </body>
+                </html>
+                """, 500
+        
+        # Rota de emergência para reinicializar bot
+        @flask_app.route('/fix_bot', methods=['GET', 'POST'])
+        def fix_bot():
+            """Força reinicialização do bot"""
+            try:
+                global bot_application
+                logger.info("🚨 EMERGÊNCIA: Forçando reinicialização do bot...")
+                
+                # Tentar reinicializar
+                async def reinitialize_bot():
+                    try:
+                        if bot_application:
+                            logger.info("🔄 Fechando aplicação anterior...")
+                            try:
+                                await bot_application.shutdown()
+                            except:
+                                pass
+                        
+                        logger.info("🆕 Criando nova aplicação...")
+                        from bot import create_application
+                        bot_application = create_application()
+                        
+                        logger.info("🔧 Inicializando nova aplicação...")
+                        await bot_application.initialize()
+                        
+                        logger.info("✅ Bot reinicializado com sucesso!")
+                        return True
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Erro na reinicialização: {e}")
+                        return False
+                
+                # Executar reinicialização
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    success = loop.run_until_complete(reinitialize_bot())
+                finally:
+                    loop.close()
+                
+                if success:
+                    return """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>✅ Bot Reinicializado</title>
+                        <meta http-equiv="refresh" content="3;url=/bot_status">
+                    </head>
+                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                        <h2 style="color: green;">✅ Bot Reinicializado!</h2>
+                        <p>🔄 O bot foi reinicializado com sucesso.</p>
+                        <p>⏳ Redirecionando para status em 3 segundos...</p>
+                        <p><strong>🧪 Teste agora:</strong> Digite <code>/help</code> no seu bot!</p>
+                        <p><a href="/bot_status" style="color: blue;">📊 Ver Status</a></p>
+                        <p><a href="/" style="color: blue;">🏠 Dashboard</a></p>
+                    </body>
+                    </html>
+                    """, 200
+                else:
+                    return """
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>❌ Falha na Reinicialização</title></head>
+                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                        <h2 style="color: red;">❌ Falha na Reinicialização</h2>
+                        <p>⚠️ Não foi possível reinicializar o bot.</p>
+                        <p>🔧 Verifique os logs do Render.</p>
+                        <p><a href="/bot_status" style="color: blue;">📊 Ver Status</a></p>
+                        <p><a href="/" style="color: blue;">🏠 Dashboard</a></p>
+                    </body>
+                    </html>
+                    """, 500
+                
+            except Exception as e:
+                logger.error(f"❌ Erro crítico na correção: {e}")
+                return f"""
+                <!DOCTYPE html>
+                <html>
+                <head><title>❌ Erro Crítico</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                    <h2 style="color: red;">❌ Erro Crítico</h2>
+                    <p><strong>Erro:</strong> {e}</p>
+                    <p><a href="/bot_status" style="color: blue;">📊 Ver Status</a></p>
+                    <p><a href="/" style="color: blue;">🏠 Dashboard</a></p>
                 </body>
                 </html>
                 """, 500
