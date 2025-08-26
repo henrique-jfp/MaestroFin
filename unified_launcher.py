@@ -88,21 +88,60 @@ def setup_bot_webhook(flask_app):
                 base_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://maestrofin-unified.onrender.com')
                 webhook_url = f"{base_url}/webhook/{TELEGRAM_TOKEN}"
                 
-                # Configurar webhook (precisa ser async, vamos fazer via background task)
-                logger.info(f"🔧 Webhook URL: {webhook_url}")
+                # Fazer request para configurar webhook
+                import requests
+                telegram_api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook"
                 
-                # Retornar instruções para configurar manualmente
-                return f"""
-                <h2>🔧 Configuração do Webhook</h2>
-                <p><strong>URL do Webhook:</strong> {webhook_url}</p>
-                <p><strong>Configure manualmente via:</strong></p>
-                <pre>curl -X POST "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook" -d "url={webhook_url}"</pre>
-                <p><strong>Ou acesse:</strong> <a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" target="_blank">Configurar Webhook</a></p>
-                """, 200
+                response = requests.post(telegram_api_url, data={'url': webhook_url})
+                result = response.json()
+                
+                if result.get('ok'):
+                    return f"""
+                    <h2>✅ Webhook Configurado com Sucesso!</h2>
+                    <p><strong>URL do Webhook:</strong> {webhook_url}</p>
+                    <p><strong>Status:</strong> ✅ Ativo</p>
+                    <p><strong>Resultado:</strong> {result.get('description', 'Webhook configurado')}</p>
+                    <hr>
+                    <h3>🎯 Próximos Passos:</h3>
+                    <ol>
+                        <li>Acesse seu bot no Telegram</li>
+                        <li>Teste: <code>/debugocr</code></li>
+                        <li>Teste: <code>/lancamento</code> (com nota fiscal)</li>
+                        <li>Se der erro: <code>/debuglogs</code></li>
+                    </ol>
+                    <p><a href="/bot_status">📊 Verificar Status do Bot</a></p>
+                    """, 200
+                else:
+                    error_msg = result.get('description', 'Erro desconhecido')
+                    return f"""
+                    <h2>❌ Erro ao Configurar Webhook</h2>
+                    <p><strong>Erro:</strong> {error_msg}</p>
+                    <p><strong>URL tentativa:</strong> {webhook_url}</p>
+                    <hr>
+                    <h3>🔧 Configuração Manual:</h3>
+                    <p>Acesse esta URL no navegador:</p>
+                    <p><a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" target="_blank">
+                        Configurar Webhook Manualmente
+                    </a></p>
+                    """, 500
                 
             except Exception as e:
                 logger.error(f"❌ Erro ao configurar webhook: {e}")
-                return f"Erro: {e}", 500
+                webhook_url = f"https://maestrofin-unified.onrender.com/webhook/{TELEGRAM_TOKEN}"
+                return f"""
+                <h2>🔧 Configuração Manual do Webhook</h2>
+                <p><strong>URL do Webhook:</strong> {webhook_url}</p>
+                
+                <h3>🌐 Opção 1 - Via Navegador:</h3>
+                <p><a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" target="_blank">
+                    ➡️ Clique aqui para configurar webhook
+                </a></p>
+                
+                <h3>💻 Opção 2 - Via Terminal:</h3>
+                <pre>curl -X POST "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook" -d "url={webhook_url}"</pre>
+                
+                <p><strong>Erro:</strong> {e}</p>
+                """, 500
         
         # Rota para status do bot
         @flask_app.route('/bot_status', methods=['GET'])
