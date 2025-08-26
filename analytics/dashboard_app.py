@@ -486,6 +486,78 @@ def cache_stats():
     except Exception as e:
         return jsonify({'error': str(e), 'status': 'error'})
 
+# Endpoints adicionais que o frontend espera
+@app.route('/api/commands/ranking')
+def commands_ranking():
+    """API para ranking de comandos mais usados"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        
+        # Mock data para ranking de comandos
+        ranking_data = [
+            {'command': '/extrato', 'count': 45, 'percentage': 25.0},
+            {'command': '/adicionar', 'count': 38, 'percentage': 21.1},
+            {'command': '/relatorio', 'count': 32, 'percentage': 17.8},
+            {'command': '/metas', 'count': 28, 'percentage': 15.6},
+            {'command': '/start', 'count': 22, 'percentage': 12.2},
+            {'command': '/help', 'count': 15, 'percentage': 8.3}
+        ]
+        
+        return jsonify({
+            'ranking': ranking_data,
+            'period_days': days,
+            'total_commands': sum(item['count'] for item in ranking_data),
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro no ranking de comandos: {e}")
+        return jsonify({'error': str(e), 'status': 'error'})
+
+@app.route('/api/performance/metrics')
+def performance_metrics():
+    """API para métricas de performance"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        
+        # Mock data para métricas de performance
+        metrics_data = {
+            'response_times': {
+                'avg_ms': 145,
+                'max_ms': 320,
+                'min_ms': 45,
+                'p95_ms': 280
+            },
+            'throughput': {
+                'requests_per_hour': 42,
+                'commands_per_hour': 38,
+                'errors_per_hour': 2
+            },
+            'system_health': {
+                'cpu_usage': 15.2,
+                'memory_usage': 62.5,
+                'uptime_hours': 48.3
+            },
+            'trends': [
+                {'time': '00:00', 'response_time': 120, 'throughput': 35},
+                {'time': '04:00', 'response_time': 110, 'throughput': 28},
+                {'time': '08:00', 'response_time': 130, 'throughput': 45},
+                {'time': '12:00', 'response_time': 150, 'throughput': 52},
+                {'time': '16:00', 'response_time': 145, 'throughput': 48},
+                {'time': '20:00', 'response_time': 135, 'throughput': 42}
+            ]
+        }
+        
+        return jsonify({
+            'metrics': metrics_data,
+            'period_hours': hours,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro nas métricas de performance: {e}")
+        return jsonify({'error': str(e), 'status': 'error'})
+
 if __name__ == '__main__':
     # Configurar servidor
     port = int(os.environ.get('PORT', 5000))
