@@ -43,13 +43,22 @@ class MockAnalytics:
     
     def track_command_usage(self, user_id: int, username: str, command: str, 
                           success: bool = True, execution_time_ms: Optional[int] = None):
-        logger.debug(f"📊 MOCK: {username} executou /{command} - {'OK' if success else 'ERRO'}")
+        # Log mais detalhado para debugging
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        logger.debug(f"📊 [ANALYTICS-DEBUG] MOCK: {timestamp} | {username} (ID:{user_id}) | /{command} | {'✅' if success else '❌'} | {execution_time_ms}ms")
     
     def track_daily_user(self, user_id: int, username: str, first_command: str = None):
-        logger.debug(f"👤 MOCK: Usuário diário {username}")
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        logger.debug(f"👤 [ANALYTICS-DEBUG] MOCK: {timestamp} | Usuário diário {username} (ID:{user_id})")
     
     def track_error(self, user_id: int, username: str, error_type: str, error_message: str, command: str = None):
-        logger.debug(f"❌ MOCK: Erro {error_type} para {username}")
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        logger.debug(f"❌ [ANALYTICS-DEBUG] MOCK: {timestamp} | Erro {error_type} para {username} | Cmd: {command} | Msg: {error_message[:100]}")
+        
+    def log_error(self, user_id: int, username: str, command: str, error_type: str, 
+                  error_message: str, stack_trace: str = None):
+        """Método adicional para compatibilidade com logs de erro"""
+        self.track_error(user_id, username, error_type, error_message, command)
 
 class BotAnalytics:
     """Classe de compatibilidade para analytics"""
@@ -71,20 +80,26 @@ class BotAnalytics:
         return _analytics_instance.track_error(user_id, username, error_type, error_message, command)
 
 def track_command(command_name: str = None):
-    """Decorator de compatibilidade para tracking de comandos"""
+    """Decorator de compatibilidade para tracking de comandos com logs detalhados"""
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(update, context):
             user = update.effective_user
             cmd = command_name or getattr(func, '__name__', 'unknown')
             
-            start_time = datetime.now()
+            # Log detalhado do início do comando
+            start_timestamp = datetime.now()
+            logger.info(f"🎯 [ANALYTICS-DEBUG] Iniciando comando /{cmd} | User: {user.username or f'user_{user.id}'} | Timestamp: {start_timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
             
             try:
                 result = await func(update, context)
                 
                 # Calcular tempo de execução
-                execution_time = (datetime.now() - start_time).total_seconds() * 1000
+                end_timestamp = datetime.now()
+                execution_time = (end_timestamp - start_timestamp).total_seconds() * 1000
+                
+                # Log de sucesso
+                logger.info(f"✅ [ANALYTICS-DEBUG] Comando /{cmd} executado com SUCESSO em {execution_time:.0f}ms")
                 
                 # Track success
                 _initialize_analytics()
@@ -99,6 +114,34 @@ def track_command(command_name: str = None):
                 return result
                 
             except Exception as e:
+                # Calcular tempo de execução mesmo em caso de erro
+                end_timestamp = datetime.now()
+                execution_time = (end_timestamp - start_timestamp).total_seconds() * 1000
+                
+                # Log de erro detalhado
+                logger.error(f"❌ [ANALYTICS-DEBUG] Comando /{cmd} FALHOU em {execution_time:.0f}ms | Erro: {type(e).__name__}: {str(e)[:100]}")
+                
+                # Track error
+                _initialize_analytics()
+                _analytics_instance.track_command_usage(
+                    user.id, 
+                    user.username or f"user_{user.id}", 
+                    cmd, 
+                    False, 
+                    int(execution_time)
+                )
+                
+                # Também registrar o erro específico se método existir
+                if hasattr(_analytics_instance, 'track_error'):
+                    _analytics_instance.track_error(
+                        user.id,
+                        user.username or f"user_{user.id}",
+                        type(e).__name__,
+                        str(e),
+                        cmd
+                    )
+                
+                raise  # Re-raise para não mascarar o erro
                 # Track error
                 _initialize_analytics()
                 _analytics_instance.track_error(

@@ -4,6 +4,7 @@ import re
 import os
 from datetime import datetime, timedelta
 import io
+import traceback
 
 from pdf2image import convert_from_bytes
 from PIL import Image
@@ -19,7 +20,32 @@ from database.database import get_or_create_user, get_db
 from models import Lancamento, ItemLancamento, Categoria, Subcategoria, Usuario
 from .states import OCR_CONFIRMATION_STATE
 
+# Configurar logging específico para OCR com mais detalhes
 logger = logging.getLogger(__name__)
+
+# Decorator para logging detalhado de funções OCR
+def debug_ocr_function(func):
+    def wrapper(*args, **kwargs):
+        func_name = func.__name__
+        logger.info(f"🔍 [OCR-DEBUG] Iniciando {func_name}")
+        logger.debug(f"🔍 [OCR-DEBUG] Args: {len(args)} | Kwargs: {list(kwargs.keys())}")
+        
+        start_time = datetime.now()
+        try:
+            result = func(*args, **kwargs)
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds() * 1000
+            
+            logger.info(f"✅ [OCR-DEBUG] {func_name} concluído em {execution_time:.0f}ms")
+            return result
+        except Exception as e:
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds() * 1000
+            
+            logger.error(f"❌ [OCR-DEBUG] {func_name} falhou em {execution_time:.0f}ms: {e}")
+            logger.error(f"🔍 [OCR-DEBUG] Traceback completo: {traceback.format_exc()}")
+            raise
+    return wrapper
 
 # Configurar credenciais do Google Vision
 def setup_google_credentials():
@@ -234,6 +260,7 @@ async def _reply_with_summary(update_or_query, context: ContextTypes.DEFAULT_TYP
     else:
         await update_or_query.message.reply_html(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@debug_ocr_function
 async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     🚨 VERSÃO COMPLETAMENTE REESCRITA - OCR Ultra Robusto
@@ -242,7 +269,12 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
     # 🔥 LOGS DETALHADOS PARA DEBUG
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
-    logger.info(f"🚀 OCR iniciado por usuário: {username} (ID: {user_id})")
+    logger.info(f"🚀 [LANCAMENTO-DEBUG] OCR iniciado por usuário: {username} (ID: {user_id})")
+    
+    # Log do ambiente
+    logger.info(f"🔧 [LANCAMENTO-DEBUG] Ambiente: {'RENDER' if os.getenv('RENDER_SERVICE_NAME') else 'LOCAL'}")
+    logger.info(f"🔧 [LANCAMENTO-DEBUG] Google Vision Creds: {'✅' if os.getenv('GOOGLE_APPLICATION_CREDENTIALS') else '❌'}")
+    logger.info(f"🔧 [LANCAMENTO-DEBUG] Gemini API: {'✅' if config.GEMINI_API_KEY else '❌'}")
     
     message = await update.message.reply_text("📸 Iniciando processamento OCR...")
     
