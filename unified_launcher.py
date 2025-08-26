@@ -80,7 +80,7 @@ def setup_bot_webhook(flask_app):
                 return "ERROR", 500
         
         # Rota para configurar webhook
-        @flask_app.route('/set_webhook', methods=['GET'])
+        @flask_app.route('/set_webhook', methods=['GET', 'POST'])
         def set_webhook():
             """Configura webhook do Telegram"""
             try:
@@ -88,59 +88,86 @@ def setup_bot_webhook(flask_app):
                 base_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://maestrofin-unified.onrender.com')
                 webhook_url = f"{base_url}/webhook/{TELEGRAM_TOKEN}"
                 
+                logger.info(f"🔧 Configurando webhook para: {webhook_url}")
+                
                 # Fazer request para configurar webhook
                 import requests
                 telegram_api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook"
                 
-                response = requests.post(telegram_api_url, data={'url': webhook_url})
+                response = requests.post(telegram_api_url, data={'url': webhook_url}, timeout=10)
                 result = response.json()
+                
+                logger.info(f"📡 Resposta Telegram API: {result}")
                 
                 if result.get('ok'):
                     return f"""
-                    <h2>✅ Webhook Configurado com Sucesso!</h2>
-                    <p><strong>URL do Webhook:</strong> {webhook_url}</p>
-                    <p><strong>Status:</strong> ✅ Ativo</p>
-                    <p><strong>Resultado:</strong> {result.get('description', 'Webhook configurado')}</p>
-                    <hr>
-                    <h3>🎯 Próximos Passos:</h3>
-                    <ol>
-                        <li>Acesse seu bot no Telegram</li>
-                        <li>Teste: <code>/debugocr</code></li>
-                        <li>Teste: <code>/lancamento</code> (com nota fiscal)</li>
-                        <li>Se der erro: <code>/debuglogs</code></li>
-                    </ol>
-                    <p><a href="/bot_status">📊 Verificar Status do Bot</a></p>
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>✅ Webhook Configurado</title></head>
+                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                        <h2 style="color: green;">✅ Webhook Configurado com Sucesso!</h2>
+                        <p><strong>URL do Webhook:</strong> <code>{webhook_url}</code></p>
+                        <p><strong>Status:</strong> ✅ Ativo</p>
+                        <p><strong>Resultado:</strong> {result.get('description', 'Webhook configurado')}</p>
+                        <hr>
+                        <h3>🎯 Próximos Passos:</h3>
+                        <ol>
+                            <li>Acesse seu bot no Telegram</li>
+                            <li>Teste: <code>/debugocr</code></li>
+                            <li>Teste: <code>/lancamento</code> (com nota fiscal)</li>
+                            <li>Se der erro: <code>/debuglogs</code></li>
+                        </ol>
+                        <p><a href="/bot_status" style="color: blue;">📊 Verificar Status do Bot</a></p>
+                        <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                    </body>
+                    </html>
                     """, 200
                 else:
                     error_msg = result.get('description', 'Erro desconhecido')
                     return f"""
-                    <h2>❌ Erro ao Configurar Webhook</h2>
-                    <p><strong>Erro:</strong> {error_msg}</p>
-                    <p><strong>URL tentativa:</strong> {webhook_url}</p>
-                    <hr>
-                    <h3>🔧 Configuração Manual:</h3>
-                    <p>Acesse esta URL no navegador:</p>
-                    <p><a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" target="_blank">
-                        Configurar Webhook Manualmente
-                    </a></p>
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>❌ Erro no Webhook</title></head>
+                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                        <h2 style="color: red;">❌ Erro ao Configurar Webhook</h2>
+                        <p><strong>Erro:</strong> {error_msg}</p>
+                        <p><strong>URL tentativa:</strong> <code>{webhook_url}</code></p>
+                        <hr>
+                        <h3>🔧 Configuração Manual:</h3>
+                        <p>Acesse esta URL no navegador:</p>
+                        <p><a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" 
+                           target="_blank" style="color: blue; font-weight: bold;">
+                            ➡️ Configurar Webhook Manualmente
+                        </a></p>
+                        <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                    </body>
+                    </html>
                     """, 500
                 
             except Exception as e:
                 logger.error(f"❌ Erro ao configurar webhook: {e}")
                 webhook_url = f"https://maestrofin-unified.onrender.com/webhook/{TELEGRAM_TOKEN}"
                 return f"""
-                <h2>🔧 Configuração Manual do Webhook</h2>
-                <p><strong>URL do Webhook:</strong> {webhook_url}</p>
-                
-                <h3>🌐 Opção 1 - Via Navegador:</h3>
-                <p><a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" target="_blank">
-                    ➡️ Clique aqui para configurar webhook
-                </a></p>
-                
-                <h3>💻 Opção 2 - Via Terminal:</h3>
-                <pre>curl -X POST "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook" -d "url={webhook_url}"</pre>
-                
-                <p><strong>Erro:</strong> {e}</p>
+                <!DOCTYPE html>
+                <html>
+                <head><title>🔧 Configuração Manual</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                    <h2 style="color: orange;">🔧 Configuração Manual do Webhook</h2>
+                    <p><strong>URL do Webhook:</strong> <code>{webhook_url}</code></p>
+                    
+                    <h3>🌐 Opção 1 - Via Navegador:</h3>
+                    <p><a href="https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}" 
+                       target="_blank" style="color: blue; font-weight: bold;">
+                        ➡️ Clique aqui para configurar webhook
+                    </a></p>
+                    
+                    <h3>💻 Opção 2 - Via Terminal:</h3>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px;">curl -X POST "https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook" -d "url={webhook_url}"</pre>
+                    
+                    <p><strong>Erro:</strong> {e}</p>
+                    <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                </body>
+                </html>
                 """, 500
         
         # Rota para status do bot
@@ -150,18 +177,71 @@ def setup_bot_webhook(flask_app):
             try:
                 if bot_application:
                     return """
-                    <h2>🤖 Status do Bot</h2>
-                    <p>✅ Bot configurado e pronto</p>
-                    <p>📡 Webhook ativo</p>
-                    <p>🔍 Debug commands disponíveis: /debugocr, /debuglogs</p>
-                    <p>💰 Comando /lancamento funcional</p>
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>🤖 Status do Bot</title></head>
+                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                        <h2 style="color: green;">🤖 Status do Bot</h2>
+                        <p>✅ Bot configurado e pronto</p>
+                        <p>📡 Webhook ativo</p>
+                        <p>🔍 Debug commands disponíveis: /debugocr, /debuglogs</p>
+                        <p>💰 Comando /lancamento funcional</p>
+                        <p><a href="/set_webhook" style="color: blue;">🔧 Configurar Webhook</a></p>
+                        <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                    </body>
+                    </html>
                     """, 200
                 else:
-                    return "<h2>❌ Bot não configurado</h2>", 500
+                    return """
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>❌ Bot não configurado</title></head>
+                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                        <h2 style="color: red;">❌ Bot não configurado</h2>
+                        <p><a href="/set_webhook" style="color: blue;">🔧 Configurar Webhook</a></p>
+                        <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                    </body>
+                    </html>
+                    """, 500
                     
             except Exception as e:
                 logger.error(f"❌ Erro ao verificar status: {e}")
-                return f"Erro: {e}", 500
+                return f"""
+                <!DOCTYPE html>
+                <html>
+                <head><title>❌ Erro</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                    <h2 style="color: red;">❌ Erro</h2>
+                    <p><strong>Erro:</strong> {e}</p>
+                    <p><a href="/" style="color: blue;">🏠 Voltar ao Dashboard</a></p>
+                </body>
+                </html>
+                """, 500
+        
+        # Rota de teste para verificar se as rotas estão funcionando
+        @flask_app.route('/test_routes', methods=['GET'])
+        def test_routes():
+            """Testa se as rotas estão registradas"""
+            return """
+            <!DOCTYPE html>
+            <html>
+            <head><title>🧪 Teste de Rotas</title></head>
+            <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
+                <h2 style="color: blue;">🧪 Teste de Rotas - Bot Integrado</h2>
+                <p>✅ Esta página funciona! As rotas estão registradas.</p>
+                <hr>
+                <h3>🔗 Links Disponíveis:</h3>
+                <ul>
+                    <li><a href="/" style="color: blue;">🏠 Dashboard Principal</a></li>
+                    <li><a href="/set_webhook" style="color: blue;">🔧 Configurar Webhook</a></li>
+                    <li><a href="/bot_status" style="color: blue;">📊 Status do Bot</a></li>
+                </ul>
+                <hr>
+                <p><strong>Token Bot:</strong> {TELEGRAM_TOKEN[:10]}...</p>
+                <p><strong>URL Webhook:</strong> /webhook/{TELEGRAM_TOKEN}</p>
+            </body>
+            </html>
+            """
         
         logger.info("✅ Bot webhook integrado ao Flask")
         return flask_app
