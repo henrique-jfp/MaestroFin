@@ -13,17 +13,12 @@ try:
     from secret_loader import setup_environment
     setup_environment()
     logging.info("✅ Secret Files carregado com sucesso")
-exce    # 🌐 DASHBOARD HANDLERS
-    application.add_handler(CommandHandler("dashboard", cmd_dashboard))  # DASHBOARD PRINCIPAL
-    application.add_handler(CommandHandler("dashstatus", cmd_dashstatus))
-    application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))  # DEBUG
-    
-    # 🔍 OCR DEBUG HANDLERS
-    application.add_handler(CommandHandler("debugocr", debug_ocr_command))  # DEBUG OCR
-    application.add_handler(CommandHandler("debuglogs", debug_logs_command))  # LOGS DEBUGmportError:
+except ImportError:
     logging.warning("⚠️ secret_loader não encontrado")
 except Exception as e:
     logging.error(f"❌ Erro ao carregar Secret Files: {e}")
+
+# Suprimir warnings do python-telegram-bot
 
 # Suprimir warnings do python-telegram-bot
 warnings.filterwarnings("ignore", category=PTBUserWarning, module="telegram")
