@@ -27,11 +27,18 @@ def run_bot_safe():
         
         logger.info("🤖 Iniciando bot em thread dedicada...")
         from bot import main as bot_main
+        logger.info("✅ Bot importado com sucesso")
+        
         bot_main()
+        
+    except ImportError as e:
+        logger.error(f"❌ Erro de import do bot: {e}")
+        logger.error("📁 Verificando se arquivo bot.py existe...")
         
     except Exception as e:
         logger.error(f"❌ Erro no bot: {e}")
-        time.sleep(5)  # Esperar antes de tentar novamente
+        logger.info("⏰ Aguardando 10s antes de continuar...")
+        time.sleep(10)  # Esperar mais tempo em caso de erro
 
 def run_dashboard():
     """Executa o dashboard Flask com configuração otimizada"""
@@ -65,7 +72,7 @@ def run_dashboard():
         sys.exit(1)
 
 def run_unified():
-    """Executa bot + dashboard em modo unificado (apenas local)"""
+    """Executa bot + dashboard em modo unificado"""
     logger.info("🔄 Modo unificado - Iniciando bot e dashboard...")
     
     # Iniciar bot em thread separada
@@ -75,7 +82,7 @@ def run_unified():
     logger.info("✅ Bot iniciado em thread")
     
     # Aguardar um pouco para o bot inicializar
-    time.sleep(2)
+    time.sleep(3)
     
     # Iniciar dashboard no thread principal
     logger.info("🌐 Iniciando dashboard...")
@@ -91,9 +98,9 @@ def main():
     
     if is_render:
         logger.info("🏭 Ambiente de produção detectado - Render")
-        logger.info("🌐 Executando apenas dashboard (web service)")
-        # No Render, executar apenas o dashboard para evitar problemas de threading
-        run_dashboard()
+        logger.info("🔄 Executando modo unificado: BOT + DASHBOARD")
+        # No Render, executar bot + dashboard em modo unificado
+        run_unified()
     else:
         logger.info("🏠 Ambiente de desenvolvimento detectado")
         logger.info(f"⚙️ Modo configurado: {mode}")
