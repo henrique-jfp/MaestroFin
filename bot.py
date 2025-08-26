@@ -13,7 +13,14 @@ try:
     from secret_loader import setup_environment
     setup_environment()
     logging.info("✅ Secret Files carregado com sucesso")
-except ImportError:
+exce    # 🌐 DASHBOARD HANDLERS
+    application.add_handler(CommandHandler("dashboard", cmd_dashboard))  # DASHBOARD PRINCIPAL
+    application.add_handler(CommandHandler("dashstatus", cmd_dashstatus))
+    application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))  # DEBUG
+    
+    # 🔍 OCR DEBUG HANDLERS
+    application.add_handler(CommandHandler("debugocr", debug_ocr_command))  # DEBUG OCR
+    application.add_handler(CommandHandler("debuglogs", debug_logs_command))  # LOGS DEBUGmportError:
     logging.warning("⚠️ secret_loader não encontrado")
 except Exception as e:
     logging.error(f"❌ Erro ao carregar Secret Files: {e}")
@@ -181,6 +188,108 @@ from gerente_financeiro.dashboard_handler import (
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
+@track_analytics("debugocr")
+async def debug_ocr_command(update, context):
+    """Comando específico para debug do OCR /lancamento"""
+    try:
+        user_id = update.effective_user.id
+        
+        message = f"""🔍 **DEBUG OCR LANCAMENTO**
+
+👤 **User ID**: {user_id}
+
+🌍 **Environment Check**:
+• GEMINI_API_KEY: {'✅ SET' if os.getenv('GEMINI_API_KEY') else '❌ NOT SET'}
+• GOOGLE_VISION: {'✅ SET' if os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GOOGLE_VISION_CREDENTIALS_JSON') else '❌ NOT SET'}
+• RENDER: {'✅ YES' if os.getenv('RENDER') else '❌ NO (LOCAL)'}
+
+📦 **Module Check**:"""
+
+        # Testar importações
+        try:
+            import google.generativeai as genai
+            message += "\n• Gemini: ✅ OK"
+        except Exception as e:
+            message += f"\n• Gemini: ❌ {str(e)[:30]}"
+        
+        try:
+            from google.cloud import vision
+            message += "\n• Google Vision: ✅ OK"
+        except Exception as e:
+            message += f"\n• Google Vision: ❌ {str(e)[:30]}"
+        
+        try:
+            from PIL import Image
+            message += "\n• PIL: ✅ OK"
+        except Exception as e:
+            message += f"\n• PIL: ❌ {str(e)[:30]}"
+
+        message += f"""
+
+🔬 **Credential Files**:"""
+        
+        # Verificar arquivos de credenciais
+        cred_files = [
+            'credenciais/credentials.json',
+            'credenciais/googlevision2.json'
+        ]
+        
+        for cred_file in cred_files:
+            if os.path.exists(cred_file):
+                size = os.path.getsize(cred_file)
+                message += f"\n• {cred_file}: ✅ ({size} bytes)"
+            else:
+                message += f"\n• {cred_file}: ❌ NOT FOUND"
+
+        message += f"""
+
+📱 **Como testar**:
+1. Envie /lancamento
+2. Envie uma foto de nota fiscal
+3. Se der erro, envie o print do erro
+4. Execute /debuglogs para ver logs detalhados
+
+🎯 **Status**: Sistema de debug ativo"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+        
+    except Exception as e:
+        await update.message.reply_text(f"🚨 **ERRO DEBUG OCR**: {str(e)}")
+
+@track_analytics("debuglogs")
+async def debug_logs_command(update, context):
+    """Mostrar logs recentes de erro do OCR"""
+    try:
+        import glob
+        
+        # Procurar arquivos de log recentes
+        log_files = glob.glob('debug_logs/ocr_debug_*.log')
+        if not log_files:
+            await update.message.reply_text("📝 Nenhum log de debug encontrado. Execute /debugocr primeiro.")
+            return
+        
+        # Pegar o log mais recente
+        latest_log = max(log_files, key=os.path.getctime)
+        
+        try:
+            with open(latest_log, 'r', encoding='utf-8') as f:
+                log_content = f.read()
+            
+            # Limitar tamanho da mensagem
+            if len(log_content) > 3500:
+                log_content = log_content[-3500:]
+                log_content = "...\n" + log_content
+            
+            message = f"📝 **LOG DEBUG OCR**\n```\n{log_content}\n```"
+            
+        except Exception as e:
+            message = f"❌ Erro ao ler log: {str(e)}"
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+        
+    except Exception as e:
+        await update.message.reply_text(f"🚨 **ERRO LOGS**: {str(e)}")
+
 @track_analytics("dashboarddebug")
 async def debug_dashboard(update, context):
     """Comando de debug do dashboard"""

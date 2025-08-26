@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 import io
 import traceback
+from pathlib import Path
 
 from pdf2image import convert_from_bytes
 from PIL import Image
@@ -20,30 +21,93 @@ from database.database import get_or_create_user, get_db
 from models import Lancamento, ItemLancamento, Categoria, Subcategoria, Usuario
 from .states import OCR_CONFIRMATION_STATE
 
-# Configurar logging específico para OCR com mais detalhes
-logger = logging.getLogger(__name__)
+# Configurar logging específico para OCR com arquivo dedicado
+def setup_ocr_logging():
+    """Configurar logging específico para OCR com arquivo separado"""
+    debug_logs_dir = Path("debug_logs")
+    debug_logs_dir.mkdir(exist_ok=True)
+    
+    # Arquivo de log específico para OCR
+    ocr_log_file = debug_logs_dir / f"ocr_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
+    # Handler específico para OCR
+    ocr_handler = logging.FileHandler(ocr_log_file, encoding='utf-8')
+    ocr_handler.setLevel(logging.DEBUG)
+    
+    # Formato mais detalhado
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)8s | %(funcName)s:%(lineno)d | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    ocr_handler.setFormatter(formatter)
+    
+    # Logger específico para OCR
+    ocr_logger = logging.getLogger('OCR_DETAILED')
+    ocr_logger.setLevel(logging.DEBUG)
+    ocr_logger.addHandler(ocr_handler)
+    
+    return ocr_logger, ocr_log_file
 
-# Decorator para logging detalhado de funções OCR
+# Logger principal e detalhado
+logger = logging.getLogger(__name__)
+ocr_detailed_logger, current_ocr_log = setup_ocr_logging()
+
+# Decorator para logging EXTREMAMENTE detalhado de funções OCR
 def debug_ocr_function(func):
     def wrapper(*args, **kwargs):
         func_name = func.__name__
+        
+        # Log no logger principal
         logger.info(f"🔍 [OCR-DEBUG] Iniciando {func_name}")
-        logger.debug(f"🔍 [OCR-DEBUG] Args: {len(args)} | Kwargs: {list(kwargs.keys())}")
+        
+        # Log DETALHADO no logger específico
+        ocr_detailed_logger.info(f"🚀 INICIANDO FUNÇÃO: {func_name}")
+        ocr_detailed_logger.debug(f"� ARGUMENTOS: args={len(args)}, kwargs={list(kwargs.keys())}")
+        
+        # Informações do ambiente no início
+        ocr_detailed_logger.debug(f"🌍 AMBIENTE:")
+        ocr_detailed_logger.debug(f"   RENDER: {os.getenv('RENDER', 'False')}")
+        ocr_detailed_logger.debug(f"   GOOGLE_APPLICATION_CREDENTIALS: {'SET' if os.getenv('GOOGLE_APPLICATION_CREDENTIALS') else 'NOT_SET'}")
+        ocr_detailed_logger.debug(f"   GOOGLE_VISION_CREDENTIALS_JSON: {'SET' if os.getenv('GOOGLE_VISION_CREDENTIALS_JSON') else 'NOT_SET'}")
+        ocr_detailed_logger.debug(f"   GEMINI_API_KEY: {'SET' if os.getenv('GEMINI_API_KEY') else 'NOT_SET'}")
         
         start_time = datetime.now()
         try:
+            ocr_detailed_logger.info(f"⚙️ EXECUTANDO: {func_name}")
             result = func(*args, **kwargs)
+            
             end_time = datetime.now()
             execution_time = (end_time - start_time).total_seconds() * 1000
             
+            # Log de sucesso
             logger.info(f"✅ [OCR-DEBUG] {func_name} concluído em {execution_time:.0f}ms")
+            ocr_detailed_logger.info(f"✅ SUCESSO: {func_name} executado em {execution_time:.0f}ms")
+            ocr_detailed_logger.debug(f"📄 RESULTADO: {type(result).__name__}")
+            
             return result
         except Exception as e:
             end_time = datetime.now()
             execution_time = (end_time - start_time).total_seconds() * 1000
             
-            logger.error(f"❌ [OCR-DEBUG] {func_name} falhou em {execution_time:.0f}ms: {e}")
-            logger.error(f"🔍 [OCR-DEBUG] Traceback completo: {traceback.format_exc()}")
+            # Log de erro DETALHADO
+            error_msg = str(e)
+            error_type = type(e).__name__
+            full_traceback = traceback.format_exc()
+            
+            logger.error(f"❌ [OCR-DEBUG] {func_name} falhou em {execution_time:.0f}ms: {error_msg}")
+            
+            ocr_detailed_logger.error(f"❌ ERRO: {func_name} falhou em {execution_time:.0f}ms")
+            ocr_detailed_logger.error(f"🚨 TIPO DO ERRO: {error_type}")
+            ocr_detailed_logger.error(f"📝 MENSAGEM: {error_msg}")
+            ocr_detailed_logger.error(f"🔍 TRACEBACK COMPLETO:")
+            ocr_detailed_logger.error(full_traceback)
+            
+            # Informações adicionais de contexto
+            ocr_detailed_logger.error(f"🌍 CONTEXTO DO ERRO:")
+            ocr_detailed_logger.error(f"   Função: {func_name}")
+            ocr_detailed_logger.error(f"   Argumentos: {len(args)} args, {len(kwargs)} kwargs")
+            ocr_detailed_logger.error(f"   Tempo até erro: {execution_time:.0f}ms")
+            
             raise
     return wrapper
 
