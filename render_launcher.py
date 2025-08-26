@@ -24,185 +24,163 @@ logger = logging.getLogger(__name__)
 from concurrent.futures import ThreadPoolExecutor
 import queue
 
+# =====================
+#   NOVA ARQUITETURA
+# =====================
+# 1 loop asyncio único e persistente em thread dedicada.
+# Workers de fila não criam/fecham loops – usam run_coroutine_threadsafe.
+# Isso elimina RuntimeError("Event loop is closed") em handlers.
+
+event_loop: asyncio.AbstractEventLoop | None = None
+loop_thread: threading.Thread | None = None
+bot_started = threading.Event()
+
 # Variáveis globais
-bot_application = None
+bot_application: Application | None = None
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 update_queue = queue.Queue()
-executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="webhook-")
+executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="webhook-")
 
 def process_updates_worker():
-    """Worker dedicado para processar updates - roda em background"""
-    logger.info("🔄 Worker de updates iniciado")
-    
+    """Worker que retira updates da fila e agenda no loop persistente."""
+    logger.info("🔄 Worker de updates iniciado (loop persistente)")
     while True:
         try:
-            # Pegar update da queue (bloqueia até ter um)
-            update = update_queue.get(timeout=60)  # Timeout de 60s
-            
-            if update is None:  # Sinal para parar
-                logger.info("🛑 Worker de updates parando")
+            update = update_queue.get(timeout=60)
+            if update is None:
+                logger.info("🛑 Worker encerrado por sinal")
                 break
-                
-            logger.info("⚡ Processando update em worker dedicado")
-            
-            # Criar loop isolado para este update
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            try:
-                # Processar update
-                loop.run_until_complete(bot_application.process_update(update))
-                logger.info("✅ Update processado com sucesso pelo worker")
-                
-            except Exception as e:
-                logger.error(f"❌ Erro no worker: {e}")
-                # Log do erro mas continua processando outros updates
-                
-            finally:
-                loop.close()
+
+            # Esperar bot inicializar
+            if not bot_started.wait(timeout=30):
+                logger.error("⚠️ Bot não inicializou em 30s – descartando update")
                 update_queue.task_done()
-                
+                continue
+
+            if not bot_application or not event_loop:
+                logger.error("⚠️ Bot/loop ausentes – descartando update")
+                update_queue.task_done()
+                continue
+
+            try:
+                fut = asyncio.run_coroutine_threadsafe(
+                    bot_application.process_update(update), event_loop
+                )
+                fut.result(timeout=60)  # processamento sequencial
+                logger.info("✅ Update processado")
+            except Exception as e:
+                logger.error(f"❌ Erro processando update: {e}")
+            finally:
+                update_queue.task_done()
         except queue.Empty:
-            # Timeout normal - continua executando
             continue
         except Exception as e:
-            logger.error(f"❌ Erro crítico no worker: {e}")
-            # Continua executando mesmo com erro
+            logger.error(f"❌ Erro crítico worker: {e}")
+
+def _start_async_loop():
+    """Thread alvo que mantém o loop rodando para toda a vida do processo."""
+    global event_loop
+    event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(event_loop)
+    logger.info("🔁 Loop assíncrono principal iniciado")
+    event_loop.run_forever()
+
+
+async def _async_init_bot():
+    """Coroutine que cria e inicia a aplicação do bot dentro do loop persistente."""
+    global bot_application
+    from bot import create_application
+    bot_application = create_application()
+    await bot_application.initialize()
+    await bot_application.start()
+    bot_started.set()
+    logger.info("✅ Bot inicializado e startado (loop persistente)")
+
 
 def setup_bot_webhook_render(flask_app):
-    """Configuração de webhook otimizada para Render"""
-    global bot_application
-    
+    """Configura webhook usando loop persistente."""
     if not TELEGRAM_TOKEN:
         logger.error("❌ TELEGRAM_TOKEN não configurado")
         return flask_app
-    
-    try:
-        logger.info("🚀 Configurando bot webhook RENDER-OPTIMIZED...")
-        
-        # Importar e criar aplicação do bot
-        from bot import create_application
-        bot_application = create_application()
-        
-        # Inicializar bot de forma síncrona (mais estável no Render)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+
+    # Iniciar loop se ainda não
+    global loop_thread
+    if not loop_thread or not loop_thread.is_alive():
+        loop_thread = threading.Thread(target=_start_async_loop, daemon=True)
+        loop_thread.start()
+
+    # Agendar inicialização do bot (uma vez)
+    if not bot_started.is_set():
+        # Rodar migração antes de startar bot para evitar erros de analytics
         try:
-            loop.run_until_complete(bot_application.initialize())
-            logger.info("✅ Bot inicializado (Render Mode)")
-        finally:
-            loop.close()
-        
-        # ✅ INICIAR WORKER EM BACKGROUND
-        worker_thread = threading.Thread(target=process_updates_worker, daemon=True)
-        worker_thread.start()
-        logger.info("🔄 Worker de updates ativo")
-        
-        # Rota webhook OTIMIZADA
-        @flask_app.route(f'/webhook/{TELEGRAM_TOKEN}', methods=['POST'])
-        def webhook():
-            """Webhook otimizado para Render - apenas adiciona à queue"""
+            from analytics.migrations import run_bigint_migration
+            run_bigint_migration()
+        except Exception as e:  # pragma: no cover
+            logger.error(f"⚠️ Falha migração BigInt: {e}")
+
+        # Schedule coroutine
+        def schedule_init():
             try:
-                update_data = request.get_json()
-                
-                if update_data:
-                    logger.info("📨 Update recebido via webhook")
-                    
-                    # Converter para objeto Update
-                    update = Update.de_json(update_data, bot_application.bot)
-                    
-                    # ✅ SOLUÇÃO RENDER: Apenas adicionar à queue (super rápido)
-                    try:
-                        update_queue.put_nowait(update)
-                        logger.info("⚡ Update adicionado à queue (processamento em background)")
-                        
-                    except queue.Full:
-                        logger.warning("⚠️ Queue cheia, descartando update")
-                    
-                return "OK", 200
-                
+                asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
             except Exception as e:
-                logger.error(f"❌ Erro no webhook: {e}")
-                return "ERROR", 500
-        
-        # Rota para configurar webhook
-        @flask_app.route('/set_webhook', methods=['GET', 'POST'])
-        def set_webhook():
-            """Configura webhook do Telegram"""
-            try:
-                base_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://maestrofin-unified.onrender.com')
-                webhook_url = f"{base_url}/webhook/{TELEGRAM_TOKEN}"
-                
-                logger.info(f"🔧 Configurando webhook: {webhook_url}")
-                
-                import requests
-                response = requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook",
-                    data={'url': webhook_url},
-                    timeout=10
-                )
-                result = response.json()
-                
-                if result.get('ok'):
-                    return f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head><title>✅ Webhook Render Mode</title></head>
-                    <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
-                        <h2 style="color: green;">✅ Webhook Configurado (Render Mode)!</h2>
-                        <p><strong>URL:</strong> <code>{webhook_url}</code></p>
-                        <p><strong>Status:</strong> ✅ Ativo com worker dedicado</p>
-                        <p><strong>Modo:</strong> 🔄 Queue-based processing</p>
-                        <hr>
-                        <h3>🧪 Teste Agora:</h3>
-                        <ol>
-                            <li>Digite <code>/help</code> no bot</li>
-                            <li>Aguarde 2-3 segundos</li>
-                            <li>Deve funcionar perfeitamente!</li>
-                        </ol>
-                        <p><a href="/bot_status" style="color: blue;">📊 Status do Bot</a></p>
-                        <p><a href="/" style="color: blue;">🏠 Dashboard</a></p>
-                    </body>
-                    </html>
-                    """, 200
-                else:
-                    return f"❌ Erro: {result.get('description', 'Desconhecido')}", 500
-                    
-            except Exception as e:
-                logger.error(f"❌ Erro ao configurar webhook: {e}")
-                return f"❌ Erro: {e}", 500
-        
-        # Status do bot
-        @flask_app.route('/bot_status', methods=['GET'])
-        def bot_status():
-            """Status otimizado"""
-            queue_size = update_queue.qsize()
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head><title>🤖 Bot Status (Render Mode)</title></head>
-            <body style="font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px;">
-                <h2 style="color: green;">🤖 Bot Status - Render Mode</h2>
-                <p>✅ Bot configurado: <strong>Sim</strong></p>
-                <p>🔄 Worker ativo: <strong>Sim</strong></p>
-                <p>📬 Updates na queue: <strong>{queue_size}</strong></p>
-                <p>⚡ Modo: <strong>Background Processing</strong></p>
-                
-                <h3>🧪 Teste Rápido</h3>
-                <p>Digite <code>/help</code> no bot - deve funcionar!</p>
-                
-                <p><a href="/set_webhook" style="color: blue;">🔧 Reconfigurar Webhook</a></p>
-                <p><a href="/" style="color: blue;">🏠 Dashboard</a></p>
-            </body>
-            </html>
-            """, 200
-        
-        logger.info("✅ Webhook Render configurado com sucesso")
-        return flask_app
-        
-    except Exception as e:
-        logger.error(f"❌ Erro na configuração: {e}")
-        return flask_app
+                logger.error(f"Erro agendando init bot: {e}")
+        schedule_init()
+
+    # Iniciar worker fila
+    worker_thread = threading.Thread(target=process_updates_worker, daemon=True)
+    worker_thread.start()
+
+    @flask_app.route(f'/webhook/{TELEGRAM_TOKEN}', methods=['POST'])
+    def webhook():
+        try:
+            data = request.get_json()
+            if data and bot_application:
+                update = Update.de_json(data, bot_application.bot)
+                try:
+                    update_queue.put_nowait(update)
+                    logger.info("📨 Update enfileirado")
+                except queue.Full:
+                    logger.warning("⚠️ Fila cheia – descartando update")
+            return "OK", 200
+        except Exception as e:
+            logger.error(f"❌ Erro webhook: {e}")
+            return "ERROR", 500
+
+    @flask_app.route('/set_webhook', methods=['GET'])
+    def set_webhook():
+        try:
+            base_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://maestrofin-unified.onrender.com')
+            webhook_url = f"{base_url}/webhook/{TELEGRAM_TOKEN}"
+            import requests
+            resp = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook",
+                data={'url': webhook_url}, timeout=10
+            ).json()
+            if resp.get('ok'):
+                return f"Webhook configurado: {webhook_url}", 200
+            return f"Erro: {resp}", 500
+        except Exception as e:
+            return f"Erro: {e}", 500
+
+    @flask_app.route('/bot_status')
+    def bot_status():
+        return {
+            "bot_started": bot_started.is_set(),
+            "queue_size": update_queue.qsize(),
+            "loop_alive": bool(event_loop and event_loop.is_running()),
+        }, 200
+
+    @flask_app.route('/migrate_analytics')
+    def migrate_analytics():
+        try:
+            from analytics.migrations import run_bigint_migration
+            res = run_bigint_migration()
+            return {"result": res}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    logger.info("✅ Webhook + loop persistente configurados")
+    return flask_app
 
 def create_render_app():
     """Cria aplicação otimizada para Render"""
