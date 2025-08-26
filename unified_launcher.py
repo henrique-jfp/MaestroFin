@@ -38,7 +38,14 @@ def setup_bot_webhook(flask_app):
         from bot import create_application
         bot_application = create_application()
         
-        logger.info("✅ Bot configurado com sucesso")
+        # ✅ CRITICAL: Inicializar a aplicação para webhook
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(bot_application.initialize())
+        loop.close()
+        
+        logger.info("✅ Bot configurado e inicializado com sucesso")
         
         # Rota webhook para receber updates do Telegram
         @flask_app.route(f'/webhook/{TELEGRAM_TOKEN}', methods=['POST'])
