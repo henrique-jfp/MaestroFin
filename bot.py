@@ -3,7 +3,7 @@ import warnings
 import google.generativeai as genai
 import os
 import functools
-from datetime import time
+from datetime import time, datetime
 from telegram.warnings import PTBUserWarning
 import threading
 from flask import Flask, jsonify
@@ -180,9 +180,6 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
-# 🔧 HANDLER GENÉRICO DE DOCUMENTOS
-from document_handler_addon import create_document_handlers
-
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("dashboarddebug")
 async def debug_dashboard(update, context):
@@ -335,12 +332,6 @@ def main() -> None:
     # 🆕 NOVOS: Handlers independentes para callbacks de agendamento de parcelas
     application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$"))
     application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$"))
-    
-    # 🔧 HANDLER GENÉRICO DE DOCUMENTOS/FOTOS
-    document_handlers = create_document_handlers()
-    for handler in document_handlers:
-        application.add_handler(handler)
-    logger.info("✅ Handlers genéricos de documentos adicionados")
     
     # Handler de Erro
     application.add_error_handler(error_handler)
