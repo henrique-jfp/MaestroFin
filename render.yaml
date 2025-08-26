@@ -8,7 +8,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python render_launcher.py
+    startCommand: python unified_launcher.py
     healthCheckPath: /
     envVars:
       - key: PYTHON_VERSION
@@ -37,7 +37,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot_launcher.py
+    startCommand: python bot.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
