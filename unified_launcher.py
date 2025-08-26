@@ -86,37 +86,83 @@ def setup_bot_webhook(flask_app):
                     # ✅ SOLUÇÃO DEFINITIVA: Processar diretamente
                     def process_update_directly():
                         """Processa update diretamente sem usar queue"""
+                        import threading
+                        
+                        # Usar thread local para evitar conflitos de loop
+                        local_data = threading.local()
+                        
                         try:
-                            # Criar loop dedicado para este update
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            
+                            # Verificar se já existe um loop na thread
                             try:
-                                # Processar update diretamente
-                                loop.run_until_complete(bot_application.process_update(update))
-                                logger.info("✅ Update processado com sucesso")
+                                # Tentar obter loop existente
+                                existing_loop = asyncio.get_running_loop()
+                                logger.info("🔄 Usando loop existente na thread")
                                 
-                            except Exception as process_error:
-                                logger.error(f"❌ Erro ao processar update: {process_error}")
-                                # Log detalhado para debug
-                                import traceback
-                                logger.error(f"❌ Traceback detalhado: {traceback.format_exc()}")
+                                # Criar task no loop existente
+                                future = asyncio.run_coroutine_threadsafe(
+                                    bot_application.process_update(update), 
+                                    existing_loop
+                                )
+                                # Aguardar resultado com timeout
+                                future.result(timeout=10)
+                                logger.info("✅ Update processado via loop existente")
                                 
-                            finally:
-                                # Limpar loop
+                            except RuntimeError:
+                                # Não há loop, criar um novo
+                                logger.info("🆕 Criando novo loop para processamento")
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                
                                 try:
-                                    loop.close()
-                                except:
-                                    pass
+                                    # Processar update
+                                    loop.run_until_complete(bot_application.process_update(update))
+                                    logger.info("✅ Update processado via novo loop")
                                     
+                                except Exception as process_error:
+                                    logger.error(f"❌ Erro no processamento: {process_error}")
+                                    
+                                    # Tentar fallback com comando simples
+                                    if update.message and update.message.text:
+                                        command = update.message.text.strip()
+                                        if command in ['/help', '/start']:
+                                            logger.info("🔄 Tentando fallback para comando básico")
+                                            try:
+                                                # Resposta básica de emergência
+                                                fallback_text = (
+                                                    "Olá! Sou seu Maestro Financeiro. Use os botões para explorar "
+                                                    "minhas funções.\n\n"
+                                                    "📝 Lançamentos\n📊 Análise\n🎯 Planejamento\n🎮 Gamificação\n⚙️ Ferramentas"
+                                                )
+                                                
+                                                # Enviar resposta via API direta
+                                                import requests
+                                                telegram_api_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+                                                
+                                                response = requests.post(telegram_api_url, data={
+                                                    'chat_id': update.effective_chat.id,
+                                                    'text': fallback_text,
+                                                    'parse_mode': 'HTML'
+                                                }, timeout=5)
+                                                
+                                                if response.status_code == 200:
+                                                    logger.info("✅ Resposta de fallback enviada")
+                                                else:
+                                                    logger.error(f"❌ Fallback falhou: {response.status_code}")
+                                                    
+                                            except Exception as fallback_error:
+                                                logger.error(f"❌ Fallback falhou: {fallback_error}")
+                                    
+                                finally:
+                                    # Limpar loop
+                                    try:
+                                        loop.close()
+                                    except:
+                                        pass
+                                        
                         except Exception as e:
                             logger.error(f"❌ Erro crítico no processamento: {e}")
                             import traceback
-                            print("\n🚨 ERRO CRÍTICO CAPTURADO:")
-                            print(f"Tipo: {type(e).__name__}")
-                            print(f"Mensagem: {e}")
-                            print("Traceback:")
-                            traceback.print_exc()
+                            logger.error(f"❌ Traceback: {traceback.format_exc()}")
                     
                     # Executar em thread separada para não bloquear Flask
                     import threading
