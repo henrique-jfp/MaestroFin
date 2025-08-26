@@ -1,95 +1,124 @@
 #!/usr/bin/env python3
 """
-🔄 COMPATIBILITY LAYER - Fallback para bot_analytics.py
-Este arquivo existe apenas para compatibilidade com imports antigos.
-O sistema principal usa analytics.bot_analytics_postgresql
+🔄 COMPATIBILITY LAYER - bot_analytics.py
+Arquivo de compatibilidade para evitar quebrar imports existentes.
+Redireciona para a versão PostgreSQL quando disponível.
 """
 
 import logging
+import os
 from typing import Optional, Dict, Any, Callable
 from functools import wraps
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-class BotAnalytics:
-    """
-    Classe de compatibilidade para sistemas locais/antigos
-    Em produção, usar analytics.bot_analytics_postgresql
-    """
+# Tentar usar a versão PostgreSQL quando disponível
+_analytics_instance = None
+_track_function = None
+
+def _initialize_analytics():
+    """Inicializa o sistema de analytics"""
+    global _analytics_instance, _track_function
     
-    def __init__(self):
-        self.db_path = "analytics.db"
-        logger.info("⚠️ Usando BotAnalytics de compatibilidade (SQLite mock)")
+    if _analytics_instance is not None:
+        return
+    
+    try:
+        # Se estiver no Render, usar PostgreSQL
+        if os.environ.get('DATABASE_URL'):
+            from analytics.bot_analytics_postgresql import get_analytics
+            _analytics_instance = get_analytics()
+            logger.info("✅ Analytics PostgreSQL carregado via compatibilidade")
+        else:
+            # Modo local - criar mock básico
+            _analytics_instance = MockAnalytics()
+            logger.info("⚠️ Usando BotAnalytics de compatibilidade (SQLite mock)")
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao carregar analytics: {e}, usando mock")
+        _analytics_instance = MockAnalytics()
+
+class MockAnalytics:
+    """Analytics mock para compatibilidade local"""
     
     def track_command_usage(self, user_id: int, username: str, command: str, 
                           success: bool = True, execution_time_ms: Optional[int] = None):
-        """Track command usage - compatibilidade"""
         logger.debug(f"📊 MOCK: {username} executou /{command} - {'OK' if success else 'ERRO'}")
     
     def track_daily_user(self, user_id: int, username: str, first_command: str = None):
-        """Track daily user - compatibilidade"""
         logger.debug(f"👤 MOCK: Usuário diário {username}")
     
-    def log_error(self, error_type: str, error_message: str, user_id: int = None, 
-                  username: str = None, command: str = None):
-        """Log error - compatibilidade"""
-        logger.error(f"❌ MOCK: {error_type}: {error_message}")
+    def track_error(self, user_id: int, username: str, error_type: str, error_message: str, command: str = None):
+        logger.debug(f"❌ MOCK: Erro {error_type} para {username}")
+
+class BotAnalytics:
+    """Classe de compatibilidade para analytics"""
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get basic stats - mock data"""
-        return {
-            'total_users': 0,
-            'total_commands': 0,
-            'error_count': 0,
-            'status': 'mock_compatibility_layer'
-        }
+    def __init__(self):
+        _initialize_analytics()
+    
+    def track_command_usage(self, user_id: int, username: str, command: str, 
+                          success: bool = True, execution_time_ms: Optional[int] = None):
+        _initialize_analytics()
+        return _analytics_instance.track_command_usage(user_id, username, command, success, execution_time_ms)
+    
+    def track_daily_user(self, user_id: int, username: str, first_command: str = None):
+        _initialize_analytics()
+        return _analytics_instance.track_daily_user(user_id, username, first_command)
+    
+    def track_error(self, user_id: int, username: str, error_type: str, error_message: str, command: str = None):
+        _initialize_analytics()
+        return _analytics_instance.track_error(user_id, username, error_type, error_message, command)
 
-# Instância global para compatibilidade
-analytics = BotAnalytics()
-
-def track_command(command_name: str):
-    """
-    Decorator para rastrear comandos - compatibilidade
-    """
-    def decorator(func: Callable):
+def track_command(command_name: str = None):
+    """Decorator de compatibilidade para tracking de comandos"""
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def wrapper(update, context, *args, **kwargs):
+        async def wrapper(update, context):
+            user = update.effective_user
+            cmd = command_name or getattr(func, '__name__', 'unknown')
+            
+            start_time = datetime.now()
+            
             try:
-                start_time = datetime.utcnow()
-                result = await func(update, context, *args, **kwargs)
+                result = await func(update, context)
                 
-                # Track success (mock)
-                user_id = update.effective_user.id
-                username = update.effective_user.username or "N/A"
+                # Calcular tempo de execução
+                execution_time = (datetime.now() - start_time).total_seconds() * 1000
                 
-                execution_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-                analytics.track_command_usage(
-                    user_id=user_id,
-                    username=username, 
-                    command=command_name,
-                    success=True,
-                    execution_time_ms=execution_time
+                # Track success
+                _initialize_analytics()
+                _analytics_instance.track_command_usage(
+                    user.id, 
+                    user.username or f"user_{user.id}", 
+                    cmd, 
+                    True, 
+                    int(execution_time)
                 )
                 
                 return result
                 
             except Exception as e:
-                # Track error (mock)
-                user_id = update.effective_user.id if update.effective_user else None
-                username = update.effective_user.username if update.effective_user else "N/A"
-                
-                analytics.log_error(
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    user_id=user_id,
-                    username=username,
-                    command=command_name
+                # Track error
+                _initialize_analytics()
+                _analytics_instance.track_error(
+                    user.id,
+                    user.username or f"user_{user.id}",
+                    type(e).__name__,
+                    str(e),
+                    cmd
                 )
-                
-                raise e
-                
+                raise
+        
         return wrapper
     return decorator
 
-logger.info("✅ Analytics de compatibilidade carregado (SQLite mock)")
+def get_analytics():
+    """Retorna instância global de analytics"""
+    _initialize_analytics()
+    return _analytics_instance
+
+# Instância global para compatibilidade
+analytics = BotAnalytics()
+
+logger.info("📦 Bot Analytics Compatibility Layer carregado")

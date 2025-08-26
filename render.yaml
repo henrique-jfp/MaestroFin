@@ -1,10 +1,10 @@
-# 🎨 Render Deploy Configuration
-# Arquitetura de Serviços Web + Worker para estabilidade máxima.
+# 🎨 Render Deploy Configuration - UNIFIED SERVICE (Free Plan Compatible)
+# Executa bot + dashboard no mesmo processo para compatibilidade com plano gratuito
 
 services:
-  # --- Serviço Principal: Auto-detecta Web ou Worker ---
+  # 🌐 UNIFIED SERVICE - Bot + Dashboard juntos (compatível com Free Plan)
   - type: web
-    name: maestrofin
+    name: maestrofin-unified
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -20,7 +20,7 @@ services:
       - key: RENDER_DEPLOY
         value: "true"
       - key: MAESTROFIN_MODE
-        value: "web"  # "web" para dashboard, "bot" para worker
+        value: "unified"  # Modo unificado: bot + dashboard
       # Adicione suas variáveis de ambiente aqui
       # - key: TELEGRAM_TOKEN
       #   fromSecret: true
@@ -30,22 +30,3 @@ services:
       #   fromSecret: true
       # - key: GOOGLE_VISION_CREDENTIALS_JSON
       #   fromSecret: true
-
-  # --- Worker Service: Bot do Telegram ---
-  - type: worker
-    name: maestrofin-bot
-    env: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.7
-      - key: PYTHONUNBUFFERED
-        value: 1
-      - key: PYTHONDONTWRITEBYTECODE
-        value: 1
-      - key: RENDER_DEPLOY
-        value: "true"
-      - key: MAESTROFIN_MODE
-        value: "bot"
