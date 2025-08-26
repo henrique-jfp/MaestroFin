@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import os
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Float
+from sqlalchemy import create_engine, Column, BigInteger, String, DateTime, Boolean, Text, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
@@ -21,30 +21,30 @@ Base = declarative_base()
 class CommandUsage(Base):
     __tablename__ = 'analytics_command_usage'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)  # ✅ BigInteger para IDs do Telegram
     username = Column(String(255))
     command = Column(String(255), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
     success = Column(Boolean, default=True)
-    execution_time_ms = Column(Integer)
+    execution_time_ms = Column(BigInteger)  # ✅ BigInteger para tempos longos
     parameters = Column(Text)  # JSON
 
 class DailyUsers(Base):
     __tablename__ = 'analytics_daily_users'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)  # ✅ BigInteger para IDs do Telegram
     username = Column(String(255))
     date = Column(DateTime, nullable=False)
     first_command = Column(String(255))
-    total_commands = Column(Integer, default=1)
+    total_commands = Column(BigInteger, default=1)  # ✅ BigInteger para contadores
 
 class ErrorLogs(Base):
     __tablename__ = 'analytics_error_logs'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger)  # ✅ BigInteger para IDs do Telegram
     username = Column(String(255))
     command = Column(String(255))
     error_type = Column(String(255), nullable=False)

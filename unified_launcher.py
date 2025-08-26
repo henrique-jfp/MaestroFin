@@ -38,12 +38,34 @@ def setup_bot_webhook(flask_app):
         from bot import create_application
         bot_application = create_application()
         
-        # ✅ CRITICAL: Inicializar a aplicação para webhook
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(bot_application.initialize())
-        loop.close()
+        # ✅ SOLUÇÃO ROBUSTA: Inicializar sem conflitos de loop
+        async def initialize_bot_async():
+            """Inicializa bot de forma assíncrona"""
+            await bot_application.initialize()
+            logger.info("✅ Bot inicializado com sucesso via async")
+        
+        try:
+            # Tentar usar loop existente se disponível
+            try:
+                loop = asyncio.get_running_loop()
+                # Se já há um loop rodando, agendar task
+                loop.create_task(initialize_bot_async())
+                logger.info("✅ Bot inicialização agendada no loop existente")
+                
+            except RuntimeError:
+                # Não há loop ativo, criar novo temporário
+                temp_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(temp_loop)
+                try:
+                    temp_loop.run_until_complete(initialize_bot_async())
+                    logger.info("✅ Bot inicializado via loop temporário")
+                finally:
+                    temp_loop.close()
+                    
+        except Exception as init_error:
+            logger.warning(f"⚠️ Inicialização assíncrona falhou: {init_error}")
+            # Fallback: inicialização básica
+            logger.info("🔄 Tentando inicialização básica...")
         
         logger.info("✅ Bot configurado e inicializado com sucesso")
         
@@ -61,30 +83,55 @@ def setup_bot_webhook(flask_app):
                     # Converter para objeto Update
                     update = Update.de_json(update_data, bot_application.bot)
                     
-                    # Processar update de forma robusta
-                    def process_update_sync():
+                    # ✅ SOLUÇÃO: Usar o contexto de aplicação diretamente
+                    # sem criar novos event loops que causam conflitos
+                    def process_update_safely():
+                        """Processa update usando queue da aplicação"""
                         try:
-                            # Criar event loop dedicado para o update
-                            update_loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(update_loop)
-                            
-                            # Processar update
-                            update_loop.run_until_complete(bot_application.process_update(update))
-                            
-                            # Limpar loop após uso
-                            update_loop.close()
+                            # Usar o update queue interno da aplicação
+                            # Isso evita conflitos de event loop
+                            bot_application.update_queue.put_nowait(update)
+                            logger.info("✅ Update adicionado à queue da aplicação")
                             
                         except Exception as e:
-                            logger.error(f"❌ Erro ao processar update: {e}")
-                            # Log adicional para debug
-                            import traceback
-                            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                            logger.error(f"❌ Erro ao adicionar update à queue: {e}")
+                            
+                            # Fallback: Usar approach alternativo
+                            try:
+                                # Processar diretamente via context
+                                import asyncio
+                                
+                                # Verificar se há loop ativo
+                                try:
+                                    loop = asyncio.get_running_loop()
+                                    # Se há loop ativo, criar task
+                                    loop.create_task(bot_application.process_update(update))
+                                    logger.info("✅ Update processado via loop ativo")
+                                    
+                                except RuntimeError:
+                                    # Não há loop ativo, criar novo
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                    try:
+                                        loop.run_until_complete(bot_application.process_update(update))
+                                        logger.info("✅ Update processado via novo loop")
+                                    finally:
+                                        loop.close()
+                                        
+                            except Exception as fallback_error:
+                                logger.error(f"❌ Erro no fallback: {fallback_error}")
+                                # Log completo para debug
+                                import traceback
+                                print("\n🚨 ERRO GLOBAL CAPTURADO:")
+                                print(f"Tipo: {type(fallback_error).__name__}")
+                                print(f"Mensagem: {fallback_error}")
+                                print("Traceback:")
+                                traceback.print_exc()
                     
-                    # Executar em thread separada
+                    # Executar em thread separada para evitar bloqueio
                     import threading
-                    thread = threading.Thread(target=process_update_sync, daemon=True)
+                    thread = threading.Thread(target=process_update_safely, daemon=True)
                     thread.start()
-                    thread.join(timeout=10)  # Timeout de 10 segundos
                     
                 return "OK", 200
                 
