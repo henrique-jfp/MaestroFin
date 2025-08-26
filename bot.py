@@ -49,7 +49,7 @@ except ImportError as e:
     logging.warning(f"⚠️ Analytics não disponível: {e}")
 
 def track_analytics(command_name):
-    """Decorator para tracking de comandos"""
+    """Decorator avançado para tracking de comandos"""
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(update, context):
@@ -57,19 +57,66 @@ def track_analytics(command_name):
                 user_id = update.effective_user.id
                 username = update.effective_user.username or update.effective_user.first_name or "Usuário"
                 
+                start_time = datetime.now()
+                success = True
+                error_details = None
+                
                 try:
+                    # Executar comando
+                    result = await func(update, context)
+                    
+                    # Calcular tempo de execução
+                    execution_time = (datetime.now() - start_time).total_seconds() * 1000
+                    
+                    # Registrar sucesso
                     analytics.track_command_usage(
                         user_id=user_id,
                         username=username,
                         command=command_name,
-                        success=True
+                        success=True,
+                        execution_time_ms=int(execution_time)
                     )
-                    analytics.track_daily_user(user_id, username, command_name)
-                    logging.info(f"📊 Analytics: {username} usou /{command_name}")
+                    
+                    # Atualizar estatísticas diárias
+                    if hasattr(analytics, 'track_daily_user'):
+                        analytics.track_daily_user(user_id, username, command_name)
+                    
+                    logging.info(f"📊 Analytics: {username} usou /{command_name} ({execution_time:.0f}ms)")
+                    return result
+                    
                 except Exception as e:
-                    logging.error(f"❌ Erro no analytics: {e}")
-            
-            return await func(update, context)
+                    success = False
+                    error_details = str(e)
+                    execution_time = (datetime.now() - start_time).total_seconds() * 1000
+                    
+                    # Registrar falha
+                    analytics.track_command_usage(
+                        user_id=user_id,
+                        username=username,
+                        command=command_name,
+                        success=False,
+                        execution_time_ms=int(execution_time)
+                    )
+                    
+                    # Log detalhado do erro
+                    if hasattr(analytics, 'log_error'):
+                        import traceback
+                        analytics.log_error(
+                            error_type=type(e).__name__,
+                            error_message=str(e),
+                            stack_trace=traceback.format_exc(),
+                            user_id=user_id,
+                            username=username,
+                            command=command_name
+                        )
+                    
+                    logging.error(f"❌ Erro no comando /{command_name}: {e}")
+                    raise  # Re-propagar o erro
+                    
+            else:
+                # Executar sem analytics
+                return await func(update, context)
+                
         return wrapper
     return decorator
 
