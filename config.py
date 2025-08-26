@@ -54,8 +54,27 @@ PIX_KEY = os.getenv("PIX_KEY")
 
 # Verificar apenas variáveis críticas para o bot funcionar
 if not TELEGRAM_TOKEN:
-    logging.error("❌ TELEGRAM_TOKEN não configurado!")
-    raise ValueError("TELEGRAM_TOKEN é obrigatório para o bot funcionar")
+    if is_production:
+        logging.warning("⚠️ TELEGRAM_TOKEN não configurado no Render - Dashboard funcionará apenas com dados mock")
+        # Em produção sem token, não quebra, mas avisa
+        TELEGRAM_TOKEN = None
+    else:
+        logging.error("❌ TELEGRAM_TOKEN não configurado!")
+        raise ValueError("TELEGRAM_TOKEN é obrigatório para o bot funcionar")
+
+# Verificar outras variáveis importantes
+missing_vars = []
+if not GEMINI_API_KEY:
+    missing_vars.append("GEMINI_API_KEY")
+if not PIX_KEY:
+    missing_vars.append("PIX_KEY")
+if not EMAIL_HOST_PASSWORD:
+    missing_vars.append("EMAIL_HOST_PASSWORD")
+
+if missing_vars:
+    logging.warning(f"⚠️ Variáveis não configuradas: {', '.join(missing_vars)}")
+    if is_production:
+        logging.info("📊 Dashboard funcionará com dados mock até variáveis serem configuradas")
 
 # Log das configurações (sem expor tokens)
 logging.info("✅ Configurações carregadas:")

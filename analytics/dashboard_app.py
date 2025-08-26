@@ -514,6 +514,54 @@ def commands_ranking():
         logger.error(f"Erro no ranking de comandos: {e}")
         return jsonify({'error': str(e), 'status': 'error'})
 
+@app.route('/api/errors/detailed')
+def errors_detailed():
+    """API para erros detalhados"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        
+        # Mock data para erros detalhados
+        errors_data = [
+            {
+                'id': 1,
+                'timestamp': (datetime.now() - timedelta(hours=2)).isoformat(),
+                'error_type': 'ValidationError',
+                'message': 'Formato de valor inválido',
+                'command': '/adicionar',
+                'user_id': 'user_123',
+                'severity': 'medium'
+            },
+            {
+                'id': 2,
+                'timestamp': (datetime.now() - timedelta(hours=5)).isoformat(),
+                'error_type': 'NetworkError',
+                'message': 'Timeout na conexão com banco',
+                'command': '/extrato',
+                'user_id': 'user_456',
+                'severity': 'high'
+            },
+            {
+                'id': 3,
+                'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
+                'error_type': 'AuthError',
+                'message': 'Token expirado',
+                'command': '/metas',
+                'user_id': 'user_789',
+                'severity': 'low'
+            }
+        ]
+        
+        return jsonify({
+            'errors': errors_data,
+            'period_days': days,
+            'total_errors': len(errors_data),
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro no endpoint errors_detailed: {e}")
+        return jsonify({'error': str(e), 'status': 'error'})
+
 @app.route('/api/performance/metrics')
 def performance_metrics():
     """API para métricas de performance"""
@@ -556,6 +604,58 @@ def performance_metrics():
         
     except Exception as e:
         logger.error(f"Erro nas métricas de performance: {e}")
+        return jsonify({'error': str(e), 'status': 'error'})
+
+@app.route('/api/config/status')
+def config_status():
+    """API para status das configurações do sistema"""
+    try:
+        import config
+        
+        # Verificar status das variáveis críticas
+        env_status = {
+            'TELEGRAM_TOKEN': '✅ Configurado' if config.TELEGRAM_TOKEN else '❌ Não configurado',
+            'GEMINI_API_KEY': '✅ Configurado' if config.GEMINI_API_KEY else '❌ Não configurado',  
+            'PIX_KEY': '✅ Configurado' if config.PIX_KEY else '❌ Não configurado',
+            'EMAIL_HOST_PASSWORD': '✅ Configurado' if config.EMAIL_HOST_PASSWORD else '❌ Não configurado',
+            'DATABASE_URL': '✅ Configurado' if config.DATABASE_URL else '❌ Não configurado'
+        }
+        
+        # Calcular % de configuração
+        configured = sum(1 for status in env_status.values() if '✅' in status)
+        total = len(env_status)
+        config_percentage = round((configured / total) * 100)
+        
+        # Determinar status geral
+        if config_percentage == 100:
+            overall_status = 'complete'
+            status_message = '🎉 Sistema 100% configurado'
+        elif config_percentage >= 80:
+            overall_status = 'mostly_complete'  
+            status_message = '⚠️ Quase completo - algumas funcionalidades limitadas'
+        elif config_percentage >= 40:
+            overall_status = 'partial'
+            status_message = '📊 Configuração parcial - modo demo ativo'
+        else:
+            overall_status = 'demo'
+            status_message = '🏠 Modo demo - configure variáveis de ambiente'
+        
+        return jsonify({
+            'environment_variables': env_status,
+            'configuration_percentage': config_percentage,
+            'overall_status': overall_status,
+            'status_message': status_message,
+            'is_production': bool(os.environ.get('RENDER_SERVICE_NAME')),
+            'recommendations': [
+                'Configure TELEGRAM_TOKEN para ativar o bot',
+                'Configure GEMINI_API_KEY para IA funcionar', 
+                'Configure PIX_KEY para pagamentos',
+                'Configure EMAIL_* para notificações'
+            ] if config_percentage < 100 else ['Sistema totalmente configurado! 🎉']
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro no status de configuração: {e}")
         return jsonify({'error': str(e), 'status': 'error'})
 
 if __name__ == '__main__':
