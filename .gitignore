@@ -2,6 +2,69 @@
 # 🎼 MaestroFin - GitIgnore Otimizado
 # ========================================
 
+# 📋 POLÍTICA: APENAS ESSENCIAL PARA PRODUÇÃO NO GITHUB
+# ✅ Incluído: bot.py, config.py, models.py, handlers, templates
+# ❌ Excluído: testes, debug, análises, documentação técnica
+
+# ===========================================
+# 🚫 ARQUIVOS DE DESENVOLVIMENTO (NÃO COMMITTAR)
+# ===========================================
+
+# 🧪 Arquivos de Teste e Debug
+test_*.py
+debug_*.py
+*_test.py  
+*_debug.py
+temp_*.py
+rascunho_*.py
+experimento_*.py
+cleanup_*.py
+migrate_*.py
+verify_*.py
+add_analytics_*.py
+*_backup.py
+
+# 📚 Documentação Técnica (manter apenas README.md)
+ANALISE_*.md
+DEBUG_*.md
+DIAGNOSTICO_*.md
+MELHORIAS_*.md
+LIMPEZA_*.md
+FIX_*.md
+GUIA_*.md
+CORREÇÕES_*.md
+SECRET_*.md
+WORKSPACE_*.md
+ENDPOINTS_*.md
+OCR_FIXES_*.md
+PROJECT_STATUS.md
+SQLALCHEMY_*.md
+
+# 🔧 Scripts de Desenvolvimento
+cleanup_*.sh
+reset_*.sh
+workspace_*.sh
+novo_*.sh
+finalizar_*.sh
+maestro.sh
+limpar_*.sh
+
+# 📊 Arquivos de Análise
+*_analysis.log
+*_analytics.py
+dashboard_handler.log
+dashboard_output.log
+*_complete.py
+
+# 🗃️ Arquivos de Configuração Temporários  
+*_fixed.py
+*_hotfix.py
+launcher_*backup*.py
+render_unified.yaml
+requirements_clean.txt
+
+# ===========================================
+
 # 🐍 Python Core
 __pycache__/
 *.pyc
@@ -116,3 +179,40 @@ launcher_*backup*.py
 dashboard_only.py
 *debug*.py
 *teste*.py
+
+# ===========================================
+# 🎯 ARQUIVOS ESSENCIAIS (SEMPRE INCLUIR)
+# ===========================================
+
+# 🤖 Core Python - PRODUÇÃO
+!bot.py
+!unified_launcher.py
+!config.py
+!advanced_config.py
+!models.py
+!alerts.py
+!jobs.py
+!secret_loader.py
+!gunicorn_config.py
+
+# 📁 Pastas Essenciais - PRODUÇÃO  
+!gerente_financeiro/
+!analytics/
+!database/
+!templates/
+!static/
+!credenciais/
+
+# ⚙️ Configuração Deploy - PRODUÇÃO
+!render.yaml
+!requirements.txt
+!runtime.txt
+!Procfile
+
+# 📖 Documentação Principal - PRODUÇÃO
+!README.md
+!LICENSE
+
+# ===========================================
+# 🌐 AMBIENTE E INFRAESTRUTURA  
+# ===========================================
