@@ -7,6 +7,17 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.0/index.min.js"></script>
     <link rel="stylesheet" href="/static/dashboard_cyberpunk.css">
+    <style>
+        /* Overrides leves para responsividade adicional */
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap: 18px; }
+        .status-card { min-height: 84px; }
+        @media (max-width: 720px){
+            .header h1 { font-size: 1.2rem; }
+            .tab-button { padding: 6px 10px; font-size: 0.75rem; }
+            .chart-title { font-size: 0.8rem; }
+        }
+    </style>
 </head>
 <body>
     <!-- Header Cyberpunk -->
@@ -291,23 +302,31 @@
         function updateMetrics(stats) {
             const metricsGrid = document.getElementById('realtimeMetrics');
             if (!stats) return;
-
+            // Alguns campos podem vir de metrics/quality – placeholders até fetch paralelo preencher
             metricsGrid.innerHTML = `
                 <div class="status-card">
-                    <div class="metric-value">${stats.total_users || 0}</div>
-                    <div class="metric-label">USUÁRIOS ATIVOS</div>
+                    <div class="metric-value">${stats.total_users ?? 0}</div>
+                    <div class="metric-label">USUÁRIOS ATIVOS (24H)</div>
                 </div>
                 <div class="status-card">
-                    <div class="metric-value">${stats.total_commands || 0}</div>
-                    <div class="metric-label">COMANDOS EXECUTADOS</div>
+                    <div class="metric-value">${stats.total_commands ?? 0}</div>
+                    <div class="metric-label">COMANDOS (24H)</div>
                 </div>
                 <div class="status-card">
-                    <div class="metric-value">${stats.avg_response_time || 0}ms</div>
-                    <div class="metric-label">TEMPO RESPOSTA</div>
+                    <div class="metric-value">${stats.avg_response_time ?? 0}ms</div>
+                    <div class="metric-label">LATÊNCIA MÉDIA</div>
                 </div>
                 <div class="status-card">
-                    <div class="metric-value">${stats.error_count || 0}</div>
-                    <div class="metric-label">ALERTAS DETECTADOS</div>
+                    <div class="metric-value">${stats.error_count ?? 0}</div>
+                    <div class="metric-label">ERROS (24H)</div>
+                </div>
+                <div class="status-card" id="successRateCard">
+                    <div class="metric-value">--%</div>
+                    <div class="metric-label">SUCCESS RATE</div>
+                </div>
+                <div class="status-card" id="errorRateCard">
+                    <div class="metric-value">--%</div>
+                    <div class="metric-label">ERROR RATE</div>
                 </div>
             `;
         }
@@ -418,8 +437,87 @@
         }
 
         // Atualizar gráficos
-        function updateCharts(data) {
-            // Implementar atualização dos gráficos
+        async function updateCharts(_realtimeData) {
+            try {
+                // Carregar dados paralelos
+                const [perfResp, rankResp, usersResp] = await Promise.all([
+                    fetch('/api/performance/metrics?hours=24'),
+                    fetch('/api/commands/ranking?days=7'),
+                    fetch('/api/users/active?period=24h')
+                ]);
+                const perfData = await perfResp.json();
+                const rankData = await rankResp.json();
+                const usersData = await usersResp.json();
+
+                // Atualizar rates
+                if (perfData.metrics && perfData.metrics.quality){
+                    const q = perfData.metrics.quality;
+                    const sCard = document.querySelector('#successRateCard .metric-value');
+                    const eCard = document.querySelector('#errorRateCard .metric-value');
+                    if (sCard) sCard.textContent = (q.success_rate ?? 0).toFixed(1) + '%';
+                    if (eCard) eCard.textContent = (q.error_rate ?? 0).toFixed(2) + '%';
+                }
+
+                // Preparar datasets
+                const trends = (perfData.metrics && perfData.metrics.trends) || [];
+                const labels = trends.map(t => t.time);
+                const throughputSeries = trends.map(t => t.throughput);
+                const latencySeries = trends.map(t => t.response_time);
+
+                // Comandos ranking
+                const ranking = rankData.ranking || [];
+                const cmdLabels = ranking.map(r => r.command);
+                const cmdCounts = ranking.map(r => r.count);
+
+                // Top usuários (overview)
+                const topUsersDiv = document.getElementById('topUsers');
+                if (topUsersDiv && usersData.users){
+                    topUsersDiv.innerHTML = usersData.users.slice(0,6).map(u => `
+                        <div class="status-card">
+                            <div class="metric-value">${u.username || 'N/A'}</div>
+                            <div class="metric-label">${u.commands_count} cmds</div>
+                        </div>`).join('');
+                }
+
+                // Inicialização ou atualização de gráficos
+                if (!charts.activityChart){
+                    charts.activityChart = new Chart(document.getElementById('activityChart').getContext('2d'), {
+                        type: 'line',
+                        data: { labels, datasets: [{ label: 'Throughput', data: throughputSeries, borderColor: '#00ffaa', tension: .25, fill: false }] },
+                        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                    });
+                } else {
+                    charts.activityChart.data.labels = labels;
+                    charts.activityChart.data.datasets[0].data = throughputSeries;
+                    charts.activityChart.update();
+                }
+
+                if (!charts.performanceChart){
+                    charts.performanceChart = new Chart(document.getElementById('performanceChart').getContext('2d'), {
+                        type: 'line',
+                        data: { labels, datasets: [{ label: 'Latency (ms)', data: latencySeries, borderColor: '#ff00aa', tension: .25, fill: false }] },
+                        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                    });
+                } else {
+                    charts.performanceChart.data.labels = labels;
+                    charts.performanceChart.data.datasets[0].data = latencySeries;
+                    charts.performanceChart.update();
+                }
+
+                if (!charts.commandsChart){
+                    charts.commandsChart = new Chart(document.getElementById('commandsChart').getContext('2d'), {
+                        type: 'bar',
+                        data: { labels: cmdLabels, datasets: [{ label: 'Uso', data: cmdCounts, backgroundColor: 'rgba(0,255,170,0.4)', borderColor: '#00ffaa' }] },
+                        options: { responsive: true, indexAxis: cmdLabels.length > 6 ? 'y' : 'x', plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true }, y:{ beginAtZero:true } } }
+                    });
+                } else {
+                    charts.commandsChart.data.labels = cmdLabels;
+                    charts.commandsChart.data.datasets[0].data = cmdCounts;
+                    charts.commandsChart.update();
+                }
+            } catch (err){
+                console.error('Erro updateCharts:', err);
+            }
         }
 
         // Inicializar dashboard
@@ -428,9 +526,11 @@
             
             // Atualizar a cada 30 segundos
             setInterval(() => {
-                if (currentTab === 'overview') {
-                    loadOverviewData();
-                }
+                if (currentTab === 'overview') { loadOverviewData(); }
+                if (currentTab === 'commands') { loadCommandsData(); }
+                if (currentTab === 'performance') { loadPerformanceData(); }
+                if (currentTab === 'errors') { loadErrorsData(); }
+                if (currentTab === 'users') { loadUsersData(); }
             }, 30000);
         }
 
