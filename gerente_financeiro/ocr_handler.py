@@ -486,12 +486,27 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             import asyncio
             
             def make_vision_request():
-                return client.document_text_detection(image=vision_image)
+                # Timeout manual simples: se demorar >25s levantamos exceção controlada
+                import threading
+                result_container = {}
+                exc_container = {}
+                def target():
+                    try:
+                        result_container['resp'] = client.document_text_detection(image=vision_image)
+                    except Exception as e:  # pragma: no cover
+                        exc_container['err'] = e
+                t = threading.Thread(target=target, daemon=True)
+                t.start()
+                t.join(timeout=25)
+                if t.is_alive():
+                    raise TimeoutError("Google Vision demorou >25s (timeout interno)")
+                if 'err' in exc_container:
+                    raise exc_container['err']
+                return result_container.get('resp')
             
             # Executar em thread pool para evitar blocking
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, make_vision_request
-            )
+            response = await asyncio.get_event_loop().run_in_executor(None, make_vision_request)
+            logger.info("⏱️ Google Vision processamento concluído dentro do timeout interno")
             
             logger.info("📥 Resposta recebida do Google Vision")
             

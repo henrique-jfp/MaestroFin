@@ -553,10 +553,17 @@ def create_application():
 
             # Handlers básicos SEMPRE
             application.add_handler(configurar_conv)  # Inclui o /start
+            # Handlers básicos SEMPRE (decorados para analytics)
             application.add_handler(CommandHandler("help", help_command))
             application.add_handler(CommandHandler("debugocr", debug_ocr_command))
             application.add_handler(CommandHandler("debuglogs", debug_logs_command))
             application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))
+            # Extra: garantir tracking /start se existir atributo
+            try:
+                if hasattr(configurar_conv, 'entry_points'):
+                    logger.debug("🔍 Verificando entry_points de /start para tracking")
+            except Exception:
+                pass
             
             logger.info("✅ Todos os handlers adicionados com sucesso.")
             

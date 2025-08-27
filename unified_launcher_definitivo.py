@@ -67,37 +67,68 @@ def _start_loop_thread():
     loop_thread.start()
 
 async def _async_init_bot():
-    """Inicializa bot e marca status como OK"""
+    """Inicializa bot, configura webhook (ou polling opcional) e marca status."""
     global bot_application
     try:
         if bot_application is None:
             from bot import create_application
             bot_application = create_application()
+            if bot_application is None:
+                raise RuntimeError("create_application retornou None")
+
+        # Inicializar se ainda não
         if not getattr(bot_application, '_initialized', False):
+            logger.info("⚙️ Inicializando Application (telegram)...")
             await bot_application.initialize()
+            logger.info("✅ Application initialize() concluído")
+
+        # START habilita job_queue / persistence interna
         if not bot_application.running:
-            await bot_application.start()
-            # Fallback: garantir remoção de webhook antigo e polling paralelo se Running continuar falso
             try:
-                # Remover webhook antigo para liberar polling (não derruba se já removido)
-                await bot_application.bot.delete_webhook(drop_pending_updates=False)
-            except Exception as e:
-                logger.warning(f"⚠️ Falha ao deletar webhook (pode ser normal): {e}")
-            # Iniciar polling em background para redundância
+                await bot_application.start()
+                logger.info("✅ Application.start() concluído")
+            except Exception as start_err:
+                logger.error(f"❌ Falha em Application.start(): {start_err}", exc_info=True)
+        else:
+            logger.info("ℹ️ Application já estava running")
+
+        # --- MODO DE RECEBIMENTO (PRIORIDADE: WEBHOOK) ---
+        enable_polling_fallback = os.getenv('ENABLE_POLLING_FALLBACK', 'false').lower() in ('1','true','yes')
+        base_url = os.environ.get('RENDER_EXTERNAL_URL') or os.environ.get('PUBLIC_BASE_URL')
+        if base_url:
+            webhook_url = f"{base_url.rstrip('/')}/webhook/{TELEGRAM_TOKEN}"
             try:
-                if getattr(bot_application, 'updater', None):
-                    await bot_application.updater.start_polling()  # se já tiver webhook ativo, simplesmente não chegarão updates duplicados
-                    logger.info("� Polling iniciado como fallback")
-            except Exception as e:
-                logger.warning(f"⚠️ Falha ao iniciar polling fallback: {e}")
-        
-        # �🔥 CRUCIAL: Marcar status IMEDIATAMENTE
+                info = await bot_application.bot.get_webhook_info()
+            except Exception as wh_info_err:
+                logger.warning(f"⚠️ getWebhookInfo falhou: {wh_info_err}")
+                info = None
+            needs_set = True
+            if info and info.url == webhook_url:
+                needs_set = False
+            if needs_set:
+                try:
+                    ok = await bot_application.bot.set_webhook(webhook_url)
+                    logger.info(f"🌐 setWebhook({webhook_url}) => {ok}")
+                except Exception as set_err:
+                    logger.error(f"❌ setWebhook falhou: {set_err}")
+            else:
+                logger.info(f"🌐 Webhook já configurado: {webhook_url}")
+        else:
+            logger.warning("⚠️ BASE URL não definida (RENDER_EXTERNAL_URL/Public). Webhook não configurado.")
+            if enable_polling_fallback and getattr(bot_application, 'updater', None):
+                if not bot_application.updater.running:
+                    try:
+                        await bot_application.updater.start_polling()
+                        logger.info("📡 Polling iniciado (fallback explícito)")
+                    except Exception as poll_err:
+                        logger.error(f"❌ Falha start_polling: {poll_err}")
+
         _set_bot_status(True)
-        logger.info("✅ [DEFINITIVO] Bot inicializado, startado e STATUS SALVO")
+        logger.info("✅ [DEFINITIVO] Bot inicializado e STATUS SALVO")
         _start_watchdog()
-        
+
     except Exception as e:
-        logger.error(f"❌ Erro na inicialização do bot: {e}")
+        logger.error(f"❌ Erro na inicialização do bot: {e}", exc_info=True)
         _set_bot_status(False)
 
 def _start_watchdog():
@@ -115,29 +146,10 @@ def _start_watchdog():
                 if bot_application:
                     running_flag = getattr(bot_application, 'running', False)
                     internal_running = getattr(bot_application, '_running', None)
-                    idle = getattr(bot_application, '_closing', False)
-                    stale = False
-                    if last_update_ts:
-                        stale = (time.time() - last_update_ts) > 120
-                    if (not running_flag or idle or stale):
-                        logger.warning(
-                            f"🩺 Watchdog: running={running_flag} _running={internal_running} idle={idle} stale={stale} -> aplicando recuperação"
-                        )
-                        try:
-                            # Forçar start se não estiver
-                            if not running_flag:
-                                try:
-                                    await bot_application.start()
-                                    logger.info("♻️ Watchdog: start() reaplicado")
-                                except Exception as e:
-                                    logger.warning(f"⚠️ Watchdog start falhou: {e}")
-                            # Garantir polling ativo
-                            if getattr(bot_application, 'updater', None):
-                                if not bot_application.updater.running:
-                                    await bot_application.updater.start_polling()
-                                    logger.info("♻️ Watchdog: polling reativado")
-                        except Exception as e:
-                            logger.error(f"❌ Watchdog recuperação falhou: {e}")
+                    stale = last_update_ts and (time.time() - last_update_ts) > 300
+                    if stale:
+                        logger.warning(f"🩺 Watchdog: sem updates há >5min (running={running_flag} _running={internal_running})")
+                        # Apenas logar por enquanto – sem reiniciar agressivamente para evitar conflitos
                 await asyncio.sleep(30)
             except asyncio.CancelledError:  # pragma: no cover
                 break
@@ -168,13 +180,11 @@ def setup_bot_webhook(flask_app):
     
     # 🔥 RETRY automático para garantir que bot suba
     def retry_init():
-        time.sleep(5)  # Aguarda 5s
+        time.sleep(8)  # Aguarda 8s
         if not _get_bot_status():
-            logger.warning("🔄 Retry de inicialização do bot...")
+            logger.warning("🔄 Retry de inicialização do bot (1ª tentativa)...")
             asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
-    
-    retry_thread = threading.Thread(target=retry_init, daemon=True)
-    retry_thread.start()
+    threading.Thread(target=retry_init, daemon=True).start()
 
     @flask_app.route(f'/webhook/{TELEGRAM_TOKEN}', methods=['POST'])
     def webhook():
@@ -217,6 +227,7 @@ def setup_bot_webhook(flask_app):
             "bot_started": bot_started,
             "loop_alive": bool(event_loop and event_loop.is_running()),
             "running": bool(bot_application and bot_application.running),
+            "initialized": getattr(bot_application, '_initialized', None) if bot_application else None,
             "internal_running": getattr(bot_application, '_running', None) if bot_application else None,
             "updater_polling": getattr(getattr(bot_application, 'updater', None), 'running', None) if bot_application else None,
             "status_file": BOT_STATUS_FILE,

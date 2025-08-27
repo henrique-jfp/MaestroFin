@@ -67,8 +67,12 @@ if is_render:
     try:
         from analytics.bot_analytics_postgresql import get_analytics
         analytics = get_analytics()
-        analytics_available = True
-        logger.info("✅ Analytics PostgreSQL conectado")
+        # Verificação simples se engine existe
+        if getattr(analytics, 'engine', None):
+            analytics_available = True
+            logger.info("✅ Analytics PostgreSQL conectado (engine ok)")
+        else:
+            logger.warning("⚠️ Analytics PostgreSQL instanciado mas engine ausente")
     except ImportError as e:
         logger.warning(f"Analytics indisponível: {e}")
 else:
