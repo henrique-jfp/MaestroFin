@@ -65,28 +65,56 @@ def _start_loop_thread():
         event_loop.run_forever()
     loop_thread = threading.Thread(target=runner, daemon=True, name="unified-loop")
     loop_thread.start()
+    # Esperar o loop ficar disponível (curto) para evitar race ao agendar init
+    for _ in range(50):  # até ~2.5s
+        if event_loop:
+            break
+        time.sleep(0.05)
+    if not event_loop:
+        logger.error("❌ Loop assíncrono não inicializado após 2.5s")
 
 async def _async_init_bot():
     """Inicializa bot, configura webhook (ou polling opcional) e marca status."""
     global bot_application
     try:
+        start_ts = time.time()
+        logger.info("🚀 [_async_init_bot] Iniciando sequência de criação do bot...")
         if bot_application is None:
             from bot import create_application
-            bot_application = create_application()
+            try:
+                bot_application = create_application()
+            except Exception as ce:
+                logger.error(f"❌ Falha create_application() completa: {ce} - tentando modo LIGHT", exc_info=True)
+                try:
+                    from bot import create_application_light
+                    bot_application = create_application_light()
+                    logger.warning("⚠️ Bot iniciado em modo LIGHT - apenas comandos básicos ativos")
+                except Exception as le:
+                    logger.error(f"❌ Falha também no modo LIGHT: {le}")
+                    raise
             if bot_application is None:
                 raise RuntimeError("create_application retornou None")
 
         # Inicializar se ainda não
         if not getattr(bot_application, '_initialized', False):
-            logger.info("⚙️ Inicializando Application (telegram)...")
-            await bot_application.initialize()
-            logger.info("✅ Application initialize() concluído")
+            logger.info("⚙️ Application.initialize()...")
+            try:
+                await asyncio.wait_for(bot_application.initialize(), timeout=40)
+            except asyncio.TimeoutError:
+                logger.error("⏱️ Timeout em initialize() >40s - prosseguindo mesmo assim")
+            except Exception as ie:
+                logger.error(f"❌ Erro initialize(): {ie}", exc_info=True)
+                raise
+            else:
+                logger.info("✅ Application initialize() OK")
 
         # START habilita job_queue / persistence interna
         if not bot_application.running:
             try:
-                await bot_application.start()
-                logger.info("✅ Application.start() concluído")
+                await asyncio.wait_for(bot_application.start(), timeout=30)
+                logger.info("✅ Application.start() OK")
+            except asyncio.TimeoutError:
+                logger.error("⏱️ Timeout em start() >30s")
             except Exception as start_err:
                 logger.error(f"❌ Falha em Application.start(): {start_err}", exc_info=True)
         else:
@@ -124,7 +152,7 @@ async def _async_init_bot():
                         logger.error(f"❌ Falha start_polling: {poll_err}")
 
         _set_bot_status(True)
-        logger.info("✅ [DEFINITIVO] Bot inicializado e STATUS SALVO")
+        logger.info(f"✅ [DEFINITIVO] Bot inicializado em {time.time()-start_ts:.1f}s e STATUS SALVO")
         _start_watchdog()
 
     except Exception as e:
@@ -176,14 +204,24 @@ def setup_bot_webhook(flask_app):
         logger.warning(f"⚠️ Migração BigInt falhou: {e}")
     
     # Agenda init mas NÃO aguarda (async)
-    asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
+    # Agendar init somente quando loop presente
+    if event_loop:
+        try:
+            asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
+        except Exception as sch_err:
+            logger.error(f"❌ Erro agendando init: {sch_err}")
+    else:
+        logger.error("❌ Loop ausente - não foi possível agendar _async_init_bot()")
     
     # 🔥 RETRY automático para garantir que bot suba
     def retry_init():
         time.sleep(8)  # Aguarda 8s
         if not _get_bot_status():
             logger.warning("🔄 Retry de inicialização do bot (1ª tentativa)...")
-            asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
+            if event_loop:
+                asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
+            else:
+                logger.error("❌ Retry abortado: loop ainda ausente")
     threading.Thread(target=retry_init, daemon=True).start()
 
     @flask_app.route(f'/webhook/{TELEGRAM_TOKEN}', methods=['POST'])
