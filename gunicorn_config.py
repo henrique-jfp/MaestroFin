@@ -1,42 +1,39 @@
 #!/usr/bin/env python3
 """
-⚡ Configuração Gunicorn Ultra Robusta para Render
+🔥 CONFIGURAÇÃO GUNICORN DEFINITIVA - Zero Race Conditions
 """
 import os
-import multiprocessing
 
-# Configurações básicas
+# Configurações básicas DEFINITIVAS
 bind = f"0.0.0.0:{os.environ.get('PORT', 10000)}"
-# IMPORTANTE: manter apenas 1 worker para não duplicar estado de bot / threads
-workers = 1
-worker_class = "sync"  # simplifica interação com threads asyncio internas
-timeout = 120
-keepalive = 5
-graceful_timeout = 60
-# Desativamos reciclagem agressiva para preservar loop persistente; se quiser reciclar use max_requests em produção futura
-# max_requests = 500
-# max_requests_jitter = 50
 
-# Logs
+# 🔥 CRÍTICO: 1 worker para evitar estado duplicado
+workers = 1
+worker_class = "sync"  # OBRIGATÓRIO para threads
+timeout = 180  # Mais tempo para inicialização
+keepalive = 10
+graceful_timeout = 60
+
+# 🔥 APP LOADING - ZERO RACE CONDITIONS
+preload_app = False  # NUNCA preload com estado global
+lazy_app = True      # SEMPRE lazy loading
+reload = False       # Sem hot reload
+
+# 🔥 WORKER RECYCLING DESABILITADO
+max_requests = 0           # Worker NUNCA recicla
+max_requests_jitter = 0    # Zero jitter
+
+# Logs melhorados
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"
 capture_output = True
 
-# Process names
-proc_name = "maestrofin"
+# Process naming
+proc_name = "maestrofin_definitivo"
 
-# Worker recycling - IMPORTANTE para SSL
-preload_app = False  # evitar iniciar thread/event loop antes do fork
-reload = False  # Sem hot reload em produção
+# Performance otimizada
+worker_tmp_dir = "/dev/shm"  # RAM disk
 
-# NEW: assegura que app só é carregada dentro do worker
-lazy_app = True
-
-# (Hook post_worker_init removido para simplificar e evitar dependências extras)
-
-# SSL/Connection management
-worker_tmp_dir = "/dev/shm"  # Use memory for temp files
-
-# Para debug
-print(f"🚀 Gunicorn Config - Workers: {workers}, Class: {worker_class}, Preload: {preload_app}, Lazy: {lazy_app}")
+# Debug info
+print(f"� [DEFINITIVO] Workers: {workers}, Preload: {preload_app}, Lazy: {lazy_app}, MaxReq: {max_requests}")

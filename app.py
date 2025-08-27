@@ -1,35 +1,32 @@
+#!/usr/bin/env python3
 """
-WSGI entrypoint para Render.
-Render detectou gunicorn e tentou carregar 'app:app'.
-Este arquivo expõe a variável 'app' apontando para a aplicação Flask integrada
-(dashboard + webhook do bot) usando o unified_launcher. 
+🔧 APP.PY DEFINITIVO - Zero Race Conditions
+WSGI entrypoint para Gunicorn: app:app
+"""
 
-Se TELEGRAM_TOKEN não estiver definido, apenas o dashboard sobe em modo degradado.
-"""
-import logging
 import os
+import logging
+from unified_launcher_definitivo import create_integrated_app
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-try:
-    from unified_launcher import create_integrated_app
-    app = create_integrated_app()
-    logger.info("✅ WSGI app criada via unified_launcher.create_integrated_app()")
-except Exception as e:  # Fallback estrito: só dashboard
-    logger.error(f"❌ Falha ao criar app integrada: {e}. Usando fallback somente dashboard.")
-    try:
-        from analytics.dashboard_app import app  # type: ignore
-        logger.info("✅ Fallback dashboard carregado")
-    except Exception as e2:
-        logger.critical(f"🔥 Falha também no fallback dashboard: {e2}")
-        raise
+# 🔥 VARIÁVEL GLOBAL PARA GUNICORN
+app = create_integrated_app()
+logger.info("✅ [APP DEFINITIVO] Aplicação integrada criada")
 
-# Opcional: health endpoint rápido para diagnóstico inicial
+# Health endpoint para diagnóstico
 @app.route('/_wsgi_health')
-def _wsgi_health():  # pragma: no cover
+def _wsgi_health():
     return {
-        "status": "ok",
+        "status": "definitivo_ok",
         "bot_enabled": bool(os.environ.get('TELEGRAM_TOKEN')),
         "pid": os.getpid(),
+        "launcher": "unified_definitivo"
     }, 200
+
+if __name__ == '__main__':
+    # Standalone mode
+    port = int(os.environ.get('PORT', 5000))
+    print(f"🚀 [APP DEFINITIVO] Rodando em porta {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
