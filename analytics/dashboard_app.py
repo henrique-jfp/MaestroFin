@@ -210,21 +210,72 @@ def realtime_stats():
 
 @app.route('/api/users/active')
 def active_users():
-    """API para usuários ativos (mock estendido)"""
-    # Mock simples para preencher UI; em produção substituir por query real
-    total = 8
-    users = [{
-        'username': f'user_{i+1}',
-        'commands_count': 5 + i,
-        'last_activity': (datetime.now() - timedelta(minutes=i*7)).isoformat()
-    } for i in range(total)]
-    return jsonify({
-        'active_users_24h': total,
-        'new_users_today': 2,
-        'users': users,
-        'total_active_users': total,
-        'status': 'mock'
-    })
+    """API para usuários ativos reais (últimas 24h)"""
+    if not (analytics_available and is_render):
+        # Fallback rápido
+        total = 0
+        return jsonify({
+            'active_users_24h': total,
+            'new_users_today': 0,
+            'users': [],
+            'total_active_users': total,
+            'status': 'fallback'
+        })
+
+    try:
+        from analytics.bot_analytics_postgresql import get_session
+        from sqlalchemy import text
+        session = get_session()
+        if not session:
+            raise Exception("Sessão indisponível")
+        try:
+            cutoff = datetime.now() - timedelta(hours=24)
+            # Usuários ativos e última atividade
+            user_rows = session.execute(text("""
+                SELECT 
+                    cu.username,
+                    COUNT(cu.id) AS commands_count,
+                    MAX(cu.timestamp) AS last_activity,
+                    MIN(cu.timestamp) AS first_activity
+                FROM analytics_command_usage cu
+                WHERE cu.timestamp >= :cutoff
+                GROUP BY cu.username
+                ORDER BY last_activity DESC
+                LIMIT 50
+            """), {"cutoff": cutoff}).fetchall()
+
+            users = []
+            for r in user_rows:
+                users.append({
+                    'username': r.username or 'N/A',
+                    'commands_count': int(r.commands_count or 0),
+                    'last_activity': (r.last_activity.isoformat() if r.last_activity else None)
+                })
+
+            active_24h = len(user_rows)
+
+            # Novos usuários hoje: primeira atividade hoje (baseado em first_activity)
+            today = datetime.now().date()
+            new_today = sum(1 for r in user_rows if (r.first_activity and r.first_activity.date() == today))
+
+            return jsonify({
+                'active_users_24h': active_24h,
+                'new_users_today': new_today,
+                'users': users,
+                'total_active_users': active_24h,
+                'status': 'success'
+            })
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"Erro active_users: {e}")
+        return jsonify({
+            'active_users_24h': 0,
+            'new_users_today': 0,
+            'users': [],
+            'total_active_users': 0,
+            'status': 'error'
+        })
 
 @app.route('/api/commands')
 def commands_stats():
@@ -520,122 +571,172 @@ def cache_stats():
 # Endpoints adicionais que o frontend espera
 @app.route('/api/commands/ranking')
 def commands_ranking():
-    """API para ranking de comandos mais usados"""
+    """API para ranking de comandos mais usados (real)"""
+    days = request.args.get('days', 7, type=int)
+    if not (analytics_available and is_render):
+        return jsonify({'ranking': [], 'period_days': days, 'total_commands': 0, 'status': 'fallback'})
     try:
-        days = request.args.get('days', 7, type=int)
-        
-        # Mock data para ranking de comandos
-        ranking_data = [
-            {'command': '/extrato', 'count': 45, 'percentage': 25.0},
-            {'command': '/adicionar', 'count': 38, 'percentage': 21.1},
-            {'command': '/relatorio', 'count': 32, 'percentage': 17.8},
-            {'command': '/metas', 'count': 28, 'percentage': 15.6},
-            {'command': '/start', 'count': 22, 'percentage': 12.2},
-            {'command': '/help', 'count': 15, 'percentage': 8.3}
-        ]
-        
-        return jsonify({
-            'ranking': ranking_data,
-            'period_days': days,
-            'total_commands': sum(item['count'] for item in ranking_data),
-            'status': 'success'
-        })
-        
+        from analytics.bot_analytics_postgresql import get_session
+        from sqlalchemy import text
+        session = get_session()
+        if not session:
+            raise Exception("Sessão indisponível")
+        try:
+            cutoff = datetime.now() - timedelta(days=days)
+            rows = session.execute(text("""
+                SELECT command, COUNT(*) AS count
+                FROM analytics_command_usage
+                WHERE timestamp >= :cutoff
+                GROUP BY command
+                ORDER BY count DESC
+                LIMIT 20
+            """), {"cutoff": cutoff}).fetchall()
+            total = sum(int(r.count or 0) for r in rows)
+            ranking = []
+            for r in rows:
+                c = int(r.count or 0)
+                perc = (c / total * 100) if total else 0
+                ranking.append({'command': r.command, 'count': c, 'percentage': round(perc, 1)})
+            return jsonify({
+                'ranking': ranking,
+                'period_days': days,
+                'total_commands': total,
+                'status': 'success'
+            })
+        finally:
+            session.close()
     except Exception as e:
-        logger.error(f"Erro no ranking de comandos: {e}")
-        return jsonify({'error': str(e), 'status': 'error'})
+        logger.error(f"Erro ranking comandos: {e}")
+        return jsonify({'ranking': [], 'period_days': days, 'total_commands': 0, 'status': 'error'})
 
 @app.route('/api/errors/detailed')
 def errors_detailed():
-    """API para erros detalhados"""
+    """API para erros detalhados reais"""
+    days = request.args.get('days', 7, type=int)
+    if not (analytics_available and is_render):
+        return jsonify({'errors': [], 'period_days': days, 'total_errors': 0, 'status': 'fallback'})
     try:
-        days = request.args.get('days', 7, type=int)
-        
-        # Mock data para erros detalhados
-        errors_data = [
-            {
-                'id': 1,
-                'timestamp': (datetime.now() - timedelta(hours=2)).isoformat(),
-                'error_type': 'ValidationError',
-                'message': 'Formato de valor inválido',
-                'command': '/adicionar',
-                'user_id': 'user_123',
-                'severity': 'medium'
-            },
-            {
-                'id': 2,
-                'timestamp': (datetime.now() - timedelta(hours=5)).isoformat(),
-                'error_type': 'NetworkError',
-                'message': 'Timeout na conexão com banco',
-                'command': '/extrato',
-                'user_id': 'user_456',
-                'severity': 'high'
-            },
-            {
-                'id': 3,
-                'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
-                'error_type': 'AuthError',
-                'message': 'Token expirado',
-                'command': '/metas',
-                'user_id': 'user_789',
-                'severity': 'low'
-            }
-        ]
-        
-        return jsonify({
-            'errors': errors_data,
-            'period_days': days,
-            'total_errors': len(errors_data),
-            'status': 'success'
-        })
-        
+        from analytics.bot_analytics_postgresql import get_session
+        from sqlalchemy import text
+        session = get_session()
+        if not session:
+            raise Exception("Sessão indisponível")
+        try:
+            cutoff = datetime.now() - timedelta(days=days)
+            rows = session.execute(text("""
+                SELECT id, error_type, error_message, command, user_id, timestamp
+                FROM analytics_error_logs
+                WHERE timestamp >= :cutoff
+                ORDER BY timestamp DESC
+                LIMIT 100
+            """), {"cutoff": cutoff}).fetchall()
+            errors = []
+            for r in rows:
+                errors.append({
+                    'id': r.id,
+                    'timestamp': r.timestamp.isoformat() if r.timestamp else None,
+                    'error_type': r.error_type,
+                    'message': (r.error_message or '')[:160],
+                    'command': r.command,
+                    'user_id': r.user_id,
+                    'severity': 'high' if 'timeout' in (r.error_message or '').lower() else 'medium'
+                })
+            return jsonify({
+                'errors': errors,
+                'period_days': days,
+                'total_errors': len(errors),
+                'status': 'success'
+            })
+        finally:
+            session.close()
     except Exception as e:
-        logger.error(f"Erro no endpoint errors_detailed: {e}")
-        return jsonify({'error': str(e), 'status': 'error'})
+        logger.error(f"Erro errors_detailed: {e}")
+        return jsonify({'errors': [], 'period_days': days, 'total_errors': 0, 'status': 'error'})
 
 @app.route('/api/performance/metrics')
 def performance_metrics():
-    """API para métricas de performance"""
+    """API para métricas de performance reais"""
+    hours = request.args.get('hours', 24, type=int)
+    if hours <= 0:
+        hours = 24
+    if not (analytics_available and is_render):
+        return jsonify({'metrics': {}, 'period_hours': hours, 'status': 'fallback'})
     try:
-        hours = request.args.get('hours', 24, type=int)
-        
-        # Mock data para métricas de performance
-        metrics_data = {
-            'response_times': {
-                'avg_ms': 145,
-                'max_ms': 320,
-                'min_ms': 45,
-                'p95_ms': 280
-            },
-            'throughput': {
-                'requests_per_hour': 42,
-                'commands_per_hour': 38,
-                'errors_per_hour': 2
-            },
-            'system_health': {
-                'cpu_usage': 15.2,
-                'memory_usage': 62.5,
-                'uptime_hours': 48.3
-            },
-            'trends': [
-                {'time': '00:00', 'response_time': 120, 'throughput': 35},
-                {'time': '04:00', 'response_time': 110, 'throughput': 28},
-                {'time': '08:00', 'response_time': 130, 'throughput': 45},
-                {'time': '12:00', 'response_time': 150, 'throughput': 52},
-                {'time': '16:00', 'response_time': 145, 'throughput': 48},
-                {'time': '20:00', 'response_time': 135, 'throughput': 42}
-            ]
-        }
-        
-        return jsonify({
-            'metrics': metrics_data,
-            'period_hours': hours,
-            'status': 'success'
-        })
-        
+        from analytics.bot_analytics_postgresql import get_session
+        from sqlalchemy import text
+        session = get_session()
+        if not session:
+            raise Exception("Sessão indisponível")
+        try:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            # Estatísticas agregadas
+            agg = session.execute(text("""
+                SELECT 
+                    AVG(CASE WHEN execution_time_ms > 0 THEN execution_time_ms END) AS avg_ms,
+                    MIN(CASE WHEN execution_time_ms > 0 THEN execution_time_ms END) AS min_ms,
+                    MAX(CASE WHEN execution_time_ms > 0 THEN execution_time_ms END) AS max_ms,
+                    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY execution_time_ms) FILTER (WHERE execution_time_ms > 0) AS p95_ms,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN success THEN 1 ELSE 0 END) AS success_count
+                FROM analytics_command_usage
+                WHERE timestamp >= :cutoff
+            """), {"cutoff": cutoff}).fetchone()
+
+            errors_row = session.execute(text("""
+                SELECT COUNT(*) AS errors
+                FROM analytics_error_logs
+                WHERE timestamp >= :cutoff
+            """), {"cutoff": cutoff}).fetchone()
+
+            total_commands = int(agg.total or 0) if agg else 0
+            errors_total = int(errors_row.errors or 0) if errors_row else 0
+            success_count = int(agg.success_count or 0) if agg else 0
+            avg_ms = float(agg.avg_ms or 0)
+            min_ms = int(agg.min_ms or 0)
+            max_ms = int(agg.max_ms or 0)
+            p95_ms = int(agg.p95_ms or 0)
+            success_rate = (success_count / total_commands * 100) if total_commands else 0
+
+            # Série por hora
+            trend_rows = session.execute(text("""
+                SELECT date_trunc('hour', timestamp) AS hour,
+                       AVG(CASE WHEN execution_time_ms > 0 THEN execution_time_ms END) AS avg_rt,
+                       COUNT(*) AS cnt
+                FROM analytics_command_usage
+                WHERE timestamp >= :cutoff
+                GROUP BY 1
+                ORDER BY 1
+            """), {"cutoff": cutoff}).fetchall()
+            trends = []
+            for tr in trend_rows:
+                hour_label = tr.hour.strftime('%H:00') if tr.hour else '??'
+                trends.append({'time': hour_label, 'response_time': int(tr.avg_rt or 0), 'throughput': int(tr.cnt or 0)})
+
+            metrics_data = {
+                'response_times': {
+                    'avg_ms': round(avg_ms, 2),
+                    'max_ms': max_ms,
+                    'min_ms': min_ms,
+                    'p95_ms': p95_ms
+                },
+                'throughput': {
+                    'requests_per_hour': round(total_commands / hours, 2) if hours else total_commands,
+                    'commands_per_hour': round(total_commands / hours, 2) if hours else total_commands,
+                    'errors_per_hour': round(errors_total / hours, 2) if hours else errors_total
+                },
+                'quality': {
+                    'success_rate': round(success_rate, 2),
+                    'error_rate': round((errors_total / total_commands * 100), 2) if total_commands else 0
+                },
+                'trends': trends
+            }
+
+            return jsonify({'metrics': metrics_data, 'period_hours': hours, 'status': 'success'})
+        finally:
+            session.close()
     except Exception as e:
-        logger.error(f"Erro nas métricas de performance: {e}")
-        return jsonify({'error': str(e), 'status': 'error'})
+        logger.error(f"Erro performance_metrics: {e}")
+        return jsonify({'metrics': {}, 'period_hours': hours, 'status': 'error'})
 
 @app.route('/api/config/status')
 def config_status():
