@@ -105,22 +105,21 @@ def setup_bot_webhook(flask_app):
 
     @flask_app.route('/bot_status', methods=['GET'])
     def bot_status():
-        from database import database as dbmod
-        return {
+        status = {
             "launcher": "unified",
             "bot_started": bot_started.is_set(),
             "loop_alive": bool(event_loop and event_loop.is_running()),
             "running": bool(bot_application and bot_application.running),
-            "db_available": dbmod.is_db_available(),
-            "db_ready_bot": bool(getattr(bot_application, 'bot_data', {}).get('db_ready')) if bot_application else False,
-        }, 200
-
-    @flask_app.route('/db_status', methods=['GET'])
-    def db_status():
-        from database import database as dbmod
-        return {
-            "available": dbmod.is_db_available(),
-        }, 200
+        }
+        try:
+            from database import database as dbmod
+            if hasattr(dbmod, 'is_db_available'):
+                status["db_available"] = dbmod.is_db_available()
+                status["db_error"] = dbmod.get_db_error()
+        except Exception as e:  # pragma: no cover
+            status["db_available"] = False
+            status["db_error"] = str(e)
+        return status, 200
 
     @flask_app.route('/fix_bot', methods=['GET'])
     def fix_bot():

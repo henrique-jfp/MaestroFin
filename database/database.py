@@ -21,6 +21,9 @@ class ServiceError(Exception):
 # --- Configuração da Conexão com SQLAlchemy ---
 engine = None
 SessionLocal = None
+_last_check_time = None
+_last_check_result = False
+_last_check_error: str | None = None
 
 try:
     if not config.DATABASE_URL:
@@ -35,6 +38,46 @@ try:
 except Exception as e:
     logging.critical(f"❌ ERRO CRÍTICO AO CONFIGURAR O BANCO DE DADOS: {e}")
     engine = None
+
+
+def is_db_available(ttl_seconds: int = 30) -> bool:
+    """Retorna True se o banco estiver acessível.
+
+    Implementa um cache simples (TTL) para evitar abrir conexão a cada chamada
+    do endpoint /bot_status. Em caso de falha, registra a última mensagem de erro.
+    """
+    import time
+    global _last_check_time, _last_check_result, _last_check_error
+
+    # Cache TTL
+    now = time.time()
+    if _last_check_time and (now - _last_check_time) < ttl_seconds:
+        return _last_check_result
+
+    if engine is None:
+        _last_check_time = now
+        _last_check_result = False
+        _last_check_error = "engine_not_initialized"
+        return False
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        _last_check_result = True
+        _last_check_error = None
+    except Exception as e:
+        _last_check_result = False
+        _last_check_error = str(e)
+        logging.warning(f"⚠️ Verificação de disponibilidade do DB falhou: {e}")
+    finally:
+        _last_check_time = now
+
+    return _last_check_result
+
+
+def get_db_error() -> str | None:
+    """Retorna a última mensagem de erro registrada por is_db_available."""
+    return _last_check_error
 
 
 def deletar_todos_dados_usuario(telegram_id: int) -> bool:
