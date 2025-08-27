@@ -192,12 +192,21 @@ def setup_bot_webhook(flask_app):
             data = request.get_json()
             if data and bot_application:
                 update = Update.de_json(data, bot_application.bot)
+                # Log em nível INFO para visibilidade em produção
+                try:
+                    update_id = getattr(update, 'update_id', None)
+                    message_user = None
+                    if hasattr(update, 'message') and update.message:
+                        message_user = getattr(update.message.from_user, 'username', None) or getattr(update.message.from_user, 'id', None)
+                    logger.info(f"📨 Webhook update recebido id={update_id} de={message_user}")
+                except Exception:
+                    pass
                 asyncio.run_coroutine_threadsafe(
                     bot_application.process_update(update), event_loop
                 )
                 global last_update_ts
                 last_update_ts = time.time()
-                logger.debug("📨 Update recebido (webhook)")
+                logger.debug("📨 Update processado (webhook)")
             return "OK", 200
         except Exception as e:
             logger.error(f"❌ Erro webhook: {e}")
@@ -230,6 +239,7 @@ def setup_bot_webhook(flask_app):
             "initialized": getattr(bot_application, '_initialized', None) if bot_application else None,
             "internal_running": getattr(bot_application, '_running', None) if bot_application else None,
             "updater_polling": getattr(getattr(bot_application, 'updater', None), 'running', None) if bot_application else None,
+            "has_updater": bool(getattr(bot_application, 'updater', None)) if bot_application else None,
             "status_file": BOT_STATUS_FILE,
             "last_update_ts": last_update_ts,
             "seconds_since_last_update": (time.time() - last_update_ts) if last_update_ts else None,

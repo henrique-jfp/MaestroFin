@@ -588,13 +588,14 @@ def create_application():
         logger.error(f"❌ [ULTRA-ROBUST] Erro crítico criação: {e}")
         return None
 
-def run_bot():
-    """Executa o bot com polling"""
-    application = main()
+def run_bot():  # pragma: no cover
+    """(LEGADO) Execução via polling NÃO utilizada em produção.
+    Mantido apenas para debug local isolado. Em produção usamos webhook através do unified_launcher_definitivo.
+    """
+    logger.warning("⚠️ run_bot() chamado - modo legado de polling. Use unified_launcher_definitivo para produção.")
+    application = create_application()
     if application:
-        logger.info("Bot pronto. Iniciando polling...")
         application.run_polling()
-        logger.info("Bot foi encerrado.")
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     run_bot()
