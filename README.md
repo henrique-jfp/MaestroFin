@@ -162,6 +162,26 @@ python bot.py
 
 ---
 
+## 🧹 Estrutura Enxuta & Diretório `legacy/`
+
+Para reduzir ambiguidade de deploy, launchers e scripts antigos foram movidos para `legacy/`.
+
+Produção usa apenas:
+- `unified_launcher_definitivo.py` (Procfile)
+- `app.py` (entrypoint WSGI/Gunicorn se desejado)
+- `analytics/dashboard_app.py` (dashboard ativo)
+
+Arquivos em `legacy/` são referência histórica (não importados). Se precisar restaurar algo, mova manualmente e revise.
+
+Benefícios da limpeza:
+- Menos risco de apontar Procfile errado
+- Startup mais previsível
+- Redução de “código fantasma” difícil de auditar
+
+---
+
+---
+
 ## 🏆 **Arquitetura Escalável**
 
 ```mermaid
