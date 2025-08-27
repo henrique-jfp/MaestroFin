@@ -28,6 +28,7 @@ TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 event_loop: asyncio.AbstractEventLoop | None = None
 loop_thread: threading.Thread | None = None
 bot_started = threading.Event()
+last_bot_init_error: str | None = None
 
 def _start_loop_thread():
     """Inicia thread com loop único persistente se ainda não existir."""
@@ -44,17 +45,31 @@ def _start_loop_thread():
     loop_thread.start()
 
 async def _async_init_bot():
-    """Inicializa (initialize + start) dentro do loop persistente."""
-    global bot_application
-    if bot_application is None:
-        from bot import create_application
-        bot_application = create_application()
-    if not getattr(bot_application, '_initialized', False):
-        await bot_application.initialize()
-    if not bot_application.running:
-        await bot_application.start()
-    bot_started.set()
-    logging.info("✅ [unified] Bot inicializado e startado (loop persistente)")
+    """Inicializa (initialize + start) dentro do loop persistente com logs detalhados."""
+    global bot_application, last_bot_init_error
+    try:
+        logging.info("🔄 [unified] Iniciando sequência de inicialização do bot...")
+        if bot_application is None:
+            logging.info("📦 [unified] Criando aplicação do bot (create_application)...")
+            from bot import create_application
+            bot_application = create_application()
+            if bot_application is None:
+                raise RuntimeError("create_application retornou None")
+        logging.info(f"🧩 [unified] Application criada: handlers={len(bot_application.handlers)} job_queue={bool(bot_application.job_queue)}")
+        if not getattr(bot_application, '_initialized', False):
+            logging.info("⚙️ [unified] Chamando initialize()...")
+            await bot_application.initialize()
+            logging.info("✅ [unified] initialize() concluído")
+        if not bot_application.running:
+            logging.info("▶️ [unified] Chamando start()...")
+            await bot_application.start()
+            logging.info("✅ [unified] start() concluído")
+        bot_started.set()
+        last_bot_init_error = None
+        logging.info("🎯 [unified] Bot inicializado e startado (loop persistente)")
+    except Exception as e:  # pragma: no cover
+        last_bot_init_error = f"{type(e).__name__}: {e}"
+        logging.exception(f"❌ [unified] Falha na inicialização do bot: {e}")
 
 def setup_bot_webhook(flask_app):
     """Configura bot com loop persistente (compat para deploys que invocam unified_launcher)."""
@@ -110,6 +125,8 @@ def setup_bot_webhook(flask_app):
             "bot_started": bot_started.is_set(),
             "loop_alive": bool(event_loop and event_loop.is_running()),
             "running": bool(bot_application and bot_application.running),
+            "handlers_loaded": len(bot_application.handlers) if bot_application else 0,
+            "last_bot_init_error": last_bot_init_error,
         }, 200
 
     @flask_app.route('/fix_bot', methods=['GET'])
@@ -117,6 +134,24 @@ def setup_bot_webhook(flask_app):
         try:
             asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
             return {"status": "reinit agendado"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    @flask_app.route('/restart_bot', methods=['POST'])
+    def restart_bot():
+        async def _restart():
+            global bot_application, bot_started
+            try:
+                if bot_application and bot_application.running:
+                    logging.info("⏹️ [unified] Parando bot para restart explícito...")
+                    await bot_application.stop()
+                bot_started.clear()
+            except Exception as e:  # pragma: no cover
+                logging.warning(f"⚠️ [unified] Erro ao parar bot: {e}")
+            await _async_init_bot()
+        try:
+            asyncio.run_coroutine_threadsafe(_restart(), event_loop)
+            return {"status": "restart agendado"}, 202
         except Exception as e:
             return {"error": str(e)}, 500
 

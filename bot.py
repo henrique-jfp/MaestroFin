@@ -362,10 +362,12 @@ def main() -> None:
     if not config.TELEGRAM_TOKEN:
         logger.error("❌ Token do Telegram não configurado. Defina a variável de ambiente TELEGRAM_TOKEN.")
         return
-
+    # GEMINI agora é opcional: funcionalidades de IA serão desativadas se ausente
     if not config.GEMINI_API_KEY:
-        logger.error("❌ Chave da API do Gemini não configurada. Defina a variável de ambiente GEMINI_API_KEY.")
-        return
+        logger.warning("⚠️ GEMINI_API_KEY ausente - recursos de IA desativados (funcionalidades principais continuam)")
+        AI_ENABLED = False
+    else:
+        AI_ENABLED = True
 
     # Configuração do Banco de Dados
     try:
@@ -378,13 +380,14 @@ def main() -> None:
         logger.critical(f"Falha crítica na configuração do banco de dados: {e}", exc_info=True)
         return
 
-    # Configuração da API do Gemini
-    try:
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        logger.info("API do Gemini configurada.")
-    except Exception as e:
-        logger.critical(f"Falha ao configurar a API do Gemini: {e}")
-        return
+    # Configuração da API do Gemini (se disponível)
+    if AI_ENABLED:
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            logger.info("API do Gemini configurada.")
+        except Exception as e:
+            logger.error(f"❌ Falha ao configurar Gemini, desativando IA: {e}")
+            AI_ENABLED = False
 
     # Construção da Aplicação do Bot
     application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
@@ -444,85 +447,6 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$"))
     
     # 🌐 DASHBOARD CALLBACKS
-    application.add_handler(CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_"))
-    
-    # 🆕 NOVOS: Handlers independentes para callbacks de agendamento de parcelas
-    application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$"))
-    application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$"))
-    
-    # Handler de Erro
-    application.add_error_handler(error_handler)
-    logger.info("Todos os handlers adicionados com sucesso.")
-    
-    # Configuração e inicialização dos Jobs agendados
-    job_queue = application.job_queue
-    configurar_jobs(job_queue)
-    logger.info("Jobs de metas e agendamentos configurados.")
-    
-    return application
-
-    # Configuração da API do Gemini
-    try:
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        logger.info("API do Gemini configurada.")
-    except Exception as e:
-        logger.critical(f"Falha ao configurar a API do Gemini: {e}")
-        return
-
-    # Construção da Aplicação do Bot
-    application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
-    logger.info("Aplicação do bot criada.")
-
-    
-    gerente_conv = create_gerente_conversation_handler()
-    email_conv = create_cadastro_email_conversation_handler()
-    
-    # Adicionando todos os handlers à aplicação
-    logger.info("Adicionando handlers...")
-    
-    # Handlers de Conversa (ConversationHandler)
-    application.add_handler(configurar_conv)  # Inclui o /start agora
-    application.add_handler(gerente_conv)
-    application.add_handler(email_conv)
-    application.add_handler(manual_entry_conv)
-    application.add_handler(fatura_conv)        # Adicionado aqui
-    application.add_handler(delete_user_conv)
-    application.add_handler(contact_conv)
-    application.add_handler(grafico_conv)
-    application.add_handler(objetivo_conv)
-    application.add_handler(edit_meta_conv)
-    application.add_handler(agendamento_conv)
-    application.add_handler(edit_conv)
-    application.add_handler(criar_conversation_handler_extrato())
-    
-    # Handlers de Comando (CommandHandler)
-    application.add_handler(relatorio_handler)  # É um CommandHandler, não uma conversa
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("alerta", schedule_alerts))
-    application.add_handler(CommandHandler("metas", listar_metas_command))
-    application.add_handler(CommandHandler("agendar", agendamento_start))
-    application.add_handler(CommandHandler("notificacoes", painel_notificacoes))
-    
-    # � GAMIFICATION HANDLERS
-    application.add_handler(CommandHandler("perfil", show_profile))
-    application.add_handler(CommandHandler("ranking", show_rankings))
-    
-    # �🌐 DASHBOARD HANDLERS
-    application.add_handler(CommandHandler("dashboard", cmd_dashboard))  # DASHBOARD PRINCIPAL
-    application.add_handler(CommandHandler("dashstatus", cmd_dashstatus))
-    application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))  # DEBUG
-    
-    # Handlers de Callback (CallbackQueryHandler) para menus e botões
-    application.add_handler(CallbackQueryHandler(help_callback, pattern="^help_"))
-    application.add_handler(CallbackQueryHandler(handle_analise_impacto_callback, pattern="^analise_"))
-    application.add_handler(CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_"))
-    application.add_handler(CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_"))
-    application.add_handler(CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_"))
-    
-    # � GAMIFICATION CALLBACKS
-    application.add_handler(CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$"))
-    
-    # �🌐 DASHBOARD CALLBACKS
     application.add_handler(CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_"))
     
     # 🆕 NOVOS: Handlers independentes para callbacks de agendamento de parcelas
