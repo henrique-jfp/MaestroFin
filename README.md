@@ -93,3 +93,97 @@ erDiagram
     Conta ||--o{ Lancamento : origina
 
     Lancamento }o--|| Subcategoria : pertence
+
+🚀 Instalação Rápida (Desenvolvimento Local)
+
+Pré-requisitos:
+
+    Python 3.12+
+
+    Git
+
+1. Clone o Repositório:
+Bash
+
+git clone [https://github.com/henrique-jfp/maestrofin.git](https://github.com/henrique-jfp/maestrofin.git)
+cd maestrofin
+
+2. Crie e Ative o Ambiente Virtual:
+Bash
+
+# Linux/Mac
+python3 -m venv venv
+source venv/bin/activate
+
+# Windows
+python -m venv venv
+.\\venv\\Scripts\\activate
+
+3. Instale as Dependências:
+Bash
+
+pip install -r requirements.txt
+
+4. Configure as Variáveis de Ambiente:
+
+    Copie o arquivo .env.example para .env.
+
+    Preencha com suas chaves de API (Telegram, Google Gemini).
+
+    Para desenvolvimento local, o DATABASE_URL pode ser deixado em branco para usar o SQLite padrão.
+
+Bash
+
+cp .env.example .env
+# Agora, edite o arquivo .env com suas chaves
+
+5. Execute o Bot:
+Bash
+
+python bot.py
+
+📈 Roadmap e Futuro do Projeto
+
+O MaestroFin está em constante evolução. Nosso roadmap inclui:
+
+    [ ] 🏦 Integração com Open Banking: Sincronização automática com suas contas bancárias.
+
+    [ ] 💰 Módulo de Investimentos: Acompanhamento de carteira e performance.
+
+    [ ] 🤝 Contas Compartilhadas: Gerenciamento financeiro para casais e famílias.
+
+    [ ] 🤖 IA Preditiva: Previsão de gastos futuros e detecção de anomalias.
+
+Como Contribuir
+
+Contribuições são muito bem-vindas!
+
+    Faça um Fork do projeto.
+
+    Crie sua Branch (git checkout -b feature/NovaFuncionalidade).
+
+    Faça o Commit de suas mudanças (git commit -m 'Adiciona NovaFuncionalidade').
+
+    Faça o Push (git push origin feature/NovaFuncionalidade).
+
+    Abra um Pull Request.
+
+📄 Licença
+
+Este projeto utiliza Licenciamento Dual:
+
+    Uso Não Comercial: Livre para visualização, estudo e uso em portfólio.
+
+    Uso Comercial: Requer uma licença paga. Entre em contato para mais detalhes.
+
+📞 Contato
+
+Henrique de Jesus Freitas Pereira
+
+    📧 Email: henriquejfp.dev@gmail.com
+
+    💼 LinkedIn: linkedin.com/in/henrique-jfp
+
+    🐙 GitHub: github.com/henrique-jfp
+
+⭐ Se este projeto te ajudou, considere dar uma estrela!
