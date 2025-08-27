@@ -277,8 +277,9 @@
             try {
                 const response = await fetch('/api/realtime');
                 const data = await response.json();
-                
-                updateMetrics(data.realtime_stats);
+                // Compat: se vier nested usa, senão usa objeto direto
+                const stats = data.realtime_stats || data;
+                updateMetrics(stats);
                 updateCharts(data);
                 updateLastUpdate();
             } catch (error) {
@@ -330,10 +331,10 @@
             try {
                 const response = await fetch('/api/users/active?period=24h');
                 const data = await response.json();
-                
                 const content = document.getElementById('activeUsersContent');
-                if (data.users && data.users.length > 0) {
-                    content.innerHTML = data.users.map(user => `
+                const users = data.users || [];
+                if (users.length > 0) {
+                    content.innerHTML = users.map(user => `
                         <div class="status-card">
                             <div class="metric-value">${user.username || 'Usuário'}</div>
                             <div class="metric-label">${user.commands_count} comandos</div>
@@ -344,8 +345,7 @@
                 }
             } catch (error) {
                 console.error('Erro ao carregar usuários:', error);
-                document.getElementById('activeUsersContent').innerHTML = 
-                    '<div class="status-card">ERRO AO CARREGAR</div>';
+                document.getElementById('activeUsersContent').innerHTML = '<div class="status-card">ERRO AO CARREGAR</div>';
             }
         }
 
@@ -354,13 +354,13 @@
             try {
                 const response = await fetch('/api/commands/ranking?days=7');
                 const data = await response.json();
-                
                 const content = document.getElementById('commandsContent');
-                if (data && data.length > 0) {
-                    content.innerHTML = data.map(cmd => `
+                const ranking = data.ranking || [];
+                if (ranking.length > 0) {
+                    content.innerHTML = ranking.map(cmd => `
                         <div class="status-card">
-                            <div class="metric-value">/${cmd.command}</div>
-                            <div class="metric-label">${cmd.total_uses} usos • ${cmd.success_rate}% sucesso</div>
+                            <div class="metric-value">${cmd.command}</div>
+                            <div class="metric-label">${cmd.count || cmd.total_uses || 0} usos</div>
                         </div>
                     `).join('');
                 } else {
@@ -368,8 +368,7 @@
                 }
             } catch (error) {
                 console.error('Erro ao carregar comandos:', error);
-                document.getElementById('commandsContent').innerHTML = 
-                    '<div class="status-card">ERRO AO CARREGAR</div>';
+                document.getElementById('commandsContent').innerHTML = '<div class="status-card">ERRO AO CARREGAR</div>';
             }
         }
 
@@ -378,22 +377,20 @@
             try {
                 const response = await fetch('/api/performance/metrics?hours=24');
                 const data = await response.json();
-                
                 const content = document.getElementById('performanceContent');
-                if (data && data.length > 0) {
-                    content.innerHTML = data.map(perf => `
-                        <div class="status-card">
-                            <div class="metric-value">/${perf.command}</div>
-                            <div class="metric-label">${perf.avg_time}ms médio • ${perf.count} execuções</div>
-                        </div>
-                    `).join('');
-                } else {
-                    content.innerHTML = '<div class="status-card">DADOS DE PERFORMANCE INDISPONÍVEIS</div>';
-                }
+                const perf = data.metrics || {};
+                content.innerHTML = `
+                    <div class="status-card">
+                        <div class="metric-value">AVG ${perf.response_times ? perf.response_times.avg_ms : 0}ms</div>
+                        <div class="metric-label">P95 ${(perf.response_times && perf.response_times.p95_ms) || 0}ms • Max ${(perf.response_times && perf.response_times.max_ms) || 0}ms</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="metric-value">Throughput ${(perf.throughput && perf.throughput.requests_per_hour) || 0}/h</div>
+                        <div class="metric-label">Comandos ${(perf.throughput && perf.throughput.commands_per_hour) || 0}/h</div>
+                    </div>`;
             } catch (error) {
                 console.error('Erro ao carregar performance:', error);
-                document.getElementById('performanceContent').innerHTML = 
-                    '<div class="status-card">ERRO AO CARREGAR</div>';
+                document.getElementById('performanceContent').innerHTML = '<div class="status-card">ERRO AO CARREGAR</div>';
             }
         }
 
@@ -402,13 +399,13 @@
             try {
                 const response = await fetch('/api/errors/detailed?days=7');
                 const data = await response.json();
-                
                 const content = document.getElementById('errorsContent');
-                if (data && data.error_analysis && data.error_analysis.length > 0) {
-                    content.innerHTML = data.error_analysis.map(error => `
+                const errors = data.errors || [];
+                if (errors.length > 0) {
+                    content.innerHTML = errors.map(err => `
                         <div class="status-card">
-                            <div class="metric-value">${error.error_type}</div>
-                            <div class="metric-label">${error.error_count} ocorrências • ${error.affected_users} usuários</div>
+                            <div class="metric-value">${err.error_type}</div>
+                            <div class="metric-label">${(err.message || '').slice(0,40)}...</div>
                         </div>
                     `).join('');
                 } else {
@@ -416,8 +413,7 @@
                 }
             } catch (error) {
                 console.error('Erro ao carregar alertas:', error);
-                document.getElementById('errorsContent').innerHTML = 
-                    '<div class="status-card">ERRO AO CARREGAR</div>';
+                document.getElementById('errorsContent').innerHTML = '<div class="status-card">ERRO AO CARREGAR</div>';
             }
         }
 

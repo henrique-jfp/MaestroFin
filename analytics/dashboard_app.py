@@ -142,7 +142,15 @@ def api_status():
 def realtime_stats():
     """Métricas em tempo real com retry automático e cache"""
     if not analytics_available:
-        return jsonify(get_fallback_data())
+        fb = get_fallback_data()
+        # Compat com frontend que espera campo nested
+        fb_wrapped = {**fb, 'realtime_stats': {
+            'total_users': fb['total_users'],
+            'total_commands': fb['total_commands'],
+            'avg_response_time': fb['avg_response_time'],
+            'error_count': fb['error_count']
+        }}
+        return jsonify(fb_wrapped)
     
     def get_real_data():
         from analytics.bot_analytics_postgresql import get_session
@@ -181,17 +189,40 @@ def realtime_stats():
             session.close()
     
     try:
-        return jsonify(execute_with_retry(get_real_data))
+        data = execute_with_retry(get_real_data)
+        wrapped = {**data, 'realtime_stats': {
+            'total_users': data.get('total_users', 0),
+            'total_commands': data.get('total_commands', 0),
+            'avg_response_time': data.get('avg_response_time', 0),
+            'error_count': data.get('error_count', 0)
+        }}
+        return jsonify(wrapped)
     except Exception as e:
         logger.error(f"Falha ao obter dados reais: {e}")
-        return jsonify(get_fallback_data())
+        fb = get_fallback_data()
+        fb_wrapped = {**fb, 'realtime_stats': {
+            'total_users': fb['total_users'],
+            'total_commands': fb['total_commands'],
+            'avg_response_time': fb['avg_response_time'],
+            'error_count': fb['error_count']
+        }}
+        return jsonify(fb_wrapped)
 
 @app.route('/api/users/active')
 def active_users():
-    """API para usuários ativos"""
+    """API para usuários ativos (mock estendido)"""
+    # Mock simples para preencher UI; em produção substituir por query real
+    total = 8
+    users = [{
+        'username': f'user_{i+1}',
+        'commands_count': 5 + i,
+        'last_activity': (datetime.now() - timedelta(minutes=i*7)).isoformat()
+    } for i in range(total)]
     return jsonify({
-        'active_users_24h': 8,
+        'active_users_24h': total,
         'new_users_today': 2,
+        'users': users,
+        'total_active_users': total,
         'status': 'mock'
     })
 
