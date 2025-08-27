@@ -30,8 +30,13 @@ proc_name = "maestrofin"
 preload_app = False  # evitar iniciar thread/event loop antes do fork
 reload = False  # Sem hot reload em produção
 
+# NEW: assegura que app só é carregada dentro do worker
+lazy_app = True
+
+# (Hook post_worker_init removido para simplificar e evitar dependências extras)
+
 # SSL/Connection management
 worker_tmp_dir = "/dev/shm"  # Use memory for temp files
 
 # Para debug
-print(f"🚀 Gunicorn Config - Workers: {workers}, Class: {worker_class}, Preload: {preload_app}")
+print(f"🚀 Gunicorn Config - Workers: {workers}, Class: {worker_class}, Preload: {preload_app}, Lazy: {lazy_app}")
