@@ -146,7 +146,7 @@ from telegram.ext import (
 
 # --- IMPORTS DO PROJETO ---
 import config
-from database.database import get_db, popular_dados_iniciais, criar_tabelas
+from database.database import get_db, popular_dados_iniciais, criar_tabelas, is_db_available
 from models import *
 from alerts import schedule_alerts
 from jobs import configurar_jobs
@@ -367,16 +367,22 @@ def main() -> None:
         logger.error("❌ Chave da API do Gemini não configurada. Defina a variável de ambiente GEMINI_API_KEY.")
         return
 
-    # Configuração do Banco de Dados
+    # Configuração do Banco de Dados (tolerante a falhas)
+    db_ready = False
     try:
-        criar_tabelas()
-        db: Session = next(get_db())
-        popular_dados_iniciais(db)
-        db.close()
-        logger.info("Banco de dados pronto.")
+        if criar_tabelas():
+            db: Session = next(get_db())
+            try:
+                popular_dados_iniciais(db)
+                db_ready = True
+                logger.info("Banco de dados pronto.")
+            finally:
+                db.close()
+        else:
+            logger.warning("Iniciando em modo degradado: DB indisponível na criação de tabelas.")
     except Exception as e:
-        logger.critical(f"Falha crítica na configuração do banco de dados: {e}", exc_info=True)
-        return
+        logger.critical(f"Falha ao preparar banco de dados. Continuando em modo degradado: {e}")
+        db_ready = False
 
     # Configuração da API do Gemini
     try:
@@ -388,6 +394,7 @@ def main() -> None:
 
     # Construção da Aplicação do Bot
     application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
+    application.bot_data['db_ready'] = db_ready
     logger.info("Aplicação do bot criada.")
 
     
