@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 # Tentar usar a versão PostgreSQL quando disponível
 _analytics_instance = None
-_track_function = None
 
 def _initialize_analytics():
     """Inicializa o sistema de analytics"""
@@ -141,17 +140,8 @@ def track_command(command_name: str = None):
                         cmd
                     )
                 
+                # Repropaga para manter comportamento esperado
                 raise  # Re-raise para não mascarar o erro
-                # Track error
-                _initialize_analytics()
-                _analytics_instance.track_error(
-                    user.id,
-                    user.username or f"user_{user.id}",
-                    type(e).__name__,
-                    str(e),
-                    cmd
-                )
-                raise
         
         return wrapper
     return decorator
