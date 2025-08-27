@@ -73,7 +73,7 @@ Diga adeus à digitação manual:
 <tr>
 <td>
 
-### 📊 **Dashboard Web Interativo**
+### 📊 **Dashboard Web Interativo** (Em Construção)
 Vá além do chat com visualizações poderosas:
 - Gráficos interativos em tempo real
 - KPIs personalizados por categoria
@@ -127,18 +127,6 @@ Documentação automática completa:
 ---
 
 ## 🎬 **Demonstração: O MaestroFin em Ação**
-
-### **🗣️ Lançamento por Conversa Natural**
-```
-👤 Paguei o almoço no iFood, R$ 45,50 no crédito
-
-🎼 ✅ Lançamento de R$ 45,50 salvo!
-   🍔 Categoria: Alimentação → Restaurante/Delivery
-   💳 Conta: Cartão de Crédito
-   
-   💡 Insight: Seus gastos com delivery este mês já somam R$ 280,70.
-   Que tal cozinhar amanhã? Economia estimada: R$ 35! 🍳
-```
 
 ### **📄 Importação de Fatura via PDF**
 ```
@@ -420,18 +408,6 @@ Compete com outros usuários em:
 
 ## 🤝 **Como Contribuir & Colaborar**
 
-### 🌟 **Estamos Buscando Talentos**
-
-| Área | Perfil Desejado | Impacto no Projeto |
-|------|------------------|-------------------|
-| 🎨 **UI/UX Design** | Designer com foco em fintech | Interface web de próxima geração |
-| 📱 **Mobile Dev** | React Native ou Flutter | App nativo multiplataforma |
-| 🔒 **Security** | Especialista em segurança financeira | Auditoria e compliance bancário |
-| 📊 **Data Science** | ML Engineer com foco em finanças | Modelos preditivos avançados |
-| 💼 **Product** | PM com experiência em produtos B2C | Roadmap e estratégia de crescimento |
-
-### 🛠️ **Processo de Contribuição**
-
 1. **🍴 Fork** o projeto no GitHub
 2. **📥 Clone** seu fork localmente
 3. **🌿 Branch** para feature: `git checkout -b feature/nome-da-feature`
@@ -461,9 +437,6 @@ Compete com outros usuários em:
 [![📊 Ver Dashboard Demo](https://img.shields.io/badge/📊_Dashboard_Demo-Ao_Vivo-success?style=for-the-badge&logo=chart-dot-js)](https://demo.maestrofin.app)
 [![⭐ Star no GitHub](https://img.shields.io/badge/⭐_Star_no_GitHub-Apoiar-yellow?style=for-the-badge&logo=github)](https://github.com/henrique-jfp/maestrofin)
 [![💬 Suporte Direto](https://img.shields.io/badge/💬_Suporte_Direto-WhatsApp-25D366?style=for-the-badge&logo=whatsapp)](https://wa.me/5511999999999)
-
-### 📈 **Resultados Garantidos em 30 Dias**
-*Ou seu dinheiro de volta!*
 
 </div>
 
@@ -521,11 +494,6 @@ Entre em contato para discutir:
 - 🐍 **Python Community** - Pelo ecossistema incrível e bibliotecas poderosas
 - 🎨 **Open Source Heroes** - Todos os maintainers das libs utilizadas
 
-### 💪 **Beta Testers & Early Adopters**
-Um obrigado especial aos corajosos que testaram as primeiras versões e forneceram feedback valioso para tornar o MaestroFin o que é hoje.
-
-### 🌟 **Inspiring Projects**
-Inspiração vem de projetos como Mint, YNAB, GuiaBolso e da comunidade brasileira de desenvolvedores que não desiste de resolver problemas reais.
 
 ---
 
@@ -552,3 +520,4 @@ Inspiração vem de projetos como Mint, YNAB, GuiaBolso e da comunidade brasilei
 **MaestroFin** - *Onde cada real conta e cada decisão importa* 🎼
 
 </div>
+
