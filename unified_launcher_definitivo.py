@@ -27,6 +27,8 @@ bot_application: Application | None = None
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 event_loop: asyncio.AbstractEventLoop | None = None
 loop_thread: threading.Thread | None = None
+last_update_ts: float | None = None
+_watchdog_started = False
 
 # 🔥 NOVO: Estado persistente em arquivo para sobreviver a restarts
 BOT_STATUS_FILE = "/tmp/maestrofin_bot_status.txt"
@@ -75,14 +77,75 @@ async def _async_init_bot():
             await bot_application.initialize()
         if not bot_application.running:
             await bot_application.start()
+            # Fallback: garantir remoção de webhook antigo e polling paralelo se Running continuar falso
+            try:
+                # Remover webhook antigo para liberar polling (não derruba se já removido)
+                await bot_application.bot.delete_webhook(drop_pending_updates=False)
+            except Exception as e:
+                logger.warning(f"⚠️ Falha ao deletar webhook (pode ser normal): {e}")
+            # Iniciar polling em background para redundância
+            try:
+                if getattr(bot_application, 'updater', None):
+                    await bot_application.updater.start_polling()  # se já tiver webhook ativo, simplesmente não chegarão updates duplicados
+                    logger.info("� Polling iniciado como fallback")
+            except Exception as e:
+                logger.warning(f"⚠️ Falha ao iniciar polling fallback: {e}")
         
-        # 🔥 CRUCIAL: Marcar status IMEDIATAMENTE
+        # �🔥 CRUCIAL: Marcar status IMEDIATAMENTE
         _set_bot_status(True)
         logger.info("✅ [DEFINITIVO] Bot inicializado, startado e STATUS SALVO")
+        _start_watchdog()
         
     except Exception as e:
         logger.error(f"❌ Erro na inicialização do bot: {e}")
         _set_bot_status(False)
+
+def _start_watchdog():
+    """Watchdog assíncrono que monitora se o bot realmente está processando updates.
+    Se 'running' permanecer False ou nenhum update chegar em 60s, força restart/polling."""
+    global _watchdog_started
+    if _watchdog_started or not event_loop:
+        return
+    _watchdog_started = True
+
+    async def watchdog():
+        await asyncio.sleep(10)  # aguarda estabilização
+        while True:
+            try:
+                if bot_application:
+                    running_flag = getattr(bot_application, 'running', False)
+                    internal_running = getattr(bot_application, '_running', None)
+                    idle = getattr(bot_application, '_closing', False)
+                    stale = False
+                    if last_update_ts:
+                        stale = (time.time() - last_update_ts) > 120
+                    if (not running_flag or idle or stale):
+                        logger.warning(
+                            f"🩺 Watchdog: running={running_flag} _running={internal_running} idle={idle} stale={stale} -> aplicando recuperação"
+                        )
+                        try:
+                            # Forçar start se não estiver
+                            if not running_flag:
+                                try:
+                                    await bot_application.start()
+                                    logger.info("♻️ Watchdog: start() reaplicado")
+                                except Exception as e:
+                                    logger.warning(f"⚠️ Watchdog start falhou: {e}")
+                            # Garantir polling ativo
+                            if getattr(bot_application, 'updater', None):
+                                if not bot_application.updater.running:
+                                    await bot_application.updater.start_polling()
+                                    logger.info("♻️ Watchdog: polling reativado")
+                        except Exception as e:
+                            logger.error(f"❌ Watchdog recuperação falhou: {e}")
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:  # pragma: no cover
+                break
+            except Exception as e:
+                logger.error(f"❌ Watchdog erro inesperado: {e}")
+                await asyncio.sleep(30)
+
+    asyncio.run_coroutine_threadsafe(watchdog(), event_loop)
 
 def setup_bot_webhook(flask_app):
     """Configura bot com inicialização forçada"""
@@ -117,12 +180,14 @@ def setup_bot_webhook(flask_app):
     def webhook():
         try:
             data = request.get_json()
-            if data and bot_application and bot_application.running:
+            if data and bot_application:
                 update = Update.de_json(data, bot_application.bot)
                 asyncio.run_coroutine_threadsafe(
                     bot_application.process_update(update), event_loop
                 )
-                logger.debug("📨 Update processado com sucesso")
+                global last_update_ts
+                last_update_ts = time.time()
+                logger.debug("📨 Update recebido (webhook)")
             return "OK", 200
         except Exception as e:
             logger.error(f"❌ Erro webhook: {e}")
@@ -152,7 +217,11 @@ def setup_bot_webhook(flask_app):
             "bot_started": bot_started,
             "loop_alive": bool(event_loop and event_loop.is_running()),
             "running": bool(bot_application and bot_application.running),
+            "internal_running": getattr(bot_application, '_running', None) if bot_application else None,
+            "updater_polling": getattr(getattr(bot_application, 'updater', None), 'running', None) if bot_application else None,
             "status_file": BOT_STATUS_FILE,
+            "last_update_ts": last_update_ts,
+            "seconds_since_last_update": (time.time() - last_update_ts) if last_update_ts else None,
             "timestamp": time.time()
         }
         
@@ -173,6 +242,22 @@ def setup_bot_webhook(flask_app):
         try:
             asyncio.run_coroutine_threadsafe(_async_init_bot(), event_loop)
             return {"status": "reinit forçado"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    @flask_app.route('/debug_bot', methods=['GET'])
+    def debug_bot():
+        try:
+            info = {
+                "has_app": bot_application is not None,
+                "repr": repr(bot_application) if bot_application else None,
+                "running": getattr(bot_application, 'running', None) if bot_application else None,
+                "_running": getattr(bot_application, '_running', None) if bot_application else None,
+                "updater_running": getattr(getattr(bot_application, 'updater', None), 'running', None) if bot_application else None,
+                "loop_alive": bool(event_loop and event_loop.is_running()),
+                "last_update_ts": last_update_ts,
+            }
+            return info, 200
         except Exception as e:
             return {"error": str(e)}, 500
 
