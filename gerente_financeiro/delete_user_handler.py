@@ -37,6 +37,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler
 )
+from .handlers import cancel
 
 # Importando a função que vamos criar no próximo passo
 from database.database import deletar_todos_dados_usuario
