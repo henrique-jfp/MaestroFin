@@ -536,9 +536,6 @@ def create_application():
                 ('contact_conv', 'gerente_financeiro.contact_handler'),
                 ('delete_user_conv', 'gerente_financeiro.delete_user_handler'),
                 ('fatura_conv', 'gerente_financeiro.fatura_handler'),
-                ('extrato_conv', 'gerente_financeiro.extrato_handler'),
-                ('relatorio_conv', 'gerente_financeiro.relatorio_handler'),
-                ('dashboard_conv', 'gerente_financeiro.dashboard_handler'),
             ]
             
             for handler_name, module_name in handlers_modulares:
@@ -572,9 +569,8 @@ def create_application():
             
         # 🔥 JOBS ULTRA-ROBUSTOS (OPCIONAL)
         try:
-            from jobs import configurar_jobs_agendados
-            configurar_jobs_agendados(application)
-            logger.info("✅ Jobs de metas e agendamentos configurados.")
+            configurar_jobs(application.job_queue)
+            logger.info("✅ Jobs agendados configurados.")
         except Exception as job_error:
             logger.warning(f"⚠️ Jobs falhou: {job_error} - continuando")
 

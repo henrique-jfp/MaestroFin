@@ -662,6 +662,36 @@ def config_status():
         logger.error(f"Erro no status de configuração: {e}")
         return jsonify({'error': str(e), 'status': 'error'})
 
+@app.route('/api/analytics_debug')
+def analytics_debug():
+    """Endpoint de debug rápido: contagens brutas das tabelas de analytics (se disponíveis)."""
+    info = {"status": "ok"}
+    if not analytics_available:
+        info["analytics_available"] = False
+        return jsonify(info)
+    try:
+        from analytics.bot_analytics_postgresql import get_session
+        from sqlalchemy import text
+        session = get_session()
+        if not session:
+            info["error"] = "session_none"
+            return jsonify(info)
+        try:
+            cmd = session.execute(text("SELECT COUNT(*) FROM analytics_command_usage"))
+            info["command_usage_count"] = int(cmd.scalar() or 0)
+        except Exception as e:
+            info["command_usage_error"] = str(e)
+        try:
+            err = session.execute(text("SELECT COUNT(*) FROM analytics_error_logs"))
+            info["error_logs_count"] = int(err.scalar() or 0)
+        except Exception as e:
+            info["error_logs_error"] = str(e)
+        finally:
+            session.close()
+    except Exception as e:
+        info["fatal"] = str(e)
+    return jsonify(info)
+
 if __name__ == '__main__':
     # Configurar servidor
     port = int(os.environ.get('PORT', 5000))
