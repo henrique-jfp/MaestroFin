@@ -53,6 +53,7 @@ def track_analytics(command_name):
     return decorator
 
 from database.database import get_db, get_or_create_user # <-- Importação adicionada
+from .messages import render_message  # Persona Alfredo
 from models import Usuario, Conta
 from .handlers import cancel
 from .states import (
@@ -107,27 +108,13 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @track_analytics("start")
 async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Função específica para /start - inclui saudação de boas-vindas."""
-    # Garante que o usuário exista no banco de dados
-    db = next(get_db())
+    db = next(get_db())  # garante existência
     try:
         user = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
-        user_name = user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name
-        
-        # Saudação especial para /start
-        welcome_text = (
-            f"👋 <b>Olá, {user_name}!</b>\n\n"
-            "Para que eu possa ser seu melhor assistente financeiro, "
-            "precisamos configurar seu ecossistema.\n\n"
-            "📋 <b>Esta etapa é rápida e vai me ajudar a personalizar sua "
-            "experiência do seu jeito.</b>\n\n"
-            "Se quiser explorar tudo que posso fazer, digite /help. 🚀"
-        )
-        
+        user_name = (user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name)
+        welcome_text = render_message("start_welcome", name=user_name)
         await update.message.reply_html(welcome_text)
-        
-        # Vai direto para o menu principal
         return await show_main_menu(update, context)
-        
     finally:
         db.close()
 

@@ -386,86 +386,15 @@ def obter_contexto_usuario(context: ContextTypes.DEFAULT_TYPE) -> ContextoConver
     return context.user_data['contexto_conversa']
 
 # --- HANDLER DE START / HELP (ONBOARDING) ---
-HELP_TEXTS = {
-    "main": (
-        "Olá, <b>{user_name}</b>! 👋\n\n"
-        "Bem-vindo ao <b>Maestro Financeiro</b>, seu assistente pessoal para dominar suas finanças. "
-        "Sou um bot completo, com inteligência artificial, gráficos, relatórios e muito mais.\n\n"
-        "Navegue pelas seções abaixo para descobrir tudo que posso fazer por você:"
-    ),
-    "lancamentos": (
-        "<b>📝 Lançamentos e Registros</b>\n\n"
-        "A forma mais fácil de manter suas finanças em dia.\n\n"
-        "📸  <b>Leitura Automática (OCR)</b>\n"
-        "   • Dentro do comando <code>/lancamento</code>, envie uma <b>foto ou PDF</b> de um cupom fiscal e eu extraio os dados para você.\n\n"
-        "📄  <code>/fatura</code>\n"  # <-- LINHA ADICIONADA
-        "   • Envie o <b>PDF da fatura do seu cartão</b> e eu lanço todas as despesas de uma vez, de forma inteligente!\n\n" # <-- LINHA ADICIONADA
-        "⌨️  <code>/lancamento</code>\n"
-        "   • Use para registrar uma <b>Entrada</b> ou <b>Saída</b> manualmente através de um guia passo a passo.\n\n"
-        "✏️  <code>/editar</code>\n"
-        "   • Use para <b>editar ou apagar</b> um lançamento recente ou buscá-lo pelo nome."
-    ),
-    "analise": (
-        "<b>🧠 Análise e Inteligência</b>\n\n"
-        "Transforme seus dados em decisões inteligentes.\n\n"
-        "💬  <code>/gerente</code>\n"
-        "   • Converse comigo em linguagem natural! Sou uma IA avançada que entende suas perguntas sobre finanças, tem memória e te ajuda com insights práticos.\n"
-        "     - <i>\"Quanto gastei com iFood este mês?\"</i>\n"
-        "     - <i>\"Qual foi minha maior despesa em Lazer?\"</i>\n"
-        "     - <i>\"Como está minha situação financeira?\"</i>\n"
-        "     - <i>\"Cotação do dólar hoje\"</i>\n\n"
-        "📈  <code>/grafico</code>\n"
-        "   • Gere gráficos visuais e interativos de despesas, fluxo de caixa e projeções.\n\n"
-        "📄  <code>/relatorio</code>\n"
-        "   • Gere um <b>relatório profissional em PDF</b> com o resumo completo do seu mês."
-    ),
-    "planejamento": (
-        "<b>🎯 Metas e Agendamentos</b>\n\n"
-        "Planeje seu futuro e automatize sua vida financeira.\n\n"
-        "🏆  <code>/novameta</code>\n"
-        "   • Crie metas de economia (ex: 'Viagem dos Sonhos') e acompanhe seu progresso.\n\n"
-        "📊  <code>/metas</code>\n"
-        "   • Veja o andamento de todas as suas metas ativas com barras de progresso.\n\n"
-        "🗓️  <code>/agendar</code>\n"
-        "   • Automatize suas contas! Agende despesas e receitas recorrentes (salário, aluguel) ou parcelamentos. Eu te lembrarei e lançarei tudo automaticamente."
-    ),
-    "config": (
-        "<b>⚙️ Configurações e Ferramentas</b>\n\n"
-        "Deixe o bot com a sua cara e gerencie suas preferências.\n\n"
-        "👤  <code>/configurar</code>\n"
-        "   • Gerencie suas <b>contas</b>, <b>cartões</b>, defina seu <b>perfil de investidor</b> para receber dicas personalizadas e altere o <b>horário dos lembretes</b>.\n\n"
-        "🚨  <code>/alerta [valor]</code>\n"
-        "   • Defina um limite de gastos mensal (ex: <code>/alerta 1500</code>). Eu te avisarei se você ultrapassar esse valor.\n\n"
-        "💬  <code>/contato</code>\n" 
-        "   • Fale com o desenvolvedor! Envie <b>sugestões</b>, <b>dúvidas</b> ou me pague um <b>café via PIX</b> para apoiar o projeto.\n\n"
-        "🗑️  <code>/apagartudo</code>\n"
-        "   • <b>Exclui permanentemente todos os seus dados</b> do bot. Use com extrema cautela!\n\n"
-        "↩️  <code>/cancelar</code>\n"
-        "   • Use a qualquer momento para interromper uma operação em andamento."
-    ),
-    "gamificacao": (
-        "<b>🎮 Sistema de Gamificação ULTRA</b>\n\n"
-        "Transforme suas finanças em uma experiência VICIANTE!\n\n"
-        "🏆  <code>/perfil</code>\n"
-        "   • Veja seu <b>perfil gamer completo</b> com barras de progresso animadas, títulos épicos, conquistas desbloqueadas e estatísticas personalizadas.\n\n"
-        "📊  <code>/ranking</code>\n"
-        "   • Consulte o <b>Hall da Fama Global</b> e veja sua posição no ranking mundial de XP.\n\n"
-        "⭐  <b>Como ganhar XP:</b>\n"
-        "   • 📝 Registrar transação: +10 XP\n"
-        "   • 💬 Usar IA do Gerente: +5 XP\n"
-        "   • 🎯 Atingir meta: +25 XP\n"
-        "   • 📊 Gerar gráfico: +8 XP\n"
-        "   • 📄 Gerar relatório: +15 XP\n"
-        "   • 🔥 Streak diário: +2 XP extra\n\n"
-        "🎯  <b>Funcionalidades exclusivas:</b>\n"
-        "   • 🏅 Sistema de conquistas personalizadas\n"
-        "   • 🎯 Desafios diários com recompensas\n"
-        "   • 💎 Títulos épicos baseados no desempenho\n"
-        "   • 🔥 Multiplicadores de streak (até +200% XP!)\n"
-        "   • 📊 Estatísticas ultra detalhadas\n"
-        "   • � Loja de XP (em desenvolvimento)\n\n"
-        "💪  <b>Dica Pro:</b> Mantenha seu streak diário para acelerar sua evolução!"
-    )
+from .messages import render_message
+
+HELP_TEXTS = {  # Mapeamento de seção -> chave do catálogo Alfredo
+    "main": "help_main_intro",
+    "lancamentos": "help_lancamentos",
+    "analise": "help_analise",
+    "planejamento": "help_planejamento",
+    "config": "help_config",
+    "gamificacao": "help_gamificacao"
 }
 
 def get_help_keyboard(current_section: str = "main") -> InlineKeyboardMarkup:
@@ -501,14 +430,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     db = next(get_db())
     try:
-        # Busca o nome do usuário no banco para personalizar a mensagem
         usuario_db = db.query(Usuario).filter(Usuario.telegram_id == user.id).first()
-        # Se não encontrar no DB, usa o nome do Telegram como fallback
         user_name = usuario_db.nome_completo.split(' ')[0] if usuario_db and usuario_db.nome_completo else user.first_name
-        
-        text = HELP_TEXTS["main"].format(user_name=user_name)
+        text = render_message(HELP_TEXTS["main"], name=user_name)
         keyboard = get_help_keyboard("main")
-        
         await update.message.reply_html(text, reply_markup=keyboard)
 
     except Exception as e:
@@ -531,7 +456,11 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         section = query.data.split('_')[1]
 
         if section in HELP_TEXTS:
-            text = HELP_TEXTS[section]
+            key = HELP_TEXTS[section]
+            if section == "main":
+                # será formatado mais abaixo com nome
+                pass
+            text = render_message(key, name=query.from_user.first_name)
             
             # Se a seção for a principal, personaliza com o nome do usuário novamente
             if section == "main":
@@ -540,7 +469,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 try:
                     usuario_db = db.query(Usuario).filter(Usuario.telegram_id == user.id).first()
                     user_name = usuario_db.nome_completo.split(' ')[0] if usuario_db and usuario_db.nome_completo else user.first_name
-                    text = text.format(user_name=user_name)
+                    text = render_message(key, name=user_name)
                 finally:
                     db.close()
 
