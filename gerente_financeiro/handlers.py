@@ -389,39 +389,89 @@ def obter_contexto_usuario(context: ContextTypes.DEFAULT_TYPE) -> ContextoConver
 # --- HANDLER DE START / HELP (ONBOARDING) ---
 from .messages import render_message
 
-HELP_TEXTS = {  # Mapeamento de seção -> chave do catálogo Alfredo
-    "main": "help_main_intro",
-    "lancamentos": "help_lancamentos",
-    "analise": "help_analise",
-    "planejamento": "help_planejamento",
-    "config": "help_config",
-    "gamificacao": "help_gamificacao"
+HELP_SECTIONS = {
+    "main": {
+        "title": "🎩 Maestro Financeiro - Centro de Comandos",
+        "body": (
+            "Use os botões abaixo para navegar.\n"
+            "Você pode a qualquer momento digitar / e ver auto‑complete dos comandos.\n\n"
+            "<b>Atalhos rápidos:</b> /lancamento /fatura /agendar /metas /perfil /dashboard /relatorio /apagartudo\n"
+            "<i>Dica:</i> Clique em '🔍 Busca' e digite uma palavra (ex: meta, fatura, ranking)."
+        )
+    },
+    "lancamentos": {
+        "title": "📝 Lançamentos & Extratos",
+        "body": (
+            "<b>/lancamento</b> Registrar manual (texto, foto OCR).\n"
+            "<b>Fluxo OCR</b>: detecta valor, data, estabelecimento.\n"
+            "<b>/extrato</b> Conversa para filtrar lançamentos.\n"
+            "<b>Edição</b>: via menus contextuais em cada lançamento.\n"
+            "<b>Agendamentos</b>: use /agendar para recorrentes."
+        )
+    },
+    "analise": {
+        "title": "🧠 Análises & IA",
+        "body": (
+            "Faça perguntas livres: 'quanto gastei em Uber?', 'maior despesa do mês', 'resumo da semana'.\n"
+            "<b>Contexto externo</b>: Pergunte sobre dólar, selic, bitcoin para impacto.\n"
+            "Histórico curto otimiza respostas."
+        )
+    },
+    "planejamento": {
+        "title": "🎯 Planejamento & Metas",
+        "body": (
+            "<b>/metas</b> Lista e cria metas.\n"
+            "<b>Agendamentos</b>: entradas/saídas futuras.\n"
+            "<b>/relatorio</b> Gera PDF/HTML consolidado.\n"
+            "<b>Fatura</b>: /fatura importa PDF e sugere parcelamento."
+        )
+    },
+    "gamificacao": {
+        "title": "🎮 Gamificação & Engajamento",
+        "body": (
+            "<b>/perfil</b> Estatísticas de progresso.\n"
+            "<b>/ranking</b> Ranking global.\n"
+            "Desafios e conquistas são liberados conforme uso."
+        )
+    },
+    "config": {
+        "title": "⚙️ Ferramentas & Utilidades",
+        "body": (
+            "<b>/dashboard</b> Painel web (gráficos, tempo real).\n"
+            "<b>/notificacoes</b> Ajusta alertas.\n"
+            "<b>/apagartudo</b> Remove TODOS os dados (irreversível).\n"
+            "<b>/help</b> Volta aqui.\n"
+            "<b>Suporte/PIX</b>: via /contato (se disponível)."
+        )
+    },
 }
 
+def _render_help_section(section: str, query: str | None = None) -> str:
+    if section == "search" and query:
+        # Busca simples por substring nos bodies
+        q = query.lower()
+        hits = []
+        for key, data in HELP_SECTIONS.items():
+            if key == 'main':
+                continue
+            text_blob = (data["title"] + "\n" + data["body"]).lower()
+            if q in text_blob:
+                hits.append(f"<b>{data['title']}</b>\n{data['body']}")
+        if not hits:
+            return f"🔍 <b>Busca:</b> '{query}'\n\nNenhum resultado encontrado."
+        return f"🔍 <b>Busca:</b> '{query}'\n\n" + "\n\n━━━━━━━━━━━━\n".join(hits)
+    data = HELP_SECTIONS.get(section, HELP_SECTIONS['main'])
+    return f"{data['title']}\n\n{data['body']}"
+
 def get_help_keyboard(current_section: str = "main") -> InlineKeyboardMarkup:
-    """
-    Gera o teclado de navegação interativo para o menu de ajuda.
-    Os botões são dispostos de forma inteligente para melhor visualização.
-    """
-    keyboard = [
-        [
-            InlineKeyboardButton("📝 Lançamentos", callback_data="help_lancamentos"),
-            InlineKeyboardButton("🧠 Análise", callback_data="help_analise"),
-        ],
-        [
-            InlineKeyboardButton("🎯 Planejamento", callback_data="help_planejamento"),
-            InlineKeyboardButton("🎮 Gamificação", callback_data="help_gamificacao"),
-        ],
-        [
-            InlineKeyboardButton("⚙️ Ferramentas", callback_data="help_config"),
-        ]
+    base_rows = [
+        [InlineKeyboardButton("📝 Lançamentos", callback_data="help_lancamentos"), InlineKeyboardButton("🧠 Análise", callback_data="help_analise")],
+        [InlineKeyboardButton("🎯 Planejamento", callback_data="help_planejamento"), InlineKeyboardButton("🎮 Gamificação", callback_data="help_gamificacao")],
+        [InlineKeyboardButton("⚙️ Ferramentas", callback_data="help_config"), InlineKeyboardButton("🔍 Busca", callback_data="help_search_prompt")]
     ]
-    
-    # Adiciona o botão de "Voltar" apenas se não estivermos no menu principal
     if current_section != "main":
-        keyboard.append([InlineKeyboardButton("↩️ Voltar ao Menu Principal", callback_data="help_main")])
-    
-    return InlineKeyboardMarkup(keyboard)
+        base_rows.append([InlineKeyboardButton("↩️ Menu", callback_data="help_main")])
+    return InlineKeyboardMarkup(base_rows)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -433,9 +483,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         usuario_db = db.query(Usuario).filter(Usuario.telegram_id == user.id).first()
         user_name = usuario_db.nome_completo.split(' ')[0] if usuario_db and usuario_db.nome_completo else user.first_name
-        text = render_message(HELP_TEXTS["main"], name=user_name)
+        text = _render_help_section("main")
         keyboard = get_help_keyboard("main")
-        await update.message.reply_html(text, reply_markup=keyboard)
+        await update.message.reply_html(text, reply_markup=keyboard, disable_web_page_preview=True)
 
     except Exception as e:
         logger.error(f"Erro no help_command para o usuário {user.id}: {e}", exc_info=True)
@@ -453,32 +503,21 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer() # Responde ao clique para o Telegram saber que foi processado
 
     try:
-        # Extrai a seção do callback_data (ex: "help_analise" -> "analise")
-        section = query.data.split('_')[1]
-
-        if section in HELP_TEXTS:
-            key = HELP_TEXTS[section]
-            if section == "main":
-                # será formatado mais abaixo com nome
-                pass
-            text = render_message(key, name=query.from_user.first_name)
-            
-            # Se a seção for a principal, personaliza com o nome do usuário novamente
-            if section == "main":
-                user = query.from_user
-                db = next(get_db())
-                try:
-                    usuario_db = db.query(Usuario).filter(Usuario.telegram_id == user.id).first()
-                    user_name = usuario_db.nome_completo.split(' ')[0] if usuario_db and usuario_db.nome_completo else user.first_name
-                    text = render_message(key, name=user_name)
-                finally:
-                    db.close()
-
-            keyboard = get_help_keyboard(section)
-            
-            # Edita a mensagem original com o novo texto e teclado
-            await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
-            
+        data = query.data
+        if data == "help_search_prompt":
+            await query.edit_message_text(
+                "🔍 <b>Busca no Help</b>\n\nEnvie agora uma palavra para procurar (ex: fatura, meta, ranking, alerta).\n\n<code>Digite algo...</code>",
+                parse_mode='HTML', reply_markup=get_help_keyboard("search")
+            )
+            context.user_data['awaiting_help_search'] = True
+            return
+        if context.user_data.get('awaiting_help_search') and not data.startswith('help_'):
+            # Ignora callbacks inesperados
+            context.user_data.pop('awaiting_help_search', None)
+        section = data.split('_')[1]
+        text = _render_help_section(section)
+        keyboard = get_help_keyboard(section)
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard, disable_web_page_preview=True)
     except (IndexError, KeyError) as e:
         logger.error(f"Erro no help_callback: Seção não encontrada. query.data: {query.data}. Erro: {e}")
         await query.answer(render_message("secao_ajuda_nao_encontrada"), show_alert=True)
