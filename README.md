@@ -38,30 +38,25 @@ Controlar as finanças é um desafio constante. Anotar cada gasto, categorizar d
 ## 🎬 Demonstração: O MaestroFin em Ação
 
 **1. Lançamento por Conversa Natural:**
-> **Você:** `Paguei o almoço no iFood, R$ 45,50 no crédito`
->
-> **MaestroFin:** ✅ Lançamento de **R$ 45,50** salvo!
-> 🍔 **Categoria:** Alimentação → Restaurante/Delivery
-> 💳 **Conta:** Cartão de Crédito
->
+> **Você:** `Paguei o almoço no iFood, R$ 45,50 no crédito`  
+> **MaestroFin:** ✅ Lançamento de **R$ 45,50** salvo!  
+> 🍔 **Categoria:** Alimentação → Restaurante/Delivery  
+> 💳 **Conta:** Cartão de Crédito  
 > 💡 *Insight: Seus gastos com delivery este mês já somam R$ 280,70.*
 
 **2. Importação de Fatura via PDF:**
-> **Você:** *[envia o arquivo fatura_nubank.pdf]*
->
-> **MaestroFin:** 📄 Fatura recebida! Processando em segundo plano...
-> *(15 segundos depois)*
-> **MaestroFin:** ✅ Análise concluída! Encontrei **47** transações válidas na sua fatura do **Nubank**. A qual cartão deseja associar?
+> **Você:** *[envia o arquivo fatura_nubank.pdf]*  
+> **MaestroFin:** 📄 Fatura recebida! Processando em segundo plano...  
+> *(15 segundos depois)*  
+> **MaestroFin:** ✅ Análise concluída! Encontrei **47** transações válidas na sua fatura do **Nubank**. A qual cartão deseja associar?  
 > `[💳 Nubank Roxinho]` `[💳 Inter Gold]`
 
 **3. Análise com a IA:**
-> **Você:** `/gerente qual foi meu maior gasto este mês?`
->
-> **MaestroFin:** 🎯 **Análise de Despesas**
-> Sua maior despesa em Agosto foi de **`R$ 1.500,00`** com **Aluguel** no dia 05/08.
->
-> 💡 **Insights do Maestro:**
-> Excluindo a moradia, seu maior gasto foi com **Supermercado** (R$ 850,40). Podemos analisar essa categoria para encontrar oportunidades de economia?
+> **Você:** `/gerente qual foi meu maior gasto este mês?`  
+> **MaestroFin:** 🎯 **Análise de Despesas**  
+> Sua maior despesa em Agosto foi de **`R$ 1.500,00`** com **Aluguel** no dia 05/08.  
+> 💡 **Insights do Maestro:**  
+> Excluindo a moradia, seu maior gasto foi com **Supermercado** (R$ 850,40). Podemos analisar essa categoria para encontrar oportunidades de economia?  
 > `[Analisar Supermercado]` `[Top 5 despesas]`
 
 ---
@@ -70,12 +65,12 @@ Controlar as finanças é um desafio constante. Anotar cada gasto, categorizar d
 
 O MaestroFin é construído sobre uma stack moderna e robusta, pronta para escalar.
 
-- **Backend:** Python 3.12+, `python-telegram-bot`, `Flask`, `Gunicorn`
-- **Inteligência Artificial:** `google-generativeai` (Gemini Pro), `google-cloud-vision`
-- **Banco de Dados:** `SQLAlchemy` ORM com `PostgreSQL` (produção) e `SQLite` (desenvolvimento)
-- **Análise de Dados:** `pandas`, `matplotlib`, `seaborn`
-- **Processamento de PDF:** `pdfplumber`
-- **Frontend (Dashboard):** `HTML`, `CSS`, `JavaScript`, `Chart.js`, `Plotly`
+- **Backend:** Python 3.12+, `python-telegram-bot`, `Flask`, `Gunicorn`  
+- **Inteligência Artificial:** `google-generativeai` (Gemini Pro), `google-cloud-vision`  
+- **Banco de Dados:** `SQLAlchemy` ORM com `PostgreSQL` (produção) e `SQLite` (desenvolvimento)  
+- **Análise de Dados:** `pandas`, `matplotlib`, `seaborn`  
+- **Processamento de PDF:** `pdfplumber`  
+- **Frontend (Dashboard):** `HTML`, `CSS`, `JavaScript`, `Chart.js`, `Plotly`  
 
 ### Estrutura do Banco de Dados
 
@@ -93,97 +88,93 @@ erDiagram
     Conta ||--o{ Lancamento : origina
 
     Lancamento }o--|| Subcategoria : pertence
+```
 
-🚀 Instalação Rápida (Desenvolvimento Local)
+---
 
-Pré-requisitos:
+## 🚀 Instalação Rápida (Desenvolvimento Local)
 
-    Python 3.12+
+**Pré-requisitos:**
+- Python 3.12+
+- Git
 
-    Git
-
-1. Clone o Repositório:
-Bash
-
-git clone [https://github.com/henrique-jfp/maestrofin.git](https://github.com/henrique-jfp/maestrofin.git)
+**1. Clone o Repositório:**
+```bash
+git clone https://github.com/henrique-jfp/maestrofin.git
 cd maestrofin
+```
 
-2. Crie e Ative o Ambiente Virtual:
-Bash
-
+**2. Crie e Ative o Ambiente Virtual:**
+```bash
 # Linux/Mac
 python3 -m venv venv
 source venv/bin/activate
 
 # Windows
 python -m venv venv
-.\\venv\\Scripts\\activate
+.env\Scriptsctivate
+```
 
-3. Instale as Dependências:
-Bash
-
+**3. Instale as Dependências:**
+```bash
 pip install -r requirements.txt
+```
 
-4. Configure as Variáveis de Ambiente:
+**4. Configure as Variáveis de Ambiente:**
+- Copie o arquivo `.env.example` para `.env`.
+- Preencha com suas chaves de API (Telegram, Google Gemini).
+- Para desenvolvimento local, o `DATABASE_URL` pode ser deixado em branco para usar o SQLite padrão.
 
-    Copie o arquivo .env.example para .env.
-
-    Preencha com suas chaves de API (Telegram, Google Gemini).
-
-    Para desenvolvimento local, o DATABASE_URL pode ser deixado em branco para usar o SQLite padrão.
-
-Bash
-
+```bash
 cp .env.example .env
 # Agora, edite o arquivo .env com suas chaves
+```
 
-5. Execute o Bot:
-Bash
-
+**5. Execute o Bot:**
+```bash
 python bot.py
+```
 
-📈 Roadmap e Futuro do Projeto
+---
+
+## 📈 Roadmap e Futuro do Projeto
 
 O MaestroFin está em constante evolução. Nosso roadmap inclui:
 
-    [ ] 🏦 Integração com Open Banking: Sincronização automática com suas contas bancárias.
+- [ ] 🏦 Integração com Open Banking: Sincronização automática com suas contas bancárias.  
+- [ ] 💰 Módulo de Investimentos: Acompanhamento de carteira e performance.  
+- [ ] 🤝 Contas Compartilhadas: Gerenciamento financeiro para casais e famílias.  
+- [ ] 🤖 IA Preditiva: Previsão de gastos futuros e detecção de anomalias.  
 
-    [ ] 💰 Módulo de Investimentos: Acompanhamento de carteira e performance.
+---
 
-    [ ] 🤝 Contas Compartilhadas: Gerenciamento financeiro para casais e famílias.
-
-    [ ] 🤖 IA Preditiva: Previsão de gastos futuros e detecção de anomalias.
-
-Como Contribuir
+## 🤝 Como Contribuir
 
 Contribuições são muito bem-vindas!
 
-    Faça um Fork do projeto.
+1. Faça um Fork do projeto.  
+2. Crie sua Branch (`git checkout -b feature/NovaFuncionalidade`).  
+3. Faça o Commit de suas mudanças (`git commit -m 'Adiciona NovaFuncionalidade'`).  
+4. Faça o Push (`git push origin feature/NovaFuncionalidade`).  
+5. Abra um Pull Request.  
 
-    Crie sua Branch (git checkout -b feature/NovaFuncionalidade).
+---
 
-    Faça o Commit de suas mudanças (git commit -m 'Adiciona NovaFuncionalidade').
+## 📄 Licença
 
-    Faça o Push (git push origin feature/NovaFuncionalidade).
+Este projeto utiliza **Licenciamento Dual**:
 
-    Abra um Pull Request.
+- **Uso Não Comercial:** Livre para visualização, estudo e uso em portfólio.  
+- **Uso Comercial:** Requer uma licença paga. Entre em contato para mais detalhes.  
 
-📄 Licença
+---
 
-Este projeto utiliza Licenciamento Dual:
+## 📞 Contato
 
-    Uso Não Comercial: Livre para visualização, estudo e uso em portfólio.
+**Henrique de Jesus Freitas Pereira**  
 
-    Uso Comercial: Requer uma licença paga. Entre em contato para mais detalhes.
-
-📞 Contato
-
-Henrique de Jesus Freitas Pereira
-
-    📧 Email: henriquejfp.dev@gmail.com
-
-    💼 LinkedIn: linkedin.com/in/henrique-jfp
-
-    🐙 GitHub: github.com/henrique-jfp
+- 📧 Email: henriquejfp.dev@gmail.com  
+- 💼 LinkedIn: [linkedin.com/in/henrique-jfp](https://linkedin.com/in/henrique-jfp)  
+- 🐙 GitHub: [github.com/henrique-jfp](https://github.com/henrique-jfp)  
 
 ⭐ Se este projeto te ajudou, considere dar uma estrela!
