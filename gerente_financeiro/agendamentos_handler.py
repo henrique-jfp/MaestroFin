@@ -19,101 +19,26 @@ from .states import (
     CONFIRM_AGENDAMENTO
 )
 from typing import List
+from .messages import render_message
 
 logger = logging.getLogger(__name__)
 
-# ESTADOS DA CONVERSA - MOVIDOS PARA states.py
-
-# --- INÍCIO E MENU MODERNO ---
-async def agendamento_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    
-    # Pergunta o valor de forma mais atrativa
-    tipo = context.user_data['novo_agendamento']['tipo']
-    emoji = "🟢" if tipo == "Entrada" else "🔴"
-    
-    await update.message.reply_text(
-        f"{emoji} <b>{descricao_texto}</b>\n\n"
-        f"💰 <b>Qual o valor?</b>\n\n"
-        f"💡 <i>Se for parcelado, informe o valor da parcela</i>\n\n"
-        f"<i>Exemplos:</i>\n"
-        f"• <code>1500</code>\n"
-        f"• <code>350.50</code>\n"
-        f"• <code>2500.00</code>",
-        parse_mode='HTML'
-    )
-    
-    return ASK_VALOR_AGENDAMENTOarkup, Update
-from telegram.ext import (
-    CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler,
-    MessageHandler, filters
-)
-
-from database.database import get_db, get_or_create_user
-from models import Categoria, Agendamento, Usuario
-from .handlers import cancel, criar_teclado_colunas
-from .utils_validation import (
-    validar_valor_monetario, validar_descricao,
-    ask_valor_generico, ask_descricao_generica
-)
-from .states import (
-    ASK_TIPO, ASK_DESCRICAO_AGENDAMENTO, ASK_VALOR_AGENDAMENTO, ASK_CATEGORIA_AGENDAMENTO, 
-    ASK_PRIMEIRO_EVENTO, ASK_FREQUENCIA, ASK_TIPO_RECORRENCIA, ASK_TOTAL_PARCELAS, 
-    CONFIRM_AGENDAMENTO
-)
-from typing import List
-
-logger = logging.getLogger(__name__)
-
-# ESTADOS DA CONVERSA - MOVIDOS PARA states.py
-
-# --- INÍCIO E MENU MODERNO ---
-async def agendamento_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Menu inicial de agendamentos com design moderno"""
-    keyboard = [
-        [InlineKeyboardButton("➕ Novo Agendamento", callback_data="agendamento_novo")],
-        [InlineKeyboardButton("📋 Meus Agendamentos", callback_data="agendamento_listar")],
-        [InlineKeyboardButton("❌ Fechar", callback_data="agendamento_fechar")],
-    ]
-    await update.message.reply_html(
-        "🗓️ <b>Gerenciador de Agendamentos</b>\n\n"
-        "💡 <i>Automatize seus lançamentos recorrentes:</i>\n"
-        "• 💰 Salários e rendas fixas\n"
-        "• 🏠 Contas mensais (aluguel, luz, água)\n"
-        "• 💳 Parcelamentos e financiamentos\n"
-        "• 📱 Assinaturas e mensalidades",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return ConversationHandler.END
-
+# --- ENTRYPOINT / MENU INICIAL ---
 async def agendamento_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entrypoint: inicia fluxo pedindo o tipo (Entrada/Saída)."""
     query = update.callback_query
     await query.answer()
-    action = query.data
+    # Inicia estrutura de dados do novo agendamento
+    context.user_data['novo_agendamento'] = {}
+    keyboard = [[
+        InlineKeyboardButton("🟢 Entrada", callback_data="ag_tipo_Entrada"),
+        InlineKeyboardButton("🔴 Saída", callback_data="ag_tipo_Saida")
+    ]]
+    texto = f"{render_message('ag_novo_titulo')}\n\n{render_message('ag_pergunta_tipo')}"
+    await query.edit_message_text(texto, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+    return ASK_TIPO
 
-    if action == "agendamento_fechar":
-        await query.edit_message_text("✅ Gerenciador de agendamentos fechado.")
-        return ConversationHandler.END
-    if action == "agendamento_listar":
-        await listar_agendamentos(update, context)
-        return ConversationHandler.END
-
-    if action == "agendamento_novo":
-        context.user_data['novo_agendamento'] = {}
-        keyboard = [
-            [
-                InlineKeyboardButton("🟢 Entrada", callback_data="ag_tipo_Entrada"),
-                InlineKeyboardButton("🔴 Saída", callback_data="ag_tipo_Saída")
-            ]
-        ]
-        await query.edit_message_text(
-            "🗓️ <b>Novo Agendamento</b>\n\n"
-            "Primeiro, este é um recebimento ou pagamento?\n\n"
-            "🟢 <b>Entrada:</b> Salário, freelance, vendas\n"
-            "🔴 <b>Saída:</b> Aluguel, contas, parcelas",
-            reply_markup=InlineKeyboardMarkup(keyboard), 
-            parse_mode='HTML'
-        )
-        return ASK_TIPO
+ # Funções refatoradas abaixo
 
 # --- FLUXO DE CRIAÇÃO MODERNO ---
 async def ask_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -127,12 +52,7 @@ async def ask_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     emoji = "🟢" if tipo == "Entrada" else "🔴"
     
     await query.edit_message_text(
-        f"{emoji} <b>Agendamento de {tipo}</b>\n\n"
-        f"📝 <b>Qual a descrição?</b>\n\n"
-        f"💡 <i>Exemplos para {tipo.lower()}:</i>\n"
-        f"• {'Salário mensal' if tipo == 'Entrada' else 'Aluguel apartamento'}\n"
-        f"• {'Freelance projeto X' if tipo == 'Entrada' else 'Parcela do carro'}\n"
-        f"• {'Dividendos ações' if tipo == 'Entrada' else 'Conta de luz'}",
+        render_message("ag_prompt_descricao", emoji=emoji, tipo=tipo),
         parse_mode='HTML'
     )
     return ASK_DESCRICAO_AGENDAMENTO
@@ -143,12 +63,7 @@ async def ask_descricao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     # Validação simples de descrição
     if len(descricao_texto) < 2 or len(descricao_texto) > 200:
-        await update.message.reply_text(
-            "⚠️ <b>Descrição muito curta ou longa</b>\n\n"
-            "Use entre 2 e 200 caracteres\n"
-            "💡 <i>Exemplo: Aluguel apartamento</i>",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(render_message("ag_descricao_invalida"), parse_mode='HTML')
         return ASK_DESCRICAO_AGENDAMENTO
     
     # Salva a descrição
@@ -159,13 +74,7 @@ async def ask_descricao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     emoji = "🟢" if tipo == "Entrada" else "🔴"
     
     await update.message.reply_text(
-        f"{emoji} <b>{descricao_texto}</b>\n\n"
-        f"💰 <b>Qual o valor?</b>\n\n"
-        f"💡 <i>Se for parcelado, informe o valor da parcela</i>\n\n"
-        f"<i>Exemplos:</i>\n"
-        f"• <code>1500</code>\n"
-        f"• <code>350.50</code>\n"
-        f"• <code>2500.00</code>",
+        render_message("ag_prompt_valor", emoji=emoji, descricao=descricao_texto),
         parse_mode='HTML'
     )
     
@@ -181,15 +90,7 @@ async def ask_valor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if valor <= 0:
             raise ValueError("Valor deve ser positivo")
     except ValueError:
-        await update.message.reply_text(
-            "⚠️ <b>Valor inválido</b>\n\n"
-            "Digite apenas números\n\n"
-            "💡 <i>Exemplos válidos:</i>\n"
-            "• <code>1500</code>\n"
-            "• <code>350.50</code>\n"
-            "• <code>2500.00</code>",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(render_message("ag_valor_invalido"), parse_mode='HTML')
         return ASK_VALOR_AGENDAMENTO
     
     # Salva o valor
@@ -216,13 +117,9 @@ async def ask_valor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         # Resumo do que foi preenchido
         dados = context.user_data['novo_agendamento']
         tipo = dados['tipo']
-        emoji_tipo = "�" if tipo == "Entrada" else "🔴"
-        
+        emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
         await update.message.reply_text(
-            f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-            f"💰 R$ {valor:.2f}\n\n"
-            f"📂 <b>Categoria:</b>\n"
-            f"Em que categoria se encaixa?",
+            render_message("ag_resumo_categoria_prompt", emoji=emoji_tipo, descricao=dados['descricao'], valor=valor),
             reply_markup=InlineKeyboardMarkup(teclado),
             parse_mode='HTML'
         )
@@ -257,13 +154,7 @@ async def ask_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
     
     await query.edit_message_text(
-        f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-        f"💰 R$ {dados['valor']:.2f}\n"
-        f"📂 {categoria_nome}\n\n"
-        f"📅 <b>Primeira ocorrência:</b>\n"
-        f"Quando acontece pela primeira vez?\n\n"
-        f"� <i>Formato: DD/MM/AAAA</i>\n"
-        f"Exemplo: <code>25/01/2025</code>",
+        render_message("ag_prompt_primeira_data", emoji=emoji_tipo, descricao=dados['descricao'], valor=dados['valor'], categoria=categoria_nome),
         parse_mode='HTML'
     )
     
@@ -274,12 +165,7 @@ async def ask_primeiro_evento(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         data_primeiro = datetime.strptime(update.message.text, '%d/%m/%Y').date()
         if data_primeiro < datetime.now().date():
-            await update.message.reply_text(
-                "⚠️ <b>Data no passado</b>\n\n"
-                "A data deve ser futura\n\n"
-                "💡 <i>Exemplo:</i> <code>25/01/2025</code>",
-                parse_mode='HTML'
-            )
+            await update.message.reply_text(render_message("ag_data_invalida"), parse_mode='HTML')
             return ASK_PRIMEIRO_EVENTO
             
         context.user_data['novo_agendamento']['data_primeiro_evento'] = data_primeiro
@@ -297,11 +183,7 @@ async def ask_primeiro_evento(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         
         await update.message.reply_text(
-            f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-            f"💰 R$ {dados['valor']:.2f}\n"
-            f"� {data_formatada}\n\n"
-            f"🔁 <b>Frequência:</b>\n"
-            f"Com que frequência vai se repetir?",
+            render_message("ag_prompt_frequencia", emoji=emoji_tipo, descricao=dados['descricao'], valor=dados['valor'], data=data_formatada),
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
@@ -341,12 +223,8 @@ async def ask_frequencia(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     ]
     
     await query.edit_message_text(
-        f"🔁 <b>Repetição: {freq_texto}</b>\n\n"
-        f"Este agendamento tem um <b>número fixo</b> de ocorrências\n"
-        f"ou é <b>contínuo</b> (como uma assinatura)?\n\n"
-        f"🔢 <b>Fixo:</b> 12x parcelas, 6 meses de aluguel\n"
-        f"♾️ <b>Contínuo:</b> Salário, assinaturas, contas mensais",
-        reply_markup=InlineKeyboardMarkup(keyboard), 
+        render_message("ag_prompt_recorrencia", freq=freq_texto),
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML'
     )
     return ASK_TIPO_RECORRENCIA
@@ -361,38 +239,25 @@ async def ask_tipo_recorrencia(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['novo_agendamento']['total_parcelas'] = None
         return await show_agendamento_confirmation(update, context)
     
-    await query.edit_message_text(
-        "🔢 <b>Quantas vezes no total?</b>\n\n"
-        "Digite o número total de ocorrências\n\n"
-        "💡 <i>Exemplos:</i>\n"
-        "• <code>12</code> (12 parcelas)\n"
-        "• <code>6</code> (6 meses)\n"
-        "• <code>24</code> (24 vezes)",
-        parse_mode='HTML'
-    )
+    await query.edit_message_text(render_message("ag_prompt_total_parcelas"), parse_mode='HTML')
     return ASK_TOTAL_PARCELAS
 
 async def ask_total_parcelas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Processa total de parcelas e vai para confirmação"""
+    """Processa o número total de parcelas informado pelo usuário."""
+    text = (update.message.text or "").strip()
     try:
-        total_parcelas = int(update.message.text)
-        if total_parcelas <= 0: 
-            raise ValueError("Número deve ser positivo")
-            
-        context.user_data['novo_agendamento']['total_parcelas'] = total_parcelas
-        return await show_agendamento_confirmation(update, context)
-        
-    except (ValueError, TypeError):
+        total_parcelas = int(text)
+        if total_parcelas <= 0:
+            raise ValueError("precisa ser positivo")
+    except Exception:
         await update.message.reply_text(
-            "⚠️ <b>Número inválido</b>\n\n"
-            "Digite um número inteiro positivo\n\n"
-            "💡 <i>Exemplos:</i>\n"
-            "• <code>12</code>\n"
-            "• <code>6</code>\n"
-            "• <code>24</code>",
+            render_message("ag_total_parcelas_invalido"),
             parse_mode='HTML'
         )
         return ASK_TOTAL_PARCELAS
+
+    context.user_data['novo_agendamento']['total_parcelas'] = total_parcelas
+    return await show_agendamento_confirmation(update, context)
 
 async def show_agendamento_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Tela de confirmação moderna"""
@@ -429,14 +294,14 @@ async def show_agendamento_confirmation(update: Update, context: ContextTypes.DE
             db.close()
 
     # Resumo elegante
-    summary = (
-        f"✅ <b>Confirme seu agendamento:</b>\n\n"
-        f"{tipo_emoji} <b>{data['descricao']}</b>\n"
-        f"💰 R$ {data['valor']:.2f}\n"
-        f"📂 {categoria_nome}\n"
-        f"📅 Primeira: {data['data_primeiro_evento'].strftime('%d/%m/%Y')}\n"
-        f"🔁 {recorrencia_str}\n\n"
-        f"💡 <i>Você receberá lembretes automáticos</i>"
+    summary = render_message(
+        "ag_confirmacao_resumo",
+        emoji=tipo_emoji,
+        descricao=data['descricao'],
+        valor=data['valor'],
+        categoria=categoria_nome,
+        data_primeira=data['data_primeiro_evento'].strftime('%d/%m/%Y'),
+        recorrencia=recorrencia_str
     )
     
     keyboard = [
@@ -468,7 +333,7 @@ async def save_agendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await query.answer()
     
     # Mostra mensagem de salvamento
-    await query.edit_message_text("💾 <b>Salvando agendamento...</b>", parse_mode='HTML')
+    await query.edit_message_text(render_message("ag_salvando"), parse_mode='HTML')
 
     db = next(get_db())
     try:
@@ -502,23 +367,21 @@ async def save_agendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         freq_str = freq_map.get(data['frequencia'], data['frequencia'])
         
         await query.edit_message_text(
-            f"✅ <b>Agendamento criado!</b>\n\n"
-            f"{tipo_emoji} <b>{data['descricao']}</b>\n"
-            f"💰 R$ {data['valor']:.2f}\n"
-            f"🔁 {freq_str}\n"
-            f"📅 Próximo: {data['data_primeiro_evento'].strftime('%d/%m/%Y')}\n\n"
-            f"🔔 <i>Você receberá lembretes automáticos</i>",
+            render_message(
+                "ag_criado_sucesso",
+                emoji=tipo_emoji,
+                descricao=data['descricao'],
+                valor=data['valor'],
+                frequencia=freq_str,
+                data_proxima=data['data_primeiro_evento'].strftime('%d/%m/%Y')
+            ),
             parse_mode='HTML'
         )
         
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao salvar agendamento: {e}", exc_info=True)
-        await query.edit_message_text(
-            "❌ <b>Erro ao salvar agendamento</b>\n\n"
-            "Tente novamente em alguns instantes.",
-            parse_mode='HTML'
-        )
+        await query.edit_message_text(render_message("ag_erro_salvar", tone="error"), parse_mode='HTML')
     finally:
         db.close()
         context.user_data.clear()
@@ -535,10 +398,10 @@ async def listar_agendamentos(update: Update, context: ContextTypes.DEFAULT_TYPE
     db.close()
 
     if not agendamentos:
-        await query.edit_message_text("Você não tem nenhum agendamento ativo.")
+        await query.edit_message_text(render_message("ag_lista_vazia"))
         return
 
-    await query.edit_message_text("📋 <b>Seus Agendamentos Ativos:</b>", parse_mode='HTML')
+    await query.edit_message_text(render_message("ag_lista_header"), parse_mode='HTML')
     for ag in agendamentos:
         tipo_emoji = '🟢' if ag.tipo == 'Entrada' else '🔴'
         
@@ -575,16 +438,13 @@ async def cancelar_agendamento_callback(update: Update, context: ContextTypes.DE
             ag_para_cancelar.ativo = False
             db.commit()
             await query.edit_message_text(
-                "✅ <b>Agendamento cancelado</b>\n\n"
-                f"🗑️ <b>{ag_para_cancelar.descricao}</b> foi removido\n"
-                f"💡 <i>Não receberá mais lembretes</i>",
+                render_message("ag_cancelar_sucesso", descricao=ag_para_cancelar.descricao),
                 reply_markup=None,
                 parse_mode='HTML'
             )
         else:
             await query.edit_message_text(
-                "❌ <b>Erro</b>\n\n"
-                "Agendamento não encontrado ou sem permissão",
+                render_message("ag_nao_encontrado", tone="error"),
                 reply_markup=None,
                 parse_mode='HTML'
             )
@@ -592,8 +452,7 @@ async def cancelar_agendamento_callback(update: Update, context: ContextTypes.DE
         db.rollback()
         logger.error(f"Erro ao cancelar agendamento {agendamento_id}: {e}", exc_info=True)
         await query.edit_message_text(
-            "❌ <b>Erro inesperado</b>\n\n"
-            "Tente novamente em alguns instantes",
+            render_message("ag_cancelar_erro", tone="error"),
             reply_markup=None,
             parse_mode='HTML'
         )
@@ -601,21 +460,19 @@ async def cancelar_agendamento_callback(update: Update, context: ContextTypes.DE
         db.close()
 
 async def handle_agendamento_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handler para confirmações de agendamento"""
+    """Processa ações do teclado de confirmação (salvar ou cancelar)."""
     query = update.callback_query
     await query.answer()
-    
-    if query.data == "ag_confirm_save":
+
+    data = query.data
+    if data == "ag_confirm_save":
         return await save_agendamento(update, context)
-    elif query.data == "ag_confirm_cancel":
-        await query.edit_message_text(
-            "❌ <b>Agendamento cancelado</b>\n\n"
-            "Nenhum agendamento foi criado",
-            parse_mode='HTML'
-        )
+    if data == "ag_confirm_cancel":
+        await query.edit_message_text(render_message("ag_cancelado"), parse_mode='HTML')
         context.user_data.clear()
         return ConversationHandler.END
-    
+
+    # Qualquer outra ação apenas encerra silenciosamente
     return ConversationHandler.END
 
 
@@ -635,7 +492,7 @@ agendamento_conv = ConversationHandler(
         ]
     },
     fallbacks=[CommandHandler('cancelar', cancel)],
-    per_message=False,  # False porque mistura MessageHandler e CallbackQueryHandler
+    per_message=False,
     per_user=True,
     per_chat=True
 )

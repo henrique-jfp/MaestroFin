@@ -43,6 +43,7 @@ from telegram.ext import (
 
 # Importações de outros módulos do projeto
 from database.database import (criar_novo_objetivo, listar_objetivos_usuario, deletar_objetivo_por_id, atualizar_objetivo_por_id)
+from .messages import render_message
 from models import Objetivo
 from .handlers import cancel
 from .states import ASK_OBJETIVO_DESCRICAO, ASK_OBJETIVO_VALOR, ASK_OBJETIVO_PRAZO, ASK_EDIT_VALOR, ASK_EDIT_PRAZO
@@ -116,7 +117,7 @@ async def save_objetivo_e_finaliza(update: Update, context: ContextTypes.DEFAULT
         elif resultado == "DUPLICATE":
             await update.message.reply_text(f"⚠️ Você já tem uma meta com o nome '{descricao}'. Por favor, escolha um nome diferente ou remova a meta existente em /metas.")
         else:
-            await update.message.reply_text("❌ Houve um erro ao salvar sua meta. Tente novamente mais tarde.")
+            await update.message.reply_text(render_message("metas_erro_salvar"))
 
         context.user_data.clear()
         return ConversationHandler.END
@@ -168,12 +169,12 @@ async def deletar_meta_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if sucesso:
             await query.edit_message_text(text=f"✅ Meta removida com sucesso.", reply_markup=None)
         else:
-            await query.edit_message_text(text="❌ Erro ao remover a meta. Ela pode já ter sido removida.", reply_markup=None)
+            await query.edit_message_text(text=render_message("metas_erro_remover"), reply_markup=None)
     except (IndexError, ValueError):
-        await query.edit_message_text(text="❌ Erro: ID da meta inválido.", reply_markup=None)
+        await query.edit_message_text(text=render_message("metas_id_invalido"), reply_markup=None)
     except Exception as e:
         logger.error(f"Erro ao deletar meta via callback: {e}", exc_info=True)
-        await query.edit_message_text(text="❌ Ocorreu um erro inesperado.", reply_markup=None)
+        await query.edit_message_text(text=render_message("metas_erro_inesperado"), reply_markup=None)
 
 async def edit_meta_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia a conversa para editar uma meta."""
@@ -236,7 +237,7 @@ async def ask_edit_prazo_and_save(update: Update, context: ContextTypes.DEFAULT_
             await listar_metas_command(update, context)
             
         else:
-            await update.message.reply_text("❌ Houve um erro ao tentar atualizar sua meta. Tente novamente.")
+            await update.message.reply_text(render_message("metas_erro_atualizar"))
 
         context.user_data.clear()
         return ConversationHandler.END

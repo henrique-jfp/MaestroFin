@@ -70,6 +70,7 @@ except ImportError as e:
 
 from database.database import get_db
 from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio
+from .messages import render_message
 
 logger = logging.getLogger(__name__)
 
@@ -386,7 +387,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         logger.error(f"Erro crítico na geração do relatório: {e}", exc_info=True)
         await update.message.reply_text(
-            "❌ Ocorreu um erro ao gerar o relatório. Tente novamente em alguns minutos.",
+            render_message("relatorio_erro_gerar"),
             parse_mode='HTML'
         )
         try:
@@ -410,7 +411,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
 
     except Exception as e:
         logger.error(f"Erro geral ao gerar relatório para o usuário {user_id}: {e}", exc_info=True)
-        await update.message.reply_text("❌ Ops! Ocorreu um erro ao gerar seu relatório. A equipe de filmagem já foi notificada.")
+        await update.message.reply_text(render_message("relatorio_erro_geral"))
     finally:
         db.close()
         

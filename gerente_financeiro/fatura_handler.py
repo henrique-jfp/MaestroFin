@@ -52,6 +52,7 @@ import config
 from database.database import get_db, get_or_create_user, verificar_transacao_duplicada
 from models import Lancamento, Categoria, Subcategoria, Conta, Usuario
 from .handlers import cancel
+from .messages import render_message
 from .services import limpar_cache_usuario
 from .utils_email import enviar_email
 from .utils_google_calendar import criar_evento_google_calendar
@@ -909,30 +910,22 @@ async def _processar_fatura_em_background(context: ContextTypes.DEFAULT_TYPE):
             error_msg = str(download_error).lower()
             if "file is too big" in error_msg:
                 await bot.send_message(
-                    chat_id, 
-                    "❌ <b>Arquivo muito grande!</b>\n\n"
-                    "🔧 <b>Soluções:</b>\n"
-                    "• Comprima o PDF online\n"
-                    "• Use apenas as páginas necessárias\n"
-                    "• Limite máximo: 20MB",
+                    chat_id,
+                    render_message(
+                        "fatura_file_muito_grande",
+                        tamanho_atual=file_size / (1024*1024),
+                        tamanho_limite=20
+                    ),
                     parse_mode='HTML'
                 )
                 return
             elif "timed out" in error_msg:
-                await bot.send_message(
-                    chat_id,
-                    "⏰ <b>Timeout no download!</b>\n\n"
-                    "Arquivo muito grande ou conexão lenta. Tente um arquivo menor.",
-                    parse_mode='HTML'
-                )
+                await bot.send_message(chat_id, render_message("fatura_timeout_download"), parse_mode='HTML')
                 return
             else:
                 # Erro genérico no download
                 logger.error(f"Erro no download do arquivo: {download_error}")
-                await bot.send_message(
-                    chat_id,
-                    "❌ Erro no download do arquivo. Tente novamente ou use um arquivo menor."
-                )
+                await bot.send_message(chat_id, render_message("fatura_download_erro_generico"), parse_mode='HTML')
                 return
 
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -942,22 +935,7 @@ async def _processar_fatura_em_background(context: ContextTypes.DEFAULT_TYPE):
 
         if not transacoes_extraidas:
             # 🆕 NOVA MENSAGEM para layouts não suportados
-            await bot.send_message(
-                chat_id, 
-                "📄 <b>Layout da fatura não reconhecido</b>\n\n"
-                "⚠️ O layout da fatura do seu cartão não pode ser lido automaticamente.\n\n"
-                "🤝 <b>Quer nos ajudar?</b>\n"
-                "Se quiser usar essa função futuramente, ajude o desenvolvedor enviando "
-                "a fatura do seu cartão <b>OMITINDO TODOS OS SEUS DADOS PESSOAIS</b> "
-                "(números do cartão, CPF, valores, etc.), para que possamos suportar "
-                "sua fatura no futuro.\n\n"
-                "📧 <b>Como ajudar:</b>\n"
-                "• Remova/cubra todos os dados pessoais\n"
-                "• Mantenha apenas o layout das transações\n"
-                "• Envie para dev.henriquejfp@hotmail.com\n\n"
-                "💡 <i>Entretanto, você pode continuar usando o /lancamento manual!</i>",
-                parse_mode='HTML'
-            )
+            await bot.send_message(chat_id, render_message("fatura_layout_nao_reconhecido"), parse_mode='HTML')
             return
 
         # 2. Categorização com IA (tarefa muito mais simples agora)
@@ -1019,7 +997,7 @@ async def _processar_fatura_em_background(context: ContextTypes.DEFAULT_TYPE):
             user_db = get_or_create_user(db, user_id, full_name)
             cartoes = db.query(Conta).filter(Conta.id_usuario == user_db.id, Conta.tipo == 'Cartão de Crédito').all()
             if not cartoes:
-                await bot.send_message(chat_id, "Você não tem cartões de crédito cadastrados. Use `/configurar` para adicionar um e tente novamente.")
+                await bot.send_message(chat_id, render_message("fatura_sem_cartoes"), parse_mode='HTML')
                 return
 
             # 🎯 NOVO: Verificar se houve detecção de parcelas futuras
@@ -1028,7 +1006,18 @@ async def _processar_fatura_em_background(context: ContextTypes.DEFAULT_TYPE):
             botoes = [[InlineKeyboardButton(c.nome, callback_data=f"fatura_conta_{c.id}")] for c in cartoes]
             
             # 🎯 MENSAGEM SIMPLES: apenas resumo das transações extraídas
-            texto_principal = f"✅ Análise concluída! Encontrei <b>{len(transacoes_categorizadas)}</b> transações válidas."
+            nota_parcelas = ""
+            if _parcelas_detectadas_info['total'] > 0:
+                nota_parcelas = render_message(
+                    "fatura_nota_parcelas",
+                    total_parcelas=_parcelas_detectadas_info['total'],
+                    banco=_parcelas_detectadas_info['banco']
+                )
+            texto_principal = render_message(
+                "fatura_analise_concluida",
+                qtd_transacoes=len(transacoes_categorizadas),
+                nota_parcelas=nota_parcelas
+            )
             
             # ⚠️ AVISAR sobre parcelas detectadas (SEM detalhar ainda)
             logger.info(f"[FATURA DEBUG] Verificando parcelas detectadas: {_parcelas_detectadas_info}")
@@ -1105,10 +1094,7 @@ async def processar_fatura_pdf(update: Update, context: ContextTypes.DEFAULT_TYP
         name=f"fatura_proc_{user.id}_{datetime.now().timestamp()}"
     )
 
-    await update.message.reply_html(
-        "✅ Fatura recebida! Iniciei o processamento em segundo plano.\n\n"
-        "Este processo pode levar <b>até 1 minuto</b>. Eu te enviarei uma nova mensagem assim que terminar."
-    )
+    await update.message.reply_html(render_message("fatura_recebida_processando"))
 
     return AWAIT_CONTA_ASSOCIADA
 
@@ -1158,10 +1144,11 @@ async def associar_conta_e_confirmar(update: Update, context: ContextTypes.DEFAU
     if len(transacoes) > 15:
         preview_text += f"\n... e mais {len(transacoes) - 15} transações."
 
-    texto_confirmacao = (
-        f"<b>Confirme a Importação</b>\n\n<b>Transações encontradas:</b> {len(transacoes)}\n"
-        f"<b>Valor total:</b> R$ {total_valor:.2f}\n\n<b>Prévia:</b>\n{preview_text}\n\n"
-        "Deseja salvar todos esses lançamentos neste cartão?"
+    texto_confirmacao = render_message(
+        "fatura_confirm_importacao",
+        qtd=len(transacoes),
+        valor_total=total_valor,
+        preview=preview_text
     )
     keyboard = [[InlineKeyboardButton("✅ Sim, salvar", callback_data="fatura_confirm_save")],
                 [InlineKeyboardButton("❌ Cancelar", callback_data="fatura_confirm_cancel")]]
@@ -1172,7 +1159,7 @@ async def associar_conta_e_confirmar(update: Update, context: ContextTypes.DEFAU
 async def salvar_transacoes_em_lote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("💾 Verificando e salvando no banco de dados...")
+    await query.edit_message_text(render_message("fatura_salvando"), parse_mode='HTML')
 
     chat_id = update.effective_chat.id
     user_id = query.from_user.id
@@ -1199,14 +1186,11 @@ async def salvar_transacoes_em_lote(update: Update, context: ContextTypes.DEFAUL
             logger.warning(f"Dados não encontrados no user_data, tentando cache. Cache encontrado: {bool(cached_data)}")
 
     if not all([conta_id, transacoes]):
-        await query.edit_message_text("❌ Erro: Dados da sessão perdidos. Operação cancelada.")
-        
+        await query.edit_message_text(render_message("fatura_dados_sessao_perdidos"), parse_mode='HTML')
         # Limpar cache se existir
         if hasattr(context.application, 'fatura_cache'):
             cache_key = f"fatura_{chat_id}_{user_id}"
             context.application.fatura_cache.pop(cache_key, None)
-            
-        return ConversationHandler.END
         return ConversationHandler.END
 
     # O resto da função de salvar é praticamente a mesma
@@ -1276,67 +1260,62 @@ async def salvar_transacoes_em_lote(update: Update, context: ContextTypes.DEFAUL
             limpar_cache_usuario(usuario_db.id)
             
             # 🎯 NOVO FLUXO: Relatório detalhado + oferecer agendamento de parcelas
-            texto_sucesso = f"✅ <b>Importação Concluída!</b>\n\n"
-            texto_sucesso += f"📊 <b>Resumo:</b>\n"
-            texto_sucesso += f"• Transações processadas: <b>{total_processadas}</b>\n"
-            texto_sucesso += f"• Novas transações salvas: <b>{total_novas}</b>\n"
-            
-            if total_duplicadas > 0:
-                texto_sucesso += f"• Duplicadas ignoradas: <b>{total_duplicadas}</b> 🔄\n"
-                texto_sucesso += f"\n💡 <i>As duplicadas já estavam no seu sistema.</i>"
-            
-            # Verificar se há parcelas detectadas para oferecer agendamento
             global _parcelas_detectadas_info
+            linha_duplicadas = render_message("fatura_linha_duplicadas", total_duplicadas=total_duplicadas) if total_duplicadas > 0 else ""
+            nota_parcelas = ""
+            oferta_parcelas = ""
+            keyboard = None
             if _parcelas_detectadas_info['total'] > 0:
                 banco = _parcelas_detectadas_info['banco']
                 total_parcelas = _parcelas_detectadas_info['total']
                 detalhes = _parcelas_detectadas_info['detalhes']
-                
-                texto_sucesso += f"\n\n📅 <b>Parcelas Futuras Detectadas ({banco})</b>\n"
-                texto_sucesso += f"🔍 Encontrei <b>{total_parcelas} parcelamentos</b> que não foram lançados."
-                
+                # Montar exemplos
+                exemplos = ""
                 if detalhes:
-                    texto_sucesso += "\n\n📋 <b>Exemplos:</b>"
-                    for detalhe in detalhes[:3]:  # Máximo 3 exemplos
-                        if " - " in detalhe:
-                            nome = detalhe.split(" - ")[0][:20]  # Limitar tamanho
-                            parcela_info = detalhe.split(" - ")[-1] if "/" in detalhe else ""
-                            texto_sucesso += f"\n• {nome}... ({parcela_info})"
-                        else:
-                            texto_sucesso += f"\n• {detalhe[:25]}..."
-                
-                if total_parcelas > 3:
-                    texto_sucesso += f"\n... e mais {total_parcelas - 3} parcelas"
-                
-                texto_sucesso += f"\n\n💡 <b>Deseja incluir esses parcelamentos na função /agendar?</b>"
-                
-                # Botões para escolha
+                    exemplos_list = []
+                    for detalhe in detalhes[:3]:
+                        exemplos_list.append(render_message("fatura_exemplos_parcelas_item", descricao=detalhe[:40]))
+                    if total_parcelas > 3:
+                        exemplos_list.append(f"... e mais {total_parcelas - 3} parcelas")
+                    exemplos = "\n".join(exemplos_list)
+                nota_parcelas = render_message(
+                    "fatura_parcelas_detectadas_resumo",
+                    banco=banco,
+                    total_parcelas=total_parcelas,
+                    exemplos=exemplos
+                )
+                oferta_parcelas = ""
                 keyboard = [
-                    [InlineKeyboardButton("✅ Sim, incluir no /agendar", callback_data="fatura_agendar_sim")],
-                    [InlineKeyboardButton("❌ Não, obrigado", callback_data="fatura_agendar_nao")]
+                    [InlineKeyboardButton("✅ Incluir parcelamentos (/agendar)", callback_data="fatura_agendar_sim")],
+                    [InlineKeyboardButton("❌ Ignorar parcelas", callback_data="fatura_agendar_nao")]
                 ]
-                await query.edit_message_text(texto_sucesso, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-            else:
-                # Sem parcelas detectadas = apenas sucesso simples
-                await query.edit_message_text(texto_sucesso, parse_mode='HTML')
+            texto_sucesso = render_message(
+                "fatura_importacao_concluida",
+                total_processadas=total_processadas,
+                total_novas=total_novas,
+                linha_duplicadas=linha_duplicadas,
+                nota_parcelas=nota_parcelas,
+                oferta_parcelas=oferta_parcelas
+            )
+            await query.edit_message_text(texto_sucesso, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None)
         else:
             # Nenhuma transação nova para salvar
             if total_duplicadas > 0:
-                texto_duplicatas = f"🔄 <b>Todas as transações já existem!</b>\n\n"
-                texto_duplicatas += f"📊 <b>Resumo:</b>\n"
-                texto_duplicatas += f"• Transações processadas: <b>{total_processadas}</b>\n"
-                texto_duplicatas += f"• Duplicadas encontradas: <b>{total_duplicadas}</b>\n\n"
-                texto_duplicatas += f"💡 <i>Parece que esta fatura já foi importada anteriormente.</i>\n"
-                texto_duplicatas += f"✅ Nenhuma ação necessária - seus dados estão atualizados!"
-                
-                await query.edit_message_text(texto_duplicatas, parse_mode='HTML')
+                await query.edit_message_text(
+                    render_message(
+                        "fatura_todas_duplicadas",
+                        total_processadas=total_processadas,
+                        total_duplicadas=total_duplicadas
+                    ),
+                    parse_mode='HTML'
+                )
             else:
-                await query.edit_message_text("🤔 Nenhuma transação válida foi encontrada para salvar.")
+                await query.edit_message_text(render_message("fatura_nenhuma_valida"), parse_mode='HTML')
 
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao salvar transações em lote: {e}", exc_info=True)
-        await query.edit_message_text("❌ Ocorreu um erro grave ao tentar salvar as transações.")
+        await query.edit_message_text(render_message("fatura_erro_grave"), parse_mode='HTML')
     finally:
         db.close()
         # Limpar dados da sessão
@@ -1469,24 +1448,18 @@ async def callback_agendar_parcelas_sim(update: Update, context: ContextTypes.DE
         _parcelas_detectadas_info = {'total': 0, 'banco': None, 'detalhes': [], 'parcelas_completas': []}
         
         await query.edit_message_text(
-            f"✅ <b>Agendamentos Criados!</b>\n\n"
-            f"📅 <b>{parcelas_criadas}</b> parcelas foram agendadas\n"
-            f"🏦 Banco: <b>{banco}</b>\n"
-            f"📝 Tipo: <b>Mensais</b>\n\n"
-            f"💡 Use <b>/agendar</b> para visualizar e editar os valores das parcelas.\n\n"
-            f"⚠️ <i>Os valores foram definidos como R$ 100,00 por padrão - ajuste conforme necessário!</i>",
+            render_message(
+                "fatura_parcelas_criadas",
+                qtd=parcelas_criadas,
+                banco=banco
+            ),
             parse_mode='HTML'
         )
         
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao criar agendamentos de parcelas: {e}", exc_info=True)
-        await query.edit_message_text(
-            "❌ <b>Erro!</b>\n\n"
-            "Ocorreu um erro ao criar os agendamentos das parcelas.\n\n"
-            "💡 Tente usar /agendar manualmente ou processe a fatura novamente.",
-            parse_mode='HTML'
-        )
+        await query.edit_message_text(render_message("fatura_parcelas_erro_criar"), parse_mode='HTML')
     finally:
         db.close()
 
@@ -1499,20 +1472,11 @@ async def callback_agendar_parcelas_nao(update: Update, context: ContextTypes.DE
     global _parcelas_detectadas_info
     _parcelas_detectadas_info = {'total': 0, 'banco': None, 'detalhes': [], 'parcelas_completas': []}
     
-    await query.edit_message_text(
-        "✅ <b>Tudo certo!</b>\n\n"
-        "Os lançamentos foram salvos com sucesso. As parcelas futuras não foram incluídas.\n\n"
-        "💡 <i>Se mudar de ideia, pode usar /agendar a qualquer momento!</i>",
-        parse_mode='HTML'
-    )
+    await query.edit_message_text(render_message("fatura_parcelas_nao_incluidas"), parse_mode='HTML')
 
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_html(
-        "📄 <b>Analisador de Faturas de Cartão</b>\n\n"
-        "🚧 <b><i>Esta função ainda está em desenvolvimento. Alguns comportamentos inesperados podem acontecer.</i></b>\n\n"
-        "Envie o arquivo PDF da sua fatura e eu vou extrair todas as transações para você! ✨"
-    )
+    await update.message.reply_html(render_message("fatura_start_intro"))
     return AWAIT_FATURA_PDF
 
 # --- HANDLER CONVERSATION ---

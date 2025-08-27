@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from database.database import get_db
 from models import Usuario, Lancamento
 from .gamification_service import LEVELS, award_xp
+from .messages import render_message
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import random
@@ -13,13 +14,13 @@ import random
 logger = logging.getLogger(__name__)
 
 async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """🎮 PERFIL GAMER ULTRA PERSONALIZADO - Sistema viciante!"""
+    """Exibe perfil gamificado usando catálogo Alfredo."""
     user_id = update.effective_user.id
     db: Session = next(get_db())
     try:        
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario:
-            await update.message.reply_text("❌ Usuário não encontrado. Use /start para começar sua jornada!")
+            await update.message.reply_text(render_message("gamif_usuario_nao_encontrado", tone="error"))
             return
 
         # 🎯 DADOS PERSONALIZADOS
@@ -39,23 +40,26 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
             xp_atual = usuario.xp
             xp_necessario = next_level_info["xp_necessario"]
             xp_anterior = LEVELS.get(usuario.level, {}).get("xp_necessario", 0)
-            
-            # Progresso no nível atual
             xp_progresso = xp_atual - xp_anterior
             xp_meta = xp_necessario - xp_anterior
-            
             progresso_percent = int((xp_progresso / xp_meta) * 100) if xp_meta > 0 else 100
             progresso_bars = progresso_percent // 10
-            
-            # 🎨 BARRA VISUAL ÉPICA
             filled_bar = "🟩" * progresso_bars
             empty_bar = "⬜" * (10 - progresso_bars)
             progress_bar = filled_bar + empty_bar
-            
             xp_faltante = xp_necessario - xp_atual
-            progress_text = f"📊 PROGRESSO PARA NÍVEL {usuario.level + 1}\n{progress_bar} {progresso_percent}%\n💫 Faltam apenas {xp_faltante} XP para subir!"
+            progress_text = render_message(
+                "gamif_perfil_progress_template",
+                proximo_nivel=usuario.level + 1,
+                progress_bar=progress_bar,
+                progresso_percent=progresso_percent,
+                xp_faltante=xp_faltante
+            )
         else:
-            progress_text = f"👑 NÍVEL MÁXIMO ALCANÇADO!\n⭐ {usuario.xp} XP - Você é uma LENDA!"
+            progress_text = render_message(
+                "gamif_perfil_progress_max",
+                xp_formatado=f"{usuario.xp:,}".replace(",", ".")
+            )
         
         # 🔥 STREAK VISUAL
         streak_visual = ""
@@ -135,36 +139,35 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         frase_motivacional = random.choice(frases_motivacionais)
         
         # 🎨 MENSAGEM ÉPICA PERSONALIZADA
-        mensagem = (
-            f"╭─────────────────────╮\n"
-            f"│  🎮 SEU PERFIL GAMER  │\n"
-            f"╰─────────────────────╯\n\n"
-            f"{user_emoji} <b>{nome_display.upper()}</b>\n"
-            f"🏅 {titulo_especial}\n"
-            f"🏆 Nível {usuario.level} - {level_info.get('titulo', 'Novato')}\n"
-            f"⭐ <b>{usuario.xp:,} XP</b> acumulados\n"
-            f"📊 <b>{total_transacoes}</b> transações registradas\n"
-            f"📅 <b>{transacoes_semana}</b> esta semana\n\n"
-            f"{streak_visual}\n"
-            f"🔥 <b>{usuario.streak_dias} DIAS</b> consecutivos\n\n"
-            f"{progress_text}\n\n"
+        mensagem = render_message(
+            "gamif_perfil_header",
+            user_emoji=user_emoji,
+            nome_display_upper=nome_display.upper(),
+            titulo_especial=titulo_especial,
+            nivel=usuario.level,
+            level_titulo=level_info.get('titulo', 'Novato'),
+            xp_formatado=f"{usuario.xp:,}".replace(",", "."),
+            total_transacoes=total_transacoes,
+            transacoes_semana=transacoes_semana,
+            streak_visual=streak_visual,
+            streak_dias=usuario.streak_dias,
+            progress_text=progress_text
         )
         
         # 🏆 SEÇÃO DE CONQUISTAS
         if conquistas_desbloqueadas:
-            mensagem += "🏆 <b>CONQUISTAS DESBLOQUEADAS:</b>\n"
+            mensagem += render_message("gamif_conquistas_desbloqueadas_label") + "\n"
             for conquista in conquistas_desbloqueadas[-3:]:  # Últimas 3
                 mensagem += f"✅ {conquista}\n"
             mensagem += "\n"
         
         if conquistas_proximas:
-            mensagem += "🎯 <b>PRÓXIMAS CONQUISTAS:</b>\n"
+            mensagem += render_message("gamif_conquistas_proximas_label") + "\n"
             for conquista in conquistas_proximas[:2]:  # 2 primeiras
                 mensagem += f"🎯 {conquista}\n"
             mensagem += "\n"
-        
-        mensagem += f"💭 {frase_motivacional}\n\n"
-        mensagem += "🎮 <b>Use os botões abaixo para explorar mais!</b>"
+
+        mensagem += f"💭 {frase_motivacional}\n\n" + render_message("gamif_perfil_footer")
         
         # 🎨 TECLADO INTERATIVO ÉPICO
         keyboard = [
@@ -188,20 +191,15 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """🏆 RANKINGS GLOBAIS SUPER COMPETITIVOS - Sistema viciante!"""
+    """Exibe rankings globais com catálogo Alfredo."""
     user_id = update.effective_user.id
     db: Session = next(get_db())
     try:
         # Ranking de XP Global
         top_10_xp = db.query(Usuario).order_by(Usuario.xp.desc()).limit(10).all()
-        
+
         # 🎨 HEADER ÉPICO
-        ranking_str = (
-            "╭─────────────────────╮\n"
-            "│ 🏆 HALL DA FAMA 🏆 │\n"
-            "╰─────────────────────╯\n\n"
-            "🔥 <b>TOP PLAYERS DO MUNDO!</b> 🔥\n\n"
-        )
+        ranking_str = render_message("gamif_rankings_header")
         
         # 🏆 TROFÉUS ESPECIAIS
         trophy_emojis = ["🥇", "🥈", "🥉"]
@@ -243,10 +241,7 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except (ValueError, AttributeError):
             ranking_str += "\n🎯 <b>Sua posição aparecerá aqui quando ganhar XP!</b>\n\n"
 
-        ranking_str += "═══════════════════════\n\n"
-        ranking_str += "💵 <b>RANKING SEMANAL DE ECONOMIA</b>\n"
-        ranking_str += "🚧 Em desenvolvimento! Grandes novidades chegando!\n\n"
-        ranking_str += "💡 <i>Dica: Use /perfil para ver seu progresso detalhado!</i>"
+        ranking_str += render_message("gamif_rankings_weekly_placeholder")
 
         await update.message.reply_html(ranking_str)
 
@@ -264,14 +259,14 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
     try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario:
-            await query.edit_message_text("❌ Usuário não encontrado.")
+            await query.edit_message_text(render_message("gamif_usuario_nao_encontrado", tone="error"))
             return
         
         if query.data == "show_rankings":
             # 🏆 RANKINGS SUPER COMPETITIVOS
             top_10_xp = db.query(Usuario).order_by(Usuario.xp.desc()).limit(10).all()
             
-            ranking_str = "🏆 <b>HALL DA FAMA GLOBAL</b> 🏆\n\n"
+            ranking_str = render_message("gamif_ranking_titulo")
             
             for i, u in enumerate(top_10_xp):
                 emoji = ["🥇", "🥈", "🥉"][i] if i < 3 else f"🔹 {i+1}º"
@@ -284,7 +279,7 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
                     ranking_str += f"{emoji} {nome}\n"
                     ranking_str += f"     🏆 Nível {u.level} | ⭐ {u.xp:,} XP\n\n"
             
-            ranking_str += "💪 <b>Continue evoluindo para chegar ao topo!</b>"
+            ranking_str += render_message("gamif_ranking_footer")
             await query.edit_message_text(ranking_str, parse_mode='HTML')
             
         elif query.data == "show_stats":
@@ -331,12 +326,7 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
             
         elif query.data == "show_rewards":
             # 💎 SISTEMA DE RECOMPENSAS ULTRA COMPLETO
-            rewards_str = (
-                f"╭─────────────────────╮\n"
-                f"│ 💎 SISTEMA DE XP 💎 │\n"
-                f"╰─────────────────────╯\n\n"
-                f"🎯 <b>COMO GANHAR XP:</b>\n\n"
-                
+            rewards_str = render_message("gamif_rewards_header") + "\n\n" + (
                 f"📝 <b>LANÇAMENTOS & REGISTROS:</b>\n"
                 f"• Registrar transação: <b>+10 XP</b>\n"
                 f"• Usar OCR (foto/cupom): <b>+25 XP</b>\n"
@@ -394,7 +384,7 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
             else:
                 rewards_str += f"👑 Você já tem o máximo bonus de streak!\n"
             
-            rewards_str += f"\n💪 <b>Cada ação conta para sua evolução financeira!</b>"
+            rewards_str += "\n" + render_message("gamif_rewards_footer_hint")
             
             await query.edit_message_text(rewards_str, parse_mode='HTML')
             
@@ -404,11 +394,7 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
                 Lancamento.id_usuario == usuario.id
             ).scalar() or 0
             
-            achievements_str = (
-                f"╭─────────────────────╮\n"
-                f"│ 🏅 SUAS CONQUISTAS 🏅│\n"
-                f"╰─────────────────────╯\n\n"
-            )
+            achievements_str = render_message("gamif_achievements_header")
             
             # Conquistas desbloqueadas
             unlocked = []
@@ -441,28 +427,18 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
                     achievements_str += f"📈 {achievement}\n"
                 achievements_str += "\n"
             
-            achievements_str += "💪 <b>Continue evoluindo para desbloquear mais!</b>"
+                achievements_str += render_message("gamif_achievements_footer")
             
             await query.edit_message_text(achievements_str, parse_mode='HTML')
             
         elif query.data == "show_challenges":
             # 🎯 DESAFIOS DIÁRIOS
-            challenges_str = (
-                f"╭─────────────────────╮\n"
-                f"│ 🎯 DESAFIOS DIÁRIOS │\n"
-                f"╰─────────────────────╯\n\n"
-                f"🔥 <b>MISSÕES DE HOJE:</b>\n\n"
-                f"📝 Registre 3 transações (+30 XP)\n"
-                f"💬 Use a IA 2 vezes (+20 XP)\n"
-                f"📊 Gere 1 gráfico (+15 XP)\n"
-                f"🔥 Mantenha seu streak (+10 XP)\n\n"
-                f"🎁 <b>BÔNUS SEMANAL:</b>\n"
-                f"🏆 Complete 7 dias seguidos\n"
-                f"💎 Ganhe <b>100 XP EXTRA!</b>\n\n"
-                f"⏰ <b>Reinicia em:</b> Meia-noite\n\n"
-                f"💪 <b>Aceite o desafio e domine suas finanças!</b>"
+            challenges_str = render_message(
+                "gamif_desafios_header"
+            ) + render_message(
+                "gamif_challenges_body",
+                footer=render_message("gamif_desafios_footer")
             )
-            
             await query.edit_message_text(challenges_str, parse_mode='HTML')
             
     finally:

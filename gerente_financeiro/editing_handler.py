@@ -44,6 +44,7 @@ from database.database import (
 )
 from models import Categoria, Subcategoria
 from .handlers import cancel, criar_teclado_colunas
+from .messages import render_message, format_money
 from .states import (
     CHOOSE_METHOD, AWAIT_SEARCH_QUERY, CHOOSE_LANCAMENTO,
     CHOOSE_FIELD_TO_EDIT, AWAIT_NEW_VALUE,
@@ -65,7 +66,7 @@ async def start_editing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         [InlineKeyboardButton("❌ Cancelar", callback_data="method_cancel")]
     ]
     await update.message.reply_text(
-        "Para editar um lançamento, primeiro precisamos encontrá-lo. Como prefere fazer?",
+        render_message("editar_intro"),
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return CHOOSE_METHOD
@@ -78,17 +79,17 @@ async def choose_search_method(update: Update, context: ContextTypes.DEFAULT_TYP
     method = query.data.split('_')[1]
 
     if method == "cancel":
-        await query.edit_message_text("Operação cancelada.")
+        await query.edit_message_text(render_message("editar_cancelada"))
         return ConversationHandler.END
 
     if method == "search":
-        await query.edit_message_text("Ok, digite parte do nome do lançamento que você procura (ex: iFood, Renner):")
+        await query.edit_message_text(render_message("editar_busca_prompt"))
         return AWAIT_SEARCH_QUERY
 
     if method == "last":
         lancamentos = buscar_lancamentos_usuario(query.from_user.id, limit=5)
         if not lancamentos:
-            await query.edit_message_text("Não encontrei nenhum lançamento recente.")
+            await query.edit_message_text(render_message("editar_nenhum_recente"))
             return ConversationHandler.END
         
         botoes = []
@@ -96,10 +97,9 @@ async def choose_search_method(update: Update, context: ContextTypes.DEFAULT_TYP
             emoji = "🔴" if lanc.tipo == 'Saída' else "🟢"
             label = f"{emoji} {lanc.descricao[:20]} (R${lanc.valor:.2f})"
             botoes.append([InlineKeyboardButton(label, callback_data=f"select_{lanc.id}")])
-        botoes.append([InlineKeyboardButton("❌ Cancelar", callback_data="select_cancel")])
-        
-        await query.edit_message_text("Selecione o lançamento para editar:", reply_markup=InlineKeyboardMarkup(botoes))
-        return CHOOSE_LANCAMENTO
+    botoes.append([InlineKeyboardButton("❌ Cancelar", callback_data="select_cancel")])
+    await query.edit_message_text(render_message("editar_selecione"), reply_markup=InlineKeyboardMarkup(botoes))
+    return CHOOSE_LANCAMENTO
 
 
 async def list_search_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -109,8 +109,7 @@ async def list_search_results(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if not lancamentos:
         await update.message.reply_text(
-            f"Não encontrei nenhum lançamento com '{search_term}'.\n"
-            "Tente outro nome ou use /cancelar para sair."
+            render_message("editar_nenhum_busca", termo=search_term)
         )
         return AWAIT_SEARCH_QUERY  # Permite ao usuário tentar de novo
 
@@ -121,7 +120,7 @@ async def list_search_results(update: Update, context: ContextTypes.DEFAULT_TYPE
         botoes.append([InlineKeyboardButton(label, callback_data=f"select_{lanc.id}")])
     botoes.append([InlineKeyboardButton("❌ Cancelar", callback_data="select_cancel")])
 
-    await update.message.reply_text("Encontrei estes lançamentos. Qual você quer editar?", reply_markup=InlineKeyboardMarkup(botoes))
+    await update.message.reply_text(render_message("editar_selecione"), reply_markup=InlineKeyboardMarkup(botoes))
     return CHOOSE_LANCAMENTO
 
 
@@ -141,13 +140,12 @@ async def _get_cockpit_text_and_keyboard(context: ContextTypes.DEFAULT_TYPE):
     
     categoria_full_str = f"{categoria_str} / {subcategoria_str}" if subcategoria_str else categoria_str
 
-    text = (
-        f"<b>⚙️ Editando Lançamento</b>\n\n"
-        f"<b>Descrição:</b> {desc}\n"
-        f"<b>Valor:</b> <code>R$ {valor:.2f}</code>\n"
-        f"<b>Data:</b> {data_str}\n"
-        f"<b>Categoria:</b> {categoria_full_str}\n\n"
-        "Selecione o campo que deseja alterar ou uma ação:"
+    text = render_message(
+        "editar_cockpit",
+        descricao=desc,
+        valor=format_money(valor),
+        data=data_str,
+        categoria=categoria_full_str
     )
     keyboard = [
         [InlineKeyboardButton("✏️ Descrição", callback_data="edit_descricao")],
@@ -168,14 +166,14 @@ async def select_lancamento_to_edit(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     
     if "cancel" in query.data:
-        await query.edit_message_text("Operação cancelada.")
+        await query.edit_message_text(render_message("editar_cancelada"))
         return ConversationHandler.END
 
     lanc_id = int(query.data.split('_')[1])
     resultados = buscar_lancamentos_usuario(query.from_user.id, lancamento_id=lanc_id)
 
     if not resultados:
-        await query.edit_message_text("❌ Erro: Lançamento não encontrado.")
+        await query.edit_message_text(render_message("editar_lancamento_nao_encontrado"))
         return ConversationHandler.END
 
     lanc = resultados[0]
@@ -211,14 +209,18 @@ async def choose_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYP
         data_to_update = {k: v for k, v in context.user_data['edit_data'].items() if k not in ['id', 'categoria_nome', 'subcategoria_nome']}
         
         atualizado = atualizar_lancamento_por_id(lanc_id, query.from_user.id, data_to_update)
-        msg = "✅ Lançamento atualizado com sucesso!" if atualizado else "❌ Erro ao salvar."
-        await query.edit_message_text(msg)
+        msg_key = "editar_atualizado_sucesso" if atualizado else "editar_atualizado_erro"
+        await query.edit_message_text(
+            render_message(msg_key, tone="success" if atualizado else "error")
+        )
         return ConversationHandler.END
 
     if field == "delete":
         deletado = deletar_lancamento_por_id(context.user_data['edit_data']['id'], query.from_user.id)
-        msg = "🗑️ Lançamento apagado com sucesso!" if deletado else "❌ Erro ao apagar."
-        await query.edit_message_text(msg)
+        msg_key = "editar_deletado_sucesso" if deletado else "editar_deletado_erro"
+        await query.edit_message_text(
+            render_message(msg_key, tone="success" if deletado else "error")
+        )
         return ConversationHandler.END
     
     if field == "categoria":
@@ -226,18 +228,18 @@ async def choose_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYP
         categorias = db.query(Categoria).order_by(Categoria.nome).all()
         db.close()
         botoes = [InlineKeyboardButton(c.nome, callback_data=f"newcat_{c.id}") for c in categorias]
-        teclado = criar_teclado_colunas(botoes, 2)
-        await query.edit_message_text("Selecione a nova categoria:", reply_markup=InlineKeyboardMarkup(teclado))
-        return AWAIT_NEW_CATEGORY
+    teclado = criar_teclado_colunas(botoes, 2)
+    await query.edit_message_text(render_message("editar_selecione_categoria"), reply_markup=InlineKeyboardMarkup(teclado))
+    return AWAIT_NEW_CATEGORY
 
     # Para campos de texto
     context.user_data['field_to_edit'] = field
     prompt_map = {
-        "descricao": "Qual a nova descrição?",
-        "valor": "Qual o novo valor? (ex: 54.30)",
-        "data": "Qual a nova data? (DD/MM/AAAA)"
+        "descricao": render_message("editar_prompt_descricao"),
+        "valor": render_message("editar_prompt_valor"),
+        "data": render_message("editar_prompt_data")
     }
-    await query.edit_message_text(prompt_map.get(field, "Envie o novo valor:"))
+    await query.edit_message_text(prompt_map.get(field, render_message("editar_prompt_descricao")))
     return AWAIT_NEW_VALUE
 
 
@@ -257,7 +259,7 @@ async def receive_new_value(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_html(text, reply_markup=keyboard)
         return CHOOSE_FIELD_TO_EDIT
     except (ValueError, TypeError):
-        await update.message.reply_text("⚠️ Formato inválido. Por favor, tente novamente:")
+        await update.message.reply_text(render_message("editar_formato_invalido", tone="error"))
         return AWAIT_NEW_VALUE
 
 
@@ -286,7 +288,7 @@ async def receive_new_category(update: Update, context: ContextTypes.DEFAULT_TYP
     botoes = [InlineKeyboardButton(s.nome, callback_data=f"newsubcat_{s.id}") for s in subcategorias]
     teclado = criar_teclado_colunas(botoes, 2)
     teclado.append([InlineKeyboardButton("↩️ Sem Subcategoria", callback_data="newsubcat_0")])
-    await query.edit_message_text("Selecione a nova subcategoria:", reply_markup=InlineKeyboardMarkup(teclado))
+    await query.edit_message_text(render_message("editar_selecione_subcategoria"), reply_markup=InlineKeyboardMarkup(teclado))
     return AWAIT_NEW_SUBCATEGORY
 
 

@@ -66,6 +66,7 @@ from telegram.ext import (
 
 import config
 from .handlers import cancel
+from .messages import render_message
 from .states import MENU_CONTATO, AWAIT_SUBJECT, AWAIT_BODY
 from email.utils import formataddr
 
@@ -168,13 +169,7 @@ async def contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    text = (
-        "🙋‍♂️ <i><b>Desenvolvido com 💙 por Henrique de Jesus Freitas Pereira</b></i>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💬 <b>Quer falar comigo?</b>\n\n"
-        "Sinta-se à vontade para enviar uma sugestão, relatar um problema, mandar um alô ou até me oferecer um cafézinho ☕🙂\n\n "
-        "Escolha uma opção abaixo:"
-    )
+    text = render_message("contact_menu_intro")
 
     if hasattr(update, 'callback_query') and update.callback_query:
         await update.callback_query.message.edit_text(text, reply_markup=reply_markup, parse_mode='HTML')
@@ -192,11 +187,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     if action == "contact_message":
         context.user_data['contact_info'] = {}
-        await query.edit_message_text(
-            "✍️ <b>Vamos lá! Qual é o assunto da sua mensagem?</b>\n\n"
-            "<i>Exemplos: Sugestão para o /gerente, Bug no OCR, Dúvida sobre metas...</i>",
-            parse_mode='HTML'
-        )
+        await query.edit_message_text(render_message("contact_assunto_prompt"), parse_mode='HTML')
         return AWAIT_SUBJECT
 
     elif action == "contact_pix":
@@ -206,22 +197,17 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         if not pix_key:
             logger.error("❌ A variável PIX_KEY não está configurada no Render Environment")
-            await query.edit_message_text("❤️ <b>Ops!</b> Parece que minha chave PIX tirou uma folga. Agradeço imensamente sua intenção!")
+            await query.edit_message_text(render_message("contact_pix_indisponivel"))
             return ConversationHandler.END
 
         logger.info("✅ PIX_KEY configurado corretamente, exibindo para usuário")
-        text = (
-            "❤️ <b>Gratidão pelo seu apoio!</b>\n\n"
-            "Seu cafezinho faz toda a diferença para manter o Maestro ativo e em constante evolução. ☕💡\n\n"
-            "👇 <b>Toque na chave abaixo para copiar:</b>\n\n"
-            f"<code>{pix_key}</code>"
-        )
+        text = render_message("contact_pix_info", pix_key=pix_key)
         keyboard = [[InlineKeyboardButton("↩️ Voltar", callback_data="contact_back_to_menu")]]
         await query.edit_message_text(text=text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         return MENU_CONTATO
 
     elif action == "contact_close":
-        await query.edit_message_text("✅ Ok, sem problemas! Se precisar, é só chamar.")
+        await query.edit_message_text(render_message("contact_close"))
         return ConversationHandler.END
     
     elif action == "contact_back_to_menu":
@@ -231,11 +217,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def receive_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Salva o assunto e pede o corpo da mensagem."""
     context.user_data['contact_info']['subject'] = update.message.text
-    await update.message.reply_html(
-        "✅ <b>Assunto registrado com sucesso!</b>\n\n"
-        "Agora me conte os detalhes da sua mensagem. Quanto mais informações você puder compartilhar, melhor poderei entender e ajudar.\n\n"
-        "<i>Importante: Este canal é de envio único. Se quiser receber uma resposta, inclua um meio de contato (como seu e-mail) no corpo da mensagem.</i>"
-    )
+    await update.message.reply_html(render_message("contact_assunto_registrado"))
     return AWAIT_BODY
 
 
@@ -246,7 +228,7 @@ async def receive_body_and_send(update: Update, context: ContextTypes.DEFAULT_TY
     body = update.message.text
     user = update.effective_user
 
-    await update.message.reply_text("Enviando sua mensagem... 🚀")
+    await update.message.reply_text(render_message("contact_enviando"))
 
     # --- CORREÇÃO APLICADA AQUI ---
     # Usando a forma moderna do asyncio para rodar a função síncrona 'send_email'
@@ -260,10 +242,9 @@ async def receive_body_and_send(update: Update, context: ContextTypes.DEFAULT_TY
     # -------------------------------
 
     if success:
-        await update.message.reply_text("✅ Sua mensagem foi enviada com sucesso! Muito obrigado pelo seu feedback.")
+        await update.message.reply_text(render_message("contact_email_sucesso"))
     else:
-        # A mensagem de erro agora é mais específica para o usuário.
-        await update.message.reply_text("❌ Desculpe, ocorreu um erro no servidor de e-mails e não consegui enviar sua mensagem. Por favor, tente novamente mais tarde.")
+        await update.message.reply_text(render_message("contact_email_falha"))
         
     context.user_data.pop('contact_info', None)
     return ConversationHandler.END

@@ -43,6 +43,7 @@ from telegram.ext import (
 # --- CORREÇÃO: Importamos as funções do ocr_handler, mas não os estados ---
 from .ocr_handler import ocr_iniciar_como_subprocesso, ocr_action_processor
 from .handlers import cancel, criar_teclado_colunas
+from .messages import render_message, format_money
 from .utils_validation import (
     validar_valor_monetario, validar_descricao,
     ask_valor_generico, ask_descricao_generica
@@ -64,12 +65,7 @@ async def show_launch_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, m
     """
     Exibe o menu principal de lançamento de forma consistente.
     """
-    text = message_text or (
-        "💰 <b>Novo Lançamento</b>\n\n"
-        "Como você quer registrar esta transação?\n\n"
-        "📸 <b>Mais fácil:</b> Envie uma foto do cupom\n"
-        "⌨️ <b>Manual:</b> Digite os dados passo a passo"
-    )
+    text = message_text or render_message("manual_menu_intro")
     
     keyboard = [
         [
@@ -127,10 +123,7 @@ async def start_manual_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     emoji = "🟢" if tipo == "Entrada" else "🔴"
     
     await query.edit_message_text(
-        f"{emoji} <b>{tipo}</b>\n\n"
-        f"📝 <b>Descrição:</b>\n"
-        f"O que foi esta {tipo.lower()}?\n\n"
-        f"💡 <i>Exemplos: Almoço no restaurante, Salário, Uber para casa</i>",
+        render_message("manual_inicio_tipo", emoji=emoji, tipo=tipo),
         parse_mode='HTML'
     )
     
@@ -143,12 +136,7 @@ async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Validação simples de descrição
     if len(descricao_texto) < 2 or len(descricao_texto) > 200:
-        await update.message.reply_text(
-            "⚠️ <b>Descrição muito curta ou longa</b>\n\n"
-            "Use entre 2 e 200 caracteres\n"
-            "💡 <i>Exemplo: Almoço no restaurante</i>",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(render_message("manual_desc_invalida"), parse_mode='HTML')
         return ASK_DESCRIPTION
     
     # Salva a descrição
@@ -159,100 +147,95 @@ async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     emoji = "🟢" if tipo == "Entrada" else "🔴"
     
     await update.message.reply_text(
-        f"{emoji} <b>{descricao_texto}</b>\n\n"
-        f"💰 <b>Qual o valor?</b>\n\n"
-        f"💡 <i>Exemplos:</i>\n"
-        f"• <code>150</code>\n"
-        f"• <code>25.50</code>\n"
-        f"• <code>1500.00</code>",
+        render_message("manual_pedir_valor", emoji=emoji, descricao=descricao_texto),
         parse_mode='HTML'
     )
     
     return ASK_VALUE
 
 async def ask_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Processa o valor e vai para seleção de conta"""
-    # Validação mais robusta do valor
-    valor_texto = update.message.text.strip().replace('R$', '').replace(' ', '').replace(',', '.')
-    
+    """Processa o valor informado e direciona para a escolha da conta."""
+    valor_texto = (
+        update.message.text.strip()
+        .replace('R$', '')
+        .replace(' ', '')
+        .replace(',', '.')
+    )
+
     try:
         valor = float(valor_texto)
         if valor <= 0:
-            raise ValueError("Valor deve ser positivo")
+            raise ValueError
     except ValueError:
         await update.message.reply_text(
-            "⚠️ <b>Valor inválido</b>\n\n"
-            "Digite apenas números\n\n"
-            "💡 <i>Exemplos válidos:</i>\n"
-            "• <code>150</code>\n"
-            "• <code>25.50</code>\n"
-            "• <code>1500.00</code>",
+            render_message("manual_valor_invalido"),
             parse_mode='HTML'
         )
         return ASK_VALUE
-    
-    # Salva o valor
+
+    # Persistimos valor válido
     context.user_data['novo_lancamento']['valor'] = valor
-    
-    # Busca contas do usuário
+
     db = next(get_db())
     try:
-        user_db = db.query(Usuario).filter(Usuario.telegram_id == update.effective_user.id).first()
+        user_db = db.query(Usuario).filter(
+            Usuario.telegram_id == update.effective_user.id
+        ).first()
         if not user_db:
-            await update.message.reply_text("❌ Usuário não encontrado. Use /start para se cadastrar.")
+            await update.message.reply_text(
+                render_message("manual_usuario_nao_encontrado", tone="error"),
+                parse_mode='HTML'
+            )
             return ConversationHandler.END
-            
-        # Filtrar contas baseado no tipo de lançamento
+
         tipo_lancamento = context.user_data['novo_lancamento']['tipo']
-        
         if tipo_lancamento == "Entrada":
-            # Para entrada, só contas bancárias (não cartões)
             contas = db.query(Conta).filter(
                 Conta.id_usuario == user_db.id,
                 Conta.tipo == "Conta"
             ).all()
             tipo_texto = "contas bancárias"
         else:
-            # Para saída, todas as opções (contas e cartões)
-            contas = db.query(Conta).filter(Conta.id_usuario == user_db.id).all()
+            contas = db.query(Conta).filter(
+                Conta.id_usuario == user_db.id
+            ).all()
             tipo_texto = "contas/cartões"
-        
+
         if not contas:
             await update.message.reply_text(
-                f"❌ <b>Nenhuma {tipo_texto} cadastrada</b>\n\n"
-                "Use /configurar para adicionar suas contas primeiro.",
+                render_message("manual_sem_contas", tipo_texto=tipo_texto),
                 parse_mode='HTML'
             )
             return ConversationHandler.END
 
-        # Cria botões para as contas de forma mais organizada
-        botoes = []
+        botoes: list[InlineKeyboardButton] = []
         for conta in contas:
-            # Emoji baseado no tipo
             emoji = "🏦" if conta.tipo == "Conta" else "💳"
-            botoes.append(InlineKeyboardButton(
-                f"{emoji} {conta.nome}", 
-                callback_data=f"manual_conta_{conta.id}"
-            ))
-        
-        # Organiza em 2 colunas
+            botoes.append(
+                InlineKeyboardButton(
+                    f"{emoji} {conta.nome}",
+                    callback_data=f"manual_conta_{conta.id}"
+                )
+            )
+
         teclado = criar_teclado_colunas(botoes, 2)
-        
         descricao = context.user_data['novo_lancamento']['descricao']
         tipo = context.user_data['novo_lancamento']['tipo']
-        emoji_tipo = "🟢" if tipo == "Entrada" else "�"
-        
+        emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
+
         await update.message.reply_text(
-            f"{emoji_tipo} <b>{descricao}</b>\n"
-            f"💰 R$ {valor:.2f}\n\n"
-            f"🏦 <b>Qual {tipo_texto}?</b>\n"
-            f"Selecione de onde {'entrou' if tipo_lancamento == 'Entrada' else 'saiu'} o dinheiro:",
+            render_message(
+                "manual_escolher_conta",
+                emoji=emoji_tipo,
+                descricao=descricao,
+                valor=format_money(valor),
+                tipo_texto=tipo_texto,
+                origem_verbo='entrou' if tipo_lancamento == 'Entrada' else 'saiu'
+            ),
             reply_markup=InlineKeyboardMarkup(teclado),
             parse_mode='HTML'
         )
-        
         return ASK_CONTA
-        
     finally:
         db.close()
 
@@ -292,11 +275,14 @@ async def ask_conta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         emoji_conta = "🏦" if conta_obj.tipo == "Conta" else "💳"
         
         await query.edit_message_text(
-            f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-            f"💰 R$ {dados['valor']:.2f}\n"
-            f"{emoji_conta} {conta_obj.nome}\n\n"
-            f"📂 <b>Categoria:</b>\n"
-            f"Em que categoria se encaixa?",
+            render_message(
+                "manual_categoria",
+                emoji=emoji_tipo,
+                descricao=dados['descricao'],
+                valor=format_money(dados['valor']),
+                conta_emoji=emoji_conta,
+                conta_nome=conta_obj.nome
+            ),
             reply_markup=InlineKeyboardMarkup(teclado),
             parse_mode='HTML'
         )
@@ -351,11 +337,13 @@ async def ask_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
         
         await query.edit_message_text(
-            f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-            f"💰 R$ {dados['valor']:.2f}\n"
-            f"📂 {categoria.nome}\n\n"
-            f"🏷️ <b>Subcategoria:</b>\n"
-            f"Escolha uma subcategoria mais específica:",
+            render_message(
+                "manual_subcategoria",
+                emoji=emoji_tipo,
+                descricao=dados['descricao'],
+                valor=format_money(dados['valor']),
+                categoria=categoria.nome
+            ),
             reply_markup=InlineKeyboardMarkup(teclado),
             parse_mode='HTML'
         )
@@ -410,14 +398,12 @@ async def ask_data_directly(update, context, categoria_nome=None, subcategoria_n
         categoria_texto += f" → {subcategoria_nome}"
     
     # Pergunta a data
-    texto = (
-        f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-        f"💰 R$ {dados['valor']:.2f}\n"
-        f"📂 {categoria_texto}\n\n"
-        f"📅 <b>Data da transação:</b>\n"
-        f"Digite a data ou 'hoje' para usar hoje\n\n"
-        f"💡 <i>Formato: DD/MM/AAAA</i>\n"
-        f"Exemplo: <code>15/01/2025</code> ou <code>hoje</code>"
+    texto = render_message(
+        "manual_perguntar_data",
+        emoji=emoji_tipo,
+        descricao=dados['descricao'],
+        valor=format_money(dados['valor']),
+        categoria=categoria_texto
     )
     
     if hasattr(update, 'callback_query') and update.callback_query:
@@ -438,14 +424,7 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
             data_transacao = datetime.strptime(data_texto, '%d/%m/%Y')
         context.user_data['novo_lancamento']['data_transacao'] = data_transacao
     except ValueError:
-        await update.message.reply_text(
-            "⚠️ <b>Data inválida</b>\n\n"
-            "Use o formato <code>DD/MM/AAAA</code> ou digite <code>hoje</code>\n\n"
-            "💡 <i>Exemplos:</i>\n"
-            "• <code>15/01/2025</code>\n"
-            "• <code>hoje</code>",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(render_message("manual_data_invalida", tone="error"), parse_mode='HTML')
         return ASK_DATA
 
     # Salvar no banco
@@ -464,25 +443,23 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
         emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
         data_formatada = data_transacao.strftime('%d/%m/%Y')
         
-        confirmacao = (
-            f"✅ <b>Lançamento Salvo!</b>\n\n"
-            f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
-            f"💰 R$ {dados['valor']:.2f}\n"
-            f"🏦 {dados['forma_pagamento']}\n"
-            f"📅 {data_formatada}\n\n"
-            f"💡 <i>Quer adicionar outro lançamento?</i>"
+        await update.message.reply_text(
+            render_message(
+                "manual_salvo_sucesso",
+                emoji=emoji_tipo,
+                descricao=dados['descricao'],
+                valor=format_money(dados['valor']),
+                conta=dados['forma_pagamento'],
+                data=data_formatada,
+                tone="success"
+            ),
+            parse_mode='HTML'
         )
-        
-        await update.message.reply_text(confirmacao, parse_mode='HTML')
         
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao salvar lançamento manual: {e}", exc_info=True)
-        await update.message.reply_text(
-            "❌ <b>Erro ao salvar</b>\n\n"
-            "Algo deu errado. Tente novamente.",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(render_message("manual_salvo_erro", tone="error"), parse_mode='HTML')
     finally:
         db.close()
         context.user_data.pop('novo_lancamento', None)
@@ -506,7 +483,7 @@ async def ocr_confirmation_handler(update: Update, context: ContextTypes.DEFAULT
     
     if action in ["ocr_salvar", "ocr_cancelar"]:
         await query.message.delete()
-        msg = "✅ Lançamento por OCR salvo! O que vamos registrar agora?" if action == "ocr_salvar" else "Lançamento por OCR cancelado. O que deseja fazer?"
+        msg = render_message("manual_ocr_salvo") if action == "ocr_salvar" else render_message("manual_ocr_cancelado")
         await show_launch_menu(update, context, message_text=msg, new_message=True)
         return AWAITING_LAUNCH_ACTION
     
@@ -517,7 +494,7 @@ async def ocr_confirmation_handler(update: Update, context: ContextTypes.DEFAULT
 async def finish_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("✅ Sessão de lançamentos concluída.")
+    await query.edit_message_text(render_message("manual_sessao_finalizada", tone="success"))
     context.user_data.clear()
     return ConversationHandler.END
 
