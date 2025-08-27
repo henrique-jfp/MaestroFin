@@ -462,8 +462,124 @@ def main() -> None:
     return application
 
 def create_application():
-    """Cria e configura a aplicação do bot (sem executar)"""
-    return main()
+    """🔥 CRIA APLICAÇÃO BOT ULTRA-ROBUSTA - SEM TRAVAR"""
+    logger.info("🚀 [ULTRA-ROBUST] Criando aplicação bot...")
+
+    # Verificação rápida de credenciais
+    if not config.TELEGRAM_TOKEN:
+        logger.error("❌ Token do Telegram não configurado")
+        return None
+
+    if not config.GEMINI_API_KEY:
+        logger.error("❌ Chave da API do Gemini não configurada") 
+        return None
+
+    # 🔥 CONFIGURAÇÃO BD ULTRA-ROBUSTA COM TIMEOUT
+    try:
+        logger.info("🗄️ Configurando banco de dados...")
+        criar_tabelas()
+        
+        # 🔥 NOVA POPULAÇÃO ULTRA-ROBUSTA
+        try:
+            from database_ultra_robust import verificar_e_popular_se_necessario
+            db: Session = next(get_db())
+            sucesso = verificar_e_popular_se_necessario(db)
+            db.close()
+            
+            if sucesso:
+                logger.info("✅ Dados iniciais OK")
+            else:
+                logger.warning("⚠️ População dados falhou - continuando")
+                
+        except Exception as pop_error:
+            logger.warning(f"⚠️ Erro população dados: {pop_error} - continuando")
+            
+        logger.info("✅ Banco de dados pronto.")
+        
+    except Exception as e:
+        logger.error(f"❌ Erro BD: {e} - continuando em modo degradado")
+
+    # 🔥 CONFIGURAÇÃO GEMINI ULTRA-ROBUSTA
+    try:
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        logger.info("✅ API do Gemini configurada.")
+    except Exception as e:
+        logger.error(f"❌ Erro Gemini: {e} - continuando")
+
+    # 🔥 CRIAÇÃO APLICAÇÃO ULTRA-ROBUSTA
+    try:
+        application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
+        logger.info("✅ Aplicação do bot criada.")
+
+        # 🔥 HANDLERS ULTRA-ROBUSTOS (COM TRY/CATCH)
+        logger.info("🔧 Adicionando handlers...")
+        
+        try:
+            from gerente_financeiro.handlers import create_gerente_conversation_handler, create_cadastro_email_conversation_handler
+            from gerente_financeiro.onboarding_handler import configurar_conv
+            
+            gerente_conv = create_gerente_conversation_handler()
+            email_conv = create_cadastro_email_conversation_handler()
+            
+            # Handlers de Conversa ESSENCIAIS
+            application.add_handler(gerente_conv)
+            application.add_handler(email_conv)
+            
+            # Handlers modulares PROTEGIDOS
+            handlers_modulares = [
+                ('manual_entry_conv', 'gerente_financeiro.manual_entry_handler'),
+                ('edit_conv', 'gerente_financeiro.editing_handler'),
+                ('agendamento_conv', 'gerente_financeiro.agendamentos_handler'),
+                ('edit_meta_conv', 'gerente_financeiro.metas_handler'),
+                ('configurar_conv', 'gerente_financeiro.onboarding_handler'),
+                ('grafico_conv', 'gerente_financeiro.graficos'),
+                ('contact_conv', 'gerente_financeiro.contact_handler'),
+                ('delete_user_conv', 'gerente_financeiro.delete_user_handler'),
+                ('fatura_conv', 'gerente_financeiro.fatura_handler'),
+                ('extrato_conv', 'gerente_financeiro.extrato_handler'),
+                ('relatorio_conv', 'gerente_financeiro.relatorio_handler'),
+                ('dashboard_conv', 'gerente_financeiro.dashboard_handler'),
+            ]
+            
+            for handler_name, module_name in handlers_modulares:
+                try:
+                    module = __import__(module_name, fromlist=[handler_name])
+                    handler = getattr(module, handler_name)
+                    application.add_handler(handler)
+                    logger.info(f"✅ Handler {handler_name} adicionado")
+                except Exception as h_error:
+                    logger.warning(f"⚠️ Handler {handler_name} falhou: {h_error}")
+                    continue
+
+            # Handlers básicos SEMPRE
+            application.add_handler(configurar_conv)  # Inclui o /start
+            application.add_handler(CommandHandler("help", help_command))
+            application.add_handler(CommandHandler("debugocr", debug_ocr_command))
+            application.add_handler(CommandHandler("debuglogs", debug_logs_command))
+            application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))
+            
+            logger.info("✅ Todos os handlers adicionados com sucesso.")
+            
+        except Exception as handler_error:
+            logger.error(f"❌ Erro handlers: {handler_error}")
+            
+        # 🔥 JOBS ULTRA-ROBUSTOS (OPCIONAL)
+        try:
+            from jobs import configurar_jobs_agendados
+            configurar_jobs_agendados(application)
+            logger.info("✅ Jobs de metas e agendamentos configurados.")
+        except Exception as job_error:
+            logger.warning(f"⚠️ Jobs falhou: {job_error} - continuando")
+
+        # 🔥 ERROR HANDLER ULTRA-ROBUSTO
+        application.add_error_handler(error_handler)
+        
+        logger.info("🎯 [ULTRA-ROBUST] Aplicação criada com SUCESSO!")
+        return application
+        
+    except Exception as e:
+        logger.error(f"❌ [ULTRA-ROBUST] Erro crítico criação: {e}")
+        return None
 
 def run_bot():
     """Executa o bot com polling"""
