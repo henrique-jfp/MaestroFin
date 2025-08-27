@@ -20,6 +20,7 @@ import config
 from database.database import get_or_create_user, get_db
 from models import Lancamento, ItemLancamento, Categoria, Subcategoria, Usuario
 from .states import OCR_CONFIRMATION_STATE
+from .messages import render_message
 
 # Configurar logging específico para OCR com arquivo dedicado
 def setup_ocr_logging():
@@ -719,7 +720,7 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
     action = query.data
     dados = context.user_data.get('dados_ocr')
     if not dados and action != 'ocr_cancelar':
-        await query.answer("Erro: Dados da sessão perdidos.", show_alert=True)
+        await query.answer(render_message("erro_dados_sessao"), show_alert=True)
         return
 
     if action == "ocr_toggle_type":
@@ -729,7 +730,7 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
         return  # Permanece no mesmo estado, apenas atualiza a mensagem
 
     if action == "ocr_salvar":
-        await query.edit_message_text("💾 Verificando e salvando no banco de dados...")
+        await query.edit_message_text(render_message("verificando_salvando"))
         db: Session = next(get_db())
         try:
             # Lógica de verificação de duplicidade e salvamento (sem alterações)
@@ -753,7 +754,7 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
             ).first()
             if existing_lancamento:
-                await query.edit_message_text("⚠️ Transação Duplicada! Operação cancelada.", parse_mode='Markdown')
+                await query.edit_message_text(render_message("transacao_duplicada"), parse_mode='Markdown')
                 return
 
             # Lógica de encontrar categoria/subcategoria (sem alterações)
@@ -799,7 +800,7 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception as e:
             db.rollback()
             logger.error(f"Erro ao salvar no banco (ocr_action_handler): {e}", exc_info=True)
-            await query.edit_message_text("❌ Falha ao salvar no banco de dados. O erro foi registrado.")
+            await query.edit_message_text(render_message("falha_salvar_banco"))
         finally:
             db.close()
             context.user_data.pop('dados_ocr', None)

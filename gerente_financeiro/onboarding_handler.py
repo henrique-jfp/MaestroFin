@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
+from .messages import render_message
 
 # Importar analytics
 try:
@@ -139,7 +140,7 @@ async def menu_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     action = query.data.split('_')[1]
 
     if action == "concluir":
-        await query.edit_message_text("✅ Configurações salvas!", reply_markup=None)
+        await query.edit_message_text(render_message("config_salvas"), reply_markup=None)
         return ConversationHandler.END
 
     if action == "perfil":
@@ -225,7 +226,7 @@ async def finalizar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user_db = db.query(Usuario).filter(Usuario.telegram_id == query.from_user.id).first()
         user_db.perfil_investidor = perfil
         db.commit()
-        await query.edit_message_text(f"✅ Perfil definido como: <b>{perfil}</b>!\n\nRetornando ao menu...", parse_mode='HTML', reply_markup=None)
+        await query.edit_message_text(render_message("perfil_definido", perfil=perfil), parse_mode='HTML', reply_markup=None)
     finally:
         db.close()
         context.user_data.pop('perfil_pontos', None)
@@ -416,7 +417,7 @@ async def handle_gerenciar_contas_callback(update: Update, context: ContextTypes
                 await asyncio.sleep(1.5)
                 return await show_gerenciar_contas(update, context)
             else:
-                await query.edit_message_text("❌ Erro: Conta não encontrada.")
+                await query.edit_message_text(render_message("conta_nao_encontrada_config"))
                 return GERENCIAR_CONTAS
                 
         finally:
@@ -491,7 +492,7 @@ async def handle_gerenciar_cartoes_callback(update: Update, context: ContextType
                 await asyncio.sleep(1.5)
                 return await show_gerenciar_cartoes(update, context)
             else:
-                await query.edit_message_text("❌ Erro: Cartão não encontrado.")
+                await query.edit_message_text(render_message("cartao_nao_encontrado_config"))
                 return GERENCIAR_CARTOES
                 
         finally:
@@ -612,7 +613,7 @@ async def handle_add_another_cartao(update: Update, context: ContextTypes.DEFAUL
 
     if action == "add_another_cartao_sim":
         # Se sim, voltamos para o início do fluxo de cartão.
-        await query.edit_message_text("Ok! Qual o nome do próximo cartão? (ex: XP Visa Infinite)", parse_mode='HTML')
+        await query.edit_message_text(render_message("pergunta_proximo_cartao"), parse_mode='HTML')
         return ADD_CARTAO_NOME
     else: # "add_another_cartao_nao"
         # Se não, voltamos para o gerenciamento de cartões (não menu principal)
@@ -626,7 +627,7 @@ async def handle_add_another_conta(update: Update, context: ContextTypes.DEFAULT
 
     if action == "add_another_conta_sim":
         # Se sim, apenas pedimos o nome da próxima conta e voltamos ao estado ADD_CONTA_NOME.
-        await query.edit_message_text("🏦 Beleza! Manda o nome da próxima <b>conta</b>?", parse_mode='HTML')
+        await query.edit_message_text(render_message("pergunta_proxima_conta"), parse_mode='HTML')
         return ADD_CONTA_NOME
     else: # "add_another_conta_nao"
         # Se não, voltamos para o gerenciamento de contas (não menu principal)

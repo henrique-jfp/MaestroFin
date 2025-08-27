@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 from typing import List, Tuple, Dict, Any
 import os
 from .services import preparar_contexto_financeiro_completo
+from .messages import render_message
 import google.generativeai as genai
 from sqlalchemy.orm import Session, joinedload
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -480,10 +481,10 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             
     except (IndexError, KeyError) as e:
         logger.error(f"Erro no help_callback: Seção não encontrada. query.data: {query.data}. Erro: {e}")
-        await query.answer("Erro: Seção de ajuda não encontrada.", show_alert=True)
+        await query.answer(render_message("secao_ajuda_nao_encontrada"), show_alert=True)
     except Exception as e:
         logger.error(f"Erro inesperado no help_callback: {e}", exc_info=True)
-        await query.answer("Ocorreu um erro ao carregar a ajuda. Tente novamente.", show_alert=True)
+        await query.answer(render_message("erro_carregar_ajuda"), show_alert=True)
 
 # --- COMANDO /start REMOVIDO - AGORA ESTÁ NO ONBOARDING_HANDLER.PY ---
 
@@ -995,7 +996,7 @@ async def handle_analise_impacto_callback(update: Update, context: ContextTypes.
         usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
         
         # Edita a mensagem para dar feedback ao usuário
-        await query.edit_message_text("Analisando o impacto para você... 🧠")
+        await query.edit_message_text(render_message("analisando_impacto"))
         
         # Busca os dados externos (cotação, etc.)
         dados_externos = await obter_dados_externos(tipo_dado)

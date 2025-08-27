@@ -48,6 +48,7 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 from sqlalchemy.orm import Session, joinedload
+from .messages import render_message
 from sqlalchemy import and_, func
 
 import config
@@ -878,7 +879,7 @@ async def associar_conta_e_confirmar_extrato(update: Update, context: ContextTyp
     transacoes = dados_extrato.get('transacoes', [])
     
     if not transacoes:
-        await query.edit_message_text("Não foram encontradas transações válidas no extrato.")
+        await query.edit_message_text(render_message("sem_transacoes_validas"))
         return ConversationHandler.END
     
     # CORREÇÃO: Garantir que os valores estão sendo calculados corretamente
@@ -1020,7 +1021,7 @@ async def salvar_transacoes_extrato_em_lote(update: Update, context: ContextType
     transacoes = dados_extrato.get('transacoes', [])
     
     if not conta_id or not transacoes:
-        await query.edit_message_text("Dados insuficientes para salvar as transações.")
+        await query.edit_message_text(render_message("dados_insuficientes"))
         return ConversationHandler.END
     
     # Salva as transações na base
@@ -1030,7 +1031,7 @@ async def salvar_transacoes_extrato_em_lote(update: Update, context: ContextType
         conta = db.query(Conta).filter(Conta.id == conta_id, Conta.id_usuario == usuario.id).first()
         
         if not conta:
-            await query.edit_message_text("Conta não encontrada. Se o problema persistir, entre em contato com o suporte.")
+            await query.edit_message_text(render_message("conta_nao_encontrada_extrato"))
             return ConversationHandler.END
         
         # Salva cada transação
@@ -1080,7 +1081,7 @@ async def salvar_transacoes_extrato_em_lote(update: Update, context: ContextType
                 logger.error(f"Erro ao salvar transação {transacao}: {e}", exc_info=True)
         
         db.commit()
-        await query.edit_message_text("✅ Todas as transações foram salvas com sucesso!")
+        await query.edit_message_text(render_message("todas_transacoes_salvas"))
         
         # Limpa os dados do usuário
         context.user_data.pop('dados_extrato', None)
@@ -1109,7 +1110,7 @@ async def salvar_transacoes_extrato_em_lote(update: Update, context: ContextType
         
     except Exception as e:
         logger.error(f"Erro ao salvar transações em lote: {e}", exc_info=True)
-        await query.edit_message_text("❌ Ocorreu um erro ao salvar suas transações. Tente novamente mais tarde.")
+        await query.edit_message_text(render_message("erro_salvar_transacoes"))
     
     finally:
         db.close()
@@ -1130,7 +1131,7 @@ async def cancelar_confirmacao_extrato(update: Update, context: ContextTypes.DEF
         transacoes = dados_extrato.get('transacoes', [])
         await mostrar_selecao_conta(update, query.message, len(transacoes))
     else:
-        await query.edit_message_text("Operação cancelada. Você pode enviar um novo extrato a qualquer momento.")
+        await query.edit_message_text(render_message("extrato_cancelado"))
     
     return ConversationHandler.END
 

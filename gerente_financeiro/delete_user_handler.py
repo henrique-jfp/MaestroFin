@@ -40,7 +40,8 @@ from telegram.ext import (
 
 # Importando a função que vamos criar no próximo passo
 from database.database import deletar_todos_dados_usuario
-from .handlers import cancel # Reutilizamos a função de cancelamento
+from .services import *
+from .messages import render_message # Reutilizamos a função de cancelamento
 from .states import CONFIRM_DELETION
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if action == "delete_confirm_yes":
         user_id = query.from_user.id
-        await query.edit_message_text("Processando sua solicitação... ⏳")
+        await query.edit_message_text(render_message("processando_solicitacao"))
         
         # Chama a função do banco de dados para fazer a exclusão
         sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
@@ -103,7 +104,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
         
     else: # delete_confirm_no
-        await query.edit_message_text("✅ Ufa! Seus dados estão seguros. Operação cancelada.")
+        await query.edit_message_text(render_message("operacao_cancelada"))
         return ConversationHandler.END
 
 # Cria o ConversationHandler para ser importado no bot.py
