@@ -143,6 +143,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     CallbackQueryHandler, ConversationHandler, ApplicationBuilder, ContextTypes
 )
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # --- IMPORTS DO PROJETO ---
 import config
@@ -162,7 +163,7 @@ from gerente_financeiro.handlers import (
     painel_notificacoes
 )
 from gerente_financeiro.agendamentos_handler import (
-    agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
+    agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
 )
 from gerente_financeiro.metas_handler import (
     objetivo_conv, listar_metas_command, deletar_meta_callback, edit_meta_conv
@@ -420,7 +421,17 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("alerta", schedule_alerts))
     application.add_handler(CommandHandler("metas", listar_metas_command))
-    application.add_handler(CommandHandler("agendar", agendamento_start))
+    # /agendar agora abre o menu inicial via callback wrapper
+    async def agendar_command(update, context):
+        # Envia mensagem com botão para iniciar fluxo ou diretamente dispara callback
+        keyboard = [[InlineKeyboardButton("➕ Novo Agendamento", callback_data="agendamento_novo")],
+                    [InlineKeyboardButton("📋 Meus Agendamentos", callback_data="agendamento_listar")]]
+        await update.message.reply_text(
+            "📅 <b>Agendamentos Financeiros</b>\n\nEscolha uma opção:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='HTML'
+        )
+    application.add_handler(CommandHandler("agendar", agendar_command))
     application.add_handler(CommandHandler("notificacoes", painel_notificacoes))
     
     # 🎮 GAMIFICATION HANDLERS
@@ -440,7 +451,10 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(help_callback, pattern="^help_"))
     application.add_handler(CallbackQueryHandler(handle_analise_impacto_callback, pattern="^analise_"))
     application.add_handler(CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_"))
-    application.add_handler(CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_"))
+    application.add_handler(CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_novo$"))
+    # Listagem de agendamentos
+    from gerente_financeiro.agendamentos_handler import listar_agendamentos
+    application.add_handler(CallbackQueryHandler(listar_agendamentos, pattern="^agendamento_listar$"))
     application.add_handler(CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_"))
     
     # 🎮 GAMIFICATION CALLBACKS
