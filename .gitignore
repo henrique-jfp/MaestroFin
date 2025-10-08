@@ -1,218 +1,53 @@
-# ========================================
-# 🎼 MaestroFin - GitIgnore Limpo
-# ========================================
+# 🎼 MaestroFin - GitIgnore
 
-# 📋 PRODUÇÃO: Apenas arquivos essenciais
-# ✅ Core: bot.py, config.py, models.py, handlers
-# ❌ Removido: testes, debug, launchers obsoletos
-
-# ===========================================
-# 🚫 ARQUIVOS DE DESENVOLVIMENTO (NÃO COMMITTAR)
-# ===========================================
-
-# 🧪 Arquivos de Teste e Debug
-test_*.py
-debug_*.py
-*_test.py  
-*_debug.py
-temp_*.py
-rascunho_*.py
-experimento_*.py
-cleanup_*.py
-migrate_*.py
-verify_*.py
-add_analytics_*.py
-*_backup.py
-
-# 📚 Documentação Técnica (manter apenas README.md)
-ANALISE_*.md
-DEBUG_*.md
-DIAGNOSTICO_*.md
-MELHORIAS_*.md
-LIMPEZA_*.md
-FIX_*.md
-GUIA_*.md
-CORREÇÕES_*.md
-SECRET_*.md
-WORKSPACE_*.md
-ENDPOINTS_*.md
-OCR_FIXES_*.md
-PROJECT_STATUS.md
-SQLALCHEMY_*.md
-
-# 🔧 Scripts de Desenvolvimento
-cleanup_*.sh
-reset_*.sh
-workspace_*.sh
-novo_*.sh
-finalizar_*.sh
-maestro.sh
-limpar_*.sh
-
-# 📊 Arquivos de Análise
-*_analysis.log
-*_analytics.py
-dashboard_handler.log
-dashboard_output.log
-*_complete.py
-
-# 🗃️ Arquivos de Configuração Temporários  
-*_fixed.py
-*_hotfix.py
-launcher_*backup*.py
-render_unified.yaml
-requirements_clean.txt
-
-# ===========================================
-
-# 🐍 Python Core
+# 🐍 Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.so
 .Python
 *.egg-info/
 build/
 dist/
 
-# 📊 Cache e Coverage
-.cache/
-.coverage
-.pytest_cache/
-.tox/
-htmlcov/
-.nox/
-
-# 🚀 Virtual Environments
+#  Virtual Environment
 .venv/
 venv/
 env/
-ENV/
-.env/
 
 # 🔐 Environment & Secrets
 .env
-.env.local
-.env.production
-.env.development
+.env.*
+credenciais/*.json
 
-# 🗃️ Credenciais (CRÍTICO)
-credenciais/
-*.json
-!requirements*.txt
-!package*.json
-!render.yaml
-
-# 💾 Databases
+# 💾 Database
 *.db
 *.sqlite
 *.sqlite3
-analytics.db
 
 # 📝 Logs
 *.log
 logs/
-dashboard_handler.log
 
-# 🗂️ Temporary Files
+# 🗂️ Temporary
 *.tmp
 *.temp
 *.bak
 *.backup
-*.swp
-*.swo
 .tmp/
 temp/
-tmp/
 
-# 💻 IDE & Editors
+# 💻 IDE
 .vscode/
 .idea/
 *.sublime-*
 .history/
-*.code-workspace
 
-# 🖥️ OS Specific
+# 🖥️ OS
 .DS_Store
-.DS_Store?
 ._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# 🧪 Development & Testing
-test_*.py
-debug_*.py
-*_test.py
-*_debug.py
-temp_*.py
-rascunho_*.py
-experimento_*.py
-cleanup_*.py
-migrate_*.py
-verify_*.py
-
-# 📦 Build & Deploy
-build/
-dist/
-.egg-info/
-*.tar.gz
-*.zip
-
-# 🌐 Web Assets (se não necessário)
+# 📦 Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# 📱 Mobile (futuro)
-*.ipa
-*.apk
-*.aab
-
-# 🚀 Deploy Temporário
-launcher_*backup*.py
-*_fixed.py
-dashboard_only.py
-*debug*.py
-*teste*.py
-
-# ===========================================
-# 🎯 ARQUIVOS ESSENCIAIS (SEMPRE INCLUIR)
-# ===========================================
-
-# 🤖 Core Python - PRODUÇÃO
-!bot.py
-!unified_launcher.py
-!config.py
-!advanced_config.py
-!models.py
-!alerts.py
-!jobs.py
-!secret_loader.py
-!gunicorn_config.py
-
-# 📁 Pastas Essenciais - PRODUÇÃO  
-!gerente_financeiro/
-!analytics/
-!database/
-!templates/
-!static/
-!credenciais/
-
-# ⚙️ Configuração Deploy - PRODUÇÃO
-!render.yaml
-!requirements.txt
-!runtime.txt
-!Procfile
-
-# 📖 Documentação Principal - PRODUÇÃO
-!README.md
-!LICENSE
-
-# ===========================================
-# 🌐 AMBIENTE E INFRAESTRUTURA  
-# ===========================================

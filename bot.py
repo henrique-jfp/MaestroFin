@@ -555,6 +555,73 @@ def create_application():
             application.add_handler(CommandHandler("debugocr", debug_ocr_command))
             application.add_handler(CommandHandler("debuglogs", debug_logs_command))
             application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))
+            
+            # 🚗 SPX HANDLERS - Sistema de Controle de Entregas
+            try:
+                from gerente_financeiro.spx_handler import spx_handler
+                from gerente_financeiro.spx_metas_handler import spx_metas_handler
+                from gerente_financeiro.spx_dashboard import spx_dashboard
+                from telegram.ext import ConversationHandler
+                
+                # Criar conversation handler para SPX
+                spx_conv = ConversationHandler(
+                    entry_points=[CommandHandler('spx', spx_handler.comando_spx)],
+                    states={
+                        spx_handler.SPX_GANHOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_ganhos)],
+                        spx_handler.SPX_COMBUSTIVEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_combustivel)],
+                        spx_handler.SPX_OUTROS_GASTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_outros_gastos)],
+                        spx_handler.SPX_QUILOMETRAGEM: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_quilometragem)],
+                        spx_handler.SPX_HORAS: [
+                            MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_horas),
+                            CallbackQueryHandler(spx_handler.pular_horas, pattern="^spx_pular_horas$")
+                        ],
+                        spx_handler.SPX_ENTREGAS: [
+                            MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_entregas),
+                            CallbackQueryHandler(spx_handler.finalizar_sem_entregas, pattern="^spx_finalizar_sem_entregas$")
+                        ],
+                        spx_handler.SPX_OBSERVACOES: [
+                            MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_observacoes),
+                            CallbackQueryHandler(spx_handler.pular_observacoes, pattern="^spx_confirmar_registro$")
+                        ],
+                        spx_handler.SPX_CONFIRMAR: [
+                            CallbackQueryHandler(spx_handler.salvar_registro, pattern="^spx_salvar$"),
+                            CallbackQueryHandler(spx_handler.cancelar_registro, pattern="^spx_cancelar$")
+                        ]
+                    },
+                    fallbacks=[
+                        CommandHandler('cancel', spx_handler.cancelar_registro),
+                        CallbackQueryHandler(spx_handler.cancelar_registro, pattern="^spx_cancelar$")
+                    ]
+                )
+                
+                application.add_handler(spx_conv)
+                
+                # SPX Metas - Conversation handler
+                spx_metas_conv = spx_metas_handler.get_conversation_handler()
+                application.add_handler(spx_metas_conv)
+                
+                # Comandos SPX diretos
+                application.add_handler(CommandHandler("spx_hoje", spx_handler.comando_spx_hoje))
+                application.add_handler(CommandHandler("spx_semana", spx_handler.comando_spx_semana))
+                application.add_handler(CommandHandler("spx_mes", spx_handler.comando_spx_mes))
+                
+                # Comandos SPX Metas
+                application.add_handler(CommandHandler("spx_metas", spx_metas_handler.comando_listar_metas))
+                
+                # Comando SPX Dashboard
+                application.add_handler(CommandHandler("spx_dashboard", spx_dashboard.comando_dashboard))
+                
+                # Callbacks SPX
+                application.add_handler(CallbackQueryHandler(spx_handler.iniciar_registro_completo, pattern="^spx_registro_completo$"))
+                
+                # Callbacks SPX Dashboard
+                application.add_handler(CallbackQueryHandler(spx_dashboard.callback_dashboard, pattern="^spx_dash_"))
+                
+                logger.info("✅ SPX System handlers adicionados com sucesso")
+                
+            except Exception as spx_error:
+                logger.warning(f"⚠️ SPX handlers falharam: {spx_error} - continuando sem SPX")
+            
             # Extra: garantir tracking /start se existir atributo
             try:
                 if hasattr(configurar_conv, 'entry_points'):

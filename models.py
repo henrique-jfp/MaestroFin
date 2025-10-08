@@ -2,7 +2,7 @@
 # models.py
 from datetime import datetime, timezone, time
 from sqlalchemy import (
-    Column, Integer, String, Numeric, DateTime, ForeignKey, BigInteger, Boolean, Date, Time, JSON
+    Column, Integer, String, Numeric, DateTime, ForeignKey, BigInteger, Boolean, Date, Time, JSON, Float, Text, func
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -151,3 +151,109 @@ class Agendamento(Base):
     usuario = relationship("Usuario", back_populates="agendamentos")
     categoria = relationship("Categoria")
     subcategoria = relationship("Subcategoria")
+
+class EntregaSPX(Base):
+    __tablename__ = 'entregas_spx'
+    
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger, nullable=False, index=True)
+    data = Column(Date, default=func.current_date(), nullable=False, index=True)
+    
+    # Dados financeiros
+    ganhos_brutos = Column(Float, nullable=False)
+    combustivel = Column(Float, nullable=False)
+    outros_gastos = Column(Float, default=0.0)  # estacionamento, pedágio, manutenção
+    
+    # Dados operacionais
+    quilometragem = Column(Float, nullable=False)
+    horas_trabalhadas = Column(Float)  # opcional
+    numero_entregas = Column(Integer)  # opcional
+    
+    # Dados do veículo/combustível
+    tipo_combustivel = Column(String(20), default='gasolina')  # gasolina, etanol, gnv, flex
+    consumo_medio = Column(Float)  # km/l ou km/m³
+    
+    # Observações
+    observacoes = Column(Text)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Propriedades calculadas
+    @property
+    def lucro_liquido(self):
+        """Lucro líquido do dia"""
+        return self.ganhos_brutos - self.combustivel - self.outros_gastos
+    
+    @property
+    def custo_por_km(self):
+        """Custo total por quilômetro"""
+        if self.quilometragem == 0:
+            return 0
+        return (self.combustivel + self.outros_gastos) / self.quilometragem
+    
+    @property
+    def eficiencia_percentual(self):
+        """Percentual de eficiência (lucro/ganhos)"""
+        if self.ganhos_brutos == 0:
+            return 0
+        return (self.lucro_liquido / self.ganhos_brutos) * 100
+    
+    @property
+    def ganho_por_km(self):
+        """Ganho bruto por quilômetro"""
+        if self.quilometragem == 0:
+            return 0
+        return self.ganhos_brutos / self.quilometragem
+    
+    @property
+    def ganho_por_entrega(self):
+        """Ganho médio por entrega"""
+        if not self.numero_entregas or self.numero_entregas == 0:
+            return 0
+        return self.ganhos_brutos / self.numero_entregas
+    
+    @property
+    def lucro_por_hora(self):
+        """Lucro por hora trabalhada"""
+        if not self.horas_trabalhadas or self.horas_trabalhadas == 0:
+            return 0
+        return self.lucro_liquido / self.horas_trabalhadas
+    
+    @property
+    def consumo_estimado(self):
+        """Estimativa de combustível consumido (se tem consumo_medio)"""
+        if not self.consumo_medio or self.consumo_medio == 0:
+            return None
+        return self.quilometragem / self.consumo_medio
+    
+    def __repr__(self):
+        return f"<EntregaSPX(data={self.data}, lucro=R${self.lucro_liquido:.2f}, km={self.quilometragem})>"
+
+class MetaSPX(Base):
+    __tablename__ = 'metas_spx'
+    
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger, nullable=False, index=True)
+    
+    # Tipo de meta
+    tipo = Column(String(20), nullable=False)  # 'diaria', 'semanal', 'mensal'
+    
+    # Valores alvo
+    meta_lucro_liquido = Column(Float)
+    meta_quilometragem = Column(Float)
+    meta_eficiencia = Column(Float)  # percentual
+    meta_ganhos_brutos = Column(Float)
+    
+    # Período (para metas semanais/mensais)
+    ano = Column(Integer)
+    mes = Column(Integer)  # para metas mensais
+    semana = Column(Integer)  # para metas semanais
+    
+    # Status
+    ativa = Column(Boolean, default=True)
+    data_criacao = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<MetaSPX(tipo={self.tipo}, lucro_meta=R${self.meta_lucro_liquido})>"
