@@ -1,1 +1,1 @@
-web: python launcher.py
+web: gunicorn wsgi:app --timeout 120 --workers 2 --threads 4 --log-level info
