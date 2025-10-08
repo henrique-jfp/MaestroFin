@@ -1,0 +1,167 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "python.defaultInterpreterPath": "./.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.flake8Enabled": true,
+        "python.formatting.provider": "black",
+        "files.exclude": {
+            "**/__pycache__": true,
+            "**/*.pyc": true,
+            "**/.DS_Store": true,
+            "**/Thumbs.db": true,
+            "**/*.tmp": true,
+            "**/*.temp": true,
+            "**/*.log": true,
+            ".venv": false
+        },
+        "search.exclude": {
+            "**/__pycache__": true,
+            "**/*.pyc": true,
+            ".venv": true
+        },
+        "git.ignoreLimitWarning": true,
+        "terminal.integrated.cwd": "${workspaceFolder}",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+            "tests"
+        ],
+        "files.associations": {
+            "*.md": "markdown",
+            "*.yaml": "yaml",
+            "*.yml": "yaml",
+            ".env": "properties",
+            ".env.*": "properties"
+        },
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "🤖 Executar Bot Local",
+                "type": "shell",
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": ["bot.py"],
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "new"
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "🌐 Executar Dashboard Local",
+                "type": "shell",
+                "command": "${workspaceFolder}/.venv/bin/python",
+                "args": ["web_launcher.py"],
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "new"
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "🧹 Finalizar Dia de Trabalho",
+                "type": "shell",
+                "command": "./workspace_manager.sh",
+                "args": ["finalize"],
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": true,
+                    "panel": "new"
+                }
+            },
+            {
+                "label": "🌅 Iniciar Dia de Trabalho",
+                "type": "shell",
+                "command": "./workspace_manager.sh",
+                "args": ["start"],
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": true,
+                    "panel": "new"
+                }
+            },
+            {
+                "label": "📦 Instalar Dependências",
+                "type": "shell",
+                "command": "${workspaceFolder}/.venv/bin/pip",
+                "args": ["install", "-r", "requirements.txt"],
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "shared"
+                }
+            },
+            {
+                "label": "🚀 Deploy (Git Push)",
+                "type": "shell",
+                "command": "git",
+                "args": ["push", "origin", "main"],
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": true,
+                    "panel": "new"
+                }
+            }
+        ]
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [
+            {
+                "name": "🤖 Debug Bot",
+                "type": "debugpy",
+                "request": "launch",
+                "program": "${workspaceFolder}/bot.py",
+                "console": "integratedTerminal",
+                "envFile": "${workspaceFolder}/.env",
+                "python": "${workspaceFolder}/.venv/bin/python"
+            },
+            {
+                "name": "🌐 Debug Dashboard",
+                "type": "debugpy",
+                "request": "launch",
+                "program": "${workspaceFolder}/web_launcher.py",
+                "console": "integratedTerminal",
+                "envFile": "${workspaceFolder}/.env",
+                "python": "${workspaceFolder}/.venv/bin/python"
+            }
+        ]
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.flake8",
+            "ms-python.black-formatter",
+            "ms-vscode.vscode-json",
+            "redhat.vscode-yaml",
+            "ms-vscode.vscode-markdown",
+            "github.vscode-pull-request-github"
+        ]
+    }
+}
