@@ -162,16 +162,18 @@ python bot.py
 
 ---
 
-## 🧹 Estrutura Enxuta & Diretório `legacy/`
+## 🧹 Estrutura Enxuta (pós-limpeza)
 
-Para reduzir ambiguidade de deploy, launchers e scripts antigos foram movidos para `legacy/`.
+Para reduzir ambiguidade de deploy, launchers e scripts antigos foram removidos do repositório.
 
 Produção usa apenas:
-- `unified_launcher_definitivo.py` (Procfile)
-- `app.py` (entrypoint WSGI/Gunicorn se desejado)
+- `Procfile` → `gunicorn analytics.dashboard_app:app -c gunicorn_config.py`
 - `analytics/dashboard_app.py` (dashboard ativo)
+- `bot.py` (serviço de bot em modo background quando necessário)
 
-Arquivos em `legacy/` são referência histórica (não importados). Se precisar restaurar algo, mova manualmente e revise.
+Notas de limpeza:
+- Pasta `legacy/` removida (arquivos históricos obsoletos)
+- `wsgi.py` e `start_web.sh` removidos (não eram usados pelo Procfile atual)
 
 Benefícios da limpeza:
 - Menos risco de apontar Procfile errado
