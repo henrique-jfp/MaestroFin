@@ -54,7 +54,7 @@ def start_telegram_bot():
     try:
         logger.info("🤖 Iniciando bot do Telegram...")
         from bot import main
-        asyncio.run(main())
+        main()  # main() do bot.py é síncrono, não assíncrono!
         
     except Exception as e:
         logger.error(f"❌ Erro no bot do Telegram: {e}")
@@ -97,16 +97,18 @@ def main():
         sys.exit(1)
     
     # Verificar modo de execução
-    mode = os.getenv('RENDER_SERVICE_TYPE', 'web')
+    # No Render: PORT é setado para web services, não é setado para workers
+    port = os.getenv('PORT')
+    is_render = os.getenv('RENDER') or os.getenv('RAILWAY_ENVIRONMENT')
     
-    if mode == 'web':
-        # Modo web - rodar dashboard Flask
-        logger.info("🌐 Modo WEB: Iniciando dashboard Flask")
+    if port and is_render:
+        # Modo web - rodar dashboard Flask (Render Web Service)
+        logger.info("🌐 Modo WEB (Render): Iniciando dashboard Flask")
         start_dashboard()
         
-    elif mode == 'background':
-        # Modo background - rodar bot Telegram
-        logger.info("🤖 Modo BACKGROUND: Iniciando bot Telegram")
+    elif is_render and not port:
+        # Modo worker - rodar bot Telegram (Render Worker)
+        logger.info("🤖 Modo WORKER (Render): Iniciando bot Telegram")
         start_telegram_bot()
         
     else:
