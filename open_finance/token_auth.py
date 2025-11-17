@@ -25,31 +25,57 @@ class TokenAuthManager:
         """
         Autentica com banco Inter usando token
         
-        Token do Inter:
-        - Gerado em: https://eb.bancointer.com.br/
-        - Formato: CPF:token
+        Token do Inter pode ser:
+        - iSafe: 6 dígitos (ex: 123456)
+        - API Token: CPF:token (ex: 12345678901:abc123...)
+        - Bearer Token: string longa
         """
         try:
-            if ':' not in token:
-                raise ValueError("Token Inter deve estar no formato: CPF:token")
+            import re
+            token_clean = token.strip()
             
-            cpf, token_value = token.split(':', 1)
-            cpf_clean = cpf.strip().replace('.', '').replace('-', '')
+            # Tipo 1: iSafe (6 dígitos)
+            if re.match(r'^\d{6}$', token_clean):
+                logger.info(f"✅ Token Inter (iSafe) validado: {token_clean[:3]}***")
+                return {
+                    'bank': 'inter',
+                    'token': token_clean,
+                    'type': 'isafe',
+                    'validated_at': datetime.now().isoformat()
+                }
             
-            if len(cpf_clean) != 11:
-                raise ValueError("CPF inválido")
+            # Tipo 2: CPF:token format
+            if ':' in token_clean:
+                cpf, token_value = token_clean.split(':', 1)
+                cpf_clean = cpf.strip().replace('.', '').replace('-', '')
+                
+                if len(cpf_clean) != 11:
+                    raise ValueError("CPF inválido - deve ter 11 dígitos")
+                
+                if len(token_value.strip()) < 10:
+                    raise ValueError("Token muito curto - mínimo 10 caracteres após ':'")
+                
+                logger.info(f"✅ Token Inter (CPF:token) validado para CPF {cpf_clean[:3]}***{cpf_clean[-2:]}")
+                return {
+                    'bank': 'inter',
+                    'cpf': cpf_clean,
+                    'token': token_value.strip(),
+                    'type': 'cpf_token',
+                    'validated_at': datetime.now().isoformat()
+                }
             
-            if len(token_value.strip()) < 10:
-                raise ValueError("Token muito curto")
+            # Tipo 3: Bearer token (string longa)
+            if len(token_clean) >= 10:
+                logger.info(f"✅ Token Inter (Bearer) validado")
+                return {
+                    'bank': 'inter',
+                    'token': token_clean,
+                    'type': 'bearer_token',
+                    'validated_at': datetime.now().isoformat()
+                }
             
-            logger.info(f"✅ Token Inter validado para CPF {cpf_clean[:3]}***{cpf_clean[-2:]}")
+            raise ValueError("Token Inter inválido - muito curto")
             
-            return {
-                'bank': 'inter',
-                'cpf': cpf_clean,
-                'token': token_value.strip(),
-                'validated_at': datetime.now().isoformat()
-            }
         except Exception as e:
             logger.error(f"❌ Erro ao validar token Inter: {e}")
             raise
@@ -61,23 +87,37 @@ class TokenAuthManager:
         """
         Autentica com Itaú usando token
         
-        Token do Itaú:
-        - Gerado em: https://www.itau.com.br/
-        - Pode ser: Código de segurança ou OAuth token
+        Token do Itaú pode ser:
+        - iToken: 6 dígitos (ex: 123456)
+        - Bearer token: string longa
+        - OAuth token: code/access_token
         """
         try:
+            import re
             token_clean = token.strip()
             
-            if len(token_clean) < 15:
-                raise ValueError("Token Itaú muito curto")
+            # Tipo 1: iToken (6 dígitos)
+            if re.match(r'^\d{6}$', token_clean):
+                logger.info(f"✅ Token Itaú (iToken) validado: {token_clean[:3]}***")
+                return {
+                    'bank': 'itau',
+                    'token': token_clean,
+                    'type': 'itoken',
+                    'validated_at': datetime.now().isoformat()
+                }
             
-            logger.info(f"✅ Token Itaú validado: {token_clean[:10]}***")
+            # Tipo 2: Bearer token ou outro (mínimo 6 caracteres)
+            if len(token_clean) >= 6:
+                logger.info(f"✅ Token Itaú validado: {token_clean[:10]}***")
+                return {
+                    'bank': 'itau',
+                    'token': token_clean,
+                    'type': 'bearer_token',
+                    'validated_at': datetime.now().isoformat()
+                }
             
-            return {
-                'bank': 'itau',
-                'token': token_clean,
-                'validated_at': datetime.now().isoformat()
-            }
+            raise ValueError("Token Itaú muito curto - mínimo 6 caracteres")
+            
         except Exception as e:
             logger.error(f"❌ Erro ao validar token Itaú: {e}")
             raise
@@ -91,7 +131,7 @@ class TokenAuthManager:
         
         Token do Bradesco:
         - Gerado em: https://www.bradesco.com.br/
-        - Geralmente é Bearer token ou código de acesso
+        - Pode ser: Bearer token, código de acesso (6+ caracteres)
         """
         try:
             token_clean = token.strip()
@@ -99,15 +139,15 @@ class TokenAuthManager:
             if token_clean.lower().startswith('bearer '):
                 token_clean = token_clean[7:]
             
-            if len(token_clean) < 15:
-                raise ValueError("Token Bradesco muito curto")
+            if len(token_clean) < 6:
+                raise ValueError("Token Bradesco muito curto - mínimo 6 caracteres")
             
             logger.info(f"✅ Token Bradesco validado")
             
             return {
                 'bank': 'bradesco',
                 'token': token_clean,
-                'token_type': 'bearer',
+                'type': 'bearer',
                 'validated_at': datetime.now().isoformat()
             }
         except Exception as e:
@@ -119,23 +159,30 @@ class TokenAuthManager:
     @staticmethod
     def authenticate_nubank(token: str) -> Dict:
         """
-        Autentica com Nubank usando token
+        Autentica com Nubank usando token/código
         
         Token do Nubank:
+        - Pode ser: Code de autenticação (6+ chars), JWT token, ou Bearer token
         - Gerado em: App do Nubank > Minha Conta > Chaves de acesso
-        - Formato: JWT ou código de segurança
         """
         try:
             token_clean = token.strip()
             
-            if len(token_clean) < 20:
-                raise ValueError("Token Nubank muito curto (mínimo 20 caracteres)")
+            if token_clean.lower().startswith('bearer '):
+                token_clean = token_clean[7:]
             
-            logger.info(f"✅ Token Nubank validado")
+            if len(token_clean) < 6:
+                raise ValueError("Token Nubank muito curto - mínimo 6 caracteres")
+            
+            # Detecta tipo de token
+            token_type = 'jwt' if '.' in token_clean else 'code'
+            
+            logger.info(f"✅ Token Nubank validado (tipo: {token_type})")
             
             return {
                 'bank': 'nubank',
                 'token': token_clean,
+                'type': token_type,
                 'validated_at': datetime.now().isoformat()
             }
         except Exception as e:
@@ -150,20 +197,25 @@ class TokenAuthManager:
         Autentica com Caixa usando token
         
         Token da Caixa:
+        - Pode ser: Código de acesso (6+ chars) ou Bearer token
         - Gerado em: Internet Banking Caixa
         - Contato: suporte@caixa.gov.br
         """
         try:
             token_clean = token.strip()
             
-            if len(token_clean) < 15:
-                raise ValueError("Token Caixa muito curto")
+            if token_clean.lower().startswith('bearer '):
+                token_clean = token_clean[7:]
+            
+            if len(token_clean) < 6:
+                raise ValueError("Token Caixa muito curto - mínimo 6 caracteres")
             
             logger.info(f"✅ Token Caixa validado")
             
             return {
                 'bank': 'caixa',
                 'token': token_clean,
+                'type': 'bearer',
                 'validated_at': datetime.now().isoformat()
             }
         except Exception as e:
@@ -178,20 +230,25 @@ class TokenAuthManager:
         Autentica com Santander usando token
         
         Token do Santander:
-        - Gerado em: https://www.santander.com.br/
+        - Pode ser: Código de acesso (6+ chars) ou Bearer token
+        - Gerado em: Internet Banking Santander
         - Developer Portal: https://www.santander.com.br/developers
         """
         try:
             token_clean = token.strip()
             
-            if len(token_clean) < 15:
-                raise ValueError("Token Santander muito curto")
+            if token_clean.lower().startswith('bearer '):
+                token_clean = token_clean[7:]
+            
+            if len(token_clean) < 6:
+                raise ValueError("Token Santander muito curto - mínimo 6 caracteres")
             
             logger.info(f"✅ Token Santander validado")
             
             return {
                 'bank': 'santander',
                 'token': token_clean,
+                'type': 'bearer',
                 'validated_at': datetime.now().isoformat()
             }
         except Exception as e:
