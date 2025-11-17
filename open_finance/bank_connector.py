@@ -5,8 +5,8 @@ Gerencia conexões de usuários com instituições financeiras
 
 import logging
 from typing import Dict, List, Optional
-from datetime import datetime
-from database.database import SessionLocal, engine  # Import correto
+from datetime import datetime, timedelta
+from database.database import SessionLocal, engine
 from sqlalchemy import text
 from .pluggy_client import PluggyClient
 
@@ -121,33 +121,39 @@ class BankConnector:
             connector_name = connector.get('name', 'Desconhecido')
             
             # Salvar no banco
-            query = """
-                INSERT INTO bank_connections 
-                    (user_id, item_id, connector_id, connector_name, status)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id, item_id, connector_name, status, created_at
-            """
-            
-            result = self.db.execute_query(
-                query,
-                (user_id, item['id'], connector_id, connector_name, item.get('status')),
-                fetch=True
-            )
-            
-            if result:
-                connection_data = result[0]
-                logger.info(f"✅ Conexão criada: {connection_data[1]}")
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        INSERT INTO bank_connections 
+                            (user_id, item_id, connector_id, connector_name, status)
+                        VALUES (:user_id, :item_id, :connector_id, :connector_name, :status)
+                        RETURNING id, item_id, connector_name, status, created_at
+                    """),
+                    {
+                        "user_id": user_id,
+                        "item_id": item['id'],
+                        "connector_id": connector_id,
+                        "connector_name": connector_name,
+                        "status": item.get('status')
+                    }
+                )
+                conn.commit()
+                row = result.fetchone()
                 
-                # Sincronizar contas imediatamente
-                self._sync_accounts(connection_data[0], item['id'])
-                
-                return {
-                    'id': connection_data[0],
-                    'item_id': connection_data[1],
-                    'connector_name': connection_data[2],
-                    'status': connection_data[3],
-                    'created_at': connection_data[4]
-                }
+                if row:
+                    connection_id = row[0]
+                    logger.info(f"✅ Conexão criada: {row[1]}")
+                    
+                    # Sincronizar contas imediatamente
+                    self._sync_accounts(connection_id, item['id'])
+                    
+                    return {
+                        'id': row[0],
+                        'item_id': row[1],
+                        'connector_name': row[2],
+                        'status': row[3],
+                        'created_at': row[4]
+                    }
             
             raise Exception("Erro ao salvar conexão no banco")
             
@@ -157,51 +163,55 @@ class BankConnector:
     
     def list_connections(self, user_id: int) -> List[Dict]:
         """Lista todas as conexões bancárias de um usuário"""
-        query = """
-            SELECT id, item_id, connector_name, status, created_at, last_sync_at
-            FROM bank_connections
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-        """
-        
-        results = self.db.execute_query(query, (user_id,), fetch=True)
-        
-        connections = []
-        for row in results:
-            connections.append({
-                'id': row[0],
-                'item_id': row[1],
-                'connector_name': row[2],
-                'status': row[3],
-                'created_at': row[4],
-                'last_sync_at': row[5]
-            })
-        
-        return connections
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT id, item_id, connector_name, status, created_at, last_sync_at
+                    FROM bank_connections
+                    WHERE user_id = :user_id
+                    ORDER BY created_at DESC
+                """),
+                {"user_id": user_id}
+            )
+            
+            connections = []
+            for row in result:
+                connections.append({
+                    'id': row[0],
+                    'item_id': row[1],
+                    'connector_name': row[2],
+                    'status': row[3],
+                    'created_at': row[4],
+                    'last_sync_at': row[5]
+                })
+            
+            return connections
     
     def get_connection(self, connection_id: int) -> Optional[Dict]:
         """Obtém detalhes de uma conexão específica"""
-        query = """
-            SELECT id, user_id, item_id, connector_name, status, created_at, last_sync_at
-            FROM bank_connections
-            WHERE id = %s
-        """
-        
-        result = self.db.execute_query(query, (connection_id,), fetch=True)
-        
-        if result:
-            row = result[0]
-            return {
-                'id': row[0],
-                'user_id': row[1],
-                'item_id': row[2],
-                'connector_name': row[3],
-                'status': row[4],
-                'created_at': row[5],
-                'last_sync_at': row[6]
-            }
-        
-        return None
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT id, user_id, item_id, connector_name, status, created_at, last_sync_at
+                    FROM bank_connections
+                    WHERE id = :connection_id
+                """),
+                {"connection_id": connection_id}
+            )
+            
+            row = result.fetchone()
+            if row:
+                return {
+                    'id': row[0],
+                    'user_id': row[1],
+                    'item_id': row[2],
+                    'connector_name': row[3],
+                    'status': row[4],
+                    'created_at': row[5],
+                    'last_sync_at': row[6]
+                }
+            
+            return None
     
     def delete_connection(self, connection_id: int) -> bool:
         """Remove conexão bancária"""
@@ -215,8 +225,12 @@ class BankConnector:
             self.client.delete_item(connection['item_id'])
             
             # Remover do banco (cascade remove contas e transações)
-            query = "DELETE FROM bank_connections WHERE id = %s"
-            self.db.execute_query(query, (connection_id,))
+            with engine.connect() as conn:
+                conn.execute(
+                    text("DELETE FROM bank_connections WHERE id = :connection_id"),
+                    {"connection_id": connection_id}
+                )
+                conn.commit()
             
             logger.info(f"✅ Conexão {connection_id} removida")
             return True
@@ -234,38 +248,41 @@ class BankConnector:
         try:
             accounts = self.client.list_accounts(item_id)
             
-            for account in accounts:
-                query = """
-                    INSERT INTO bank_accounts 
-                        (connection_id, account_id, account_type, account_number, 
-                         account_name, balance, currency)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (account_id) 
-                    DO UPDATE SET
-                        balance = EXCLUDED.balance,
-                        updated_at = CURRENT_TIMESTAMP
-                """
-                
-                self.db.execute_query(
-                    query,
-                    (
-                        connection_id,
-                        account['id'],
-                        account.get('type'),
-                        account.get('number'),
-                        account.get('name'),
-                        account.get('balance'),
-                        account.get('currencyCode', 'BRL')
+            with engine.connect() as conn:
+                for account in accounts:
+                    conn.execute(
+                        text("""
+                            INSERT INTO bank_accounts 
+                                (connection_id, account_id, account_type, account_number, 
+                                 account_name, balance, currency)
+                            VALUES (:connection_id, :account_id, :account_type, :account_number,
+                                    :account_name, :balance, :currency)
+                            ON CONFLICT (account_id) 
+                            DO UPDATE SET
+                                balance = EXCLUDED.balance,
+                                updated_at = CURRENT_TIMESTAMP
+                        """),
+                        {
+                            "connection_id": connection_id,
+                            "account_id": account['id'],
+                            "account_type": account.get('type'),
+                            "account_number": account.get('number'),
+                            "account_name": account.get('name'),
+                            "balance": account.get('balance'),
+                            "currency": account.get('currencyCode', 'BRL')
+                        }
                     )
+                
+                # Atualizar timestamp de sincronização
+                conn.execute(
+                    text("""
+                        UPDATE bank_connections 
+                        SET last_sync_at = CURRENT_TIMESTAMP
+                        WHERE id = :connection_id
+                    """),
+                    {"connection_id": connection_id}
                 )
-            
-            # Atualizar timestamp de sincronização
-            update_query = """
-                UPDATE bank_connections 
-                SET last_sync_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            """
-            self.db.execute_query(update_query, (connection_id,))
+                conn.commit()
             
             logger.info(f"✅ {len(accounts)} contas sincronizadas")
             
@@ -275,54 +292,59 @@ class BankConnector:
     
     def list_accounts(self, user_id: int) -> List[Dict]:
         """Lista todas as contas bancárias de um usuário"""
-        query = """
-            SELECT 
-                ba.id,
-                ba.account_id,
-                ba.account_type,
-                ba.account_number,
-                ba.account_name,
-                ba.balance,
-                ba.currency,
-                bc.connector_name
-            FROM bank_accounts ba
-            JOIN bank_connections bc ON ba.connection_id = bc.id
-            WHERE bc.user_id = %s
-            ORDER BY ba.created_at DESC
-        """
-        
-        results = self.db.execute_query(query, (user_id,), fetch=True)
-        
-        accounts = []
-        for row in results:
-            accounts.append({
-                'id': row[0],
-                'account_id': row[1],
-                'account_type': row[2],
-                'account_number': row[3],
-                'account_name': row[4],
-                'balance': float(row[5]) if row[5] else 0.0,
-                'currency': row[6],
-                'bank_name': row[7]
-            })
-        
-        return accounts
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT 
+                        ba.id,
+                        ba.account_id,
+                        ba.account_type,
+                        ba.account_number,
+                        ba.account_name,
+                        ba.balance,
+                        ba.currency,
+                        bc.connector_name
+                    FROM bank_accounts ba
+                    JOIN bank_connections bc ON ba.connection_id = bc.id
+                    WHERE bc.user_id = :user_id
+                    ORDER BY ba.created_at DESC
+                """),
+                {"user_id": user_id}
+            )
+            
+            accounts = []
+            for row in result:
+                accounts.append({
+                    'id': row[0],
+                    'account_id': row[1],
+                    'account_type': row[2],
+                    'account_number': row[3],
+                    'account_name': row[4],
+                    'balance': float(row[5]) if row[5] else 0.0,
+                    'currency': row[6],
+                    'bank_name': row[7]
+                })
+            
+            return accounts
     
     def get_total_balance(self, user_id: int) -> float:
         """Calcula saldo total consolidado de todas as contas"""
-        query = """
-            SELECT COALESCE(SUM(ba.balance), 0) as total
-            FROM bank_accounts ba
-            JOIN bank_connections bc ON ba.connection_id = bc.id
-            WHERE bc.user_id = %s
-        """
-        
-        result = self.db.execute_query(query, (user_id,), fetch=True)
-        
-        if result:
-            return float(result[0][0])
-        
-        return 0.0
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT COALESCE(SUM(ba.balance), 0) as total
+                    FROM bank_accounts ba
+                    JOIN bank_connections bc ON ba.connection_id = bc.id
+                    WHERE bc.user_id = :user_id
+                """),
+                {"user_id": user_id}
+            )
+            
+            row = result.fetchone()
+            if row:
+                return float(row[0])
+            
+            return 0.0
     
     # ==================== TRANSAÇÕES ====================
     
@@ -338,46 +360,52 @@ class BankConnector:
         
         try:
             # Obter contas da conexão
-            query = "SELECT id, account_id FROM bank_accounts WHERE connection_id = %s"
-            accounts = self.db.execute_query(query, (connection_id,), fetch=True)
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT id, account_id FROM bank_accounts WHERE connection_id = :connection_id"),
+                    {"connection_id": connection_id}
+                )
+                accounts = result.fetchall()
             
             from_date = datetime.now() - timedelta(days=days)
             total_transactions = 0
             
-            for account_row in accounts:
-                account_db_id, account_id = account_row
-                
-                # Buscar transações no Pluggy
-                transactions = self.client.list_transactions(
-                    account_id=account_id,
-                    from_date=from_date
-                )
-                
-                # Salvar no banco
-                for trans in transactions:
-                    insert_query = """
-                        INSERT INTO bank_transactions
-                            (account_id, transaction_id, description, amount, 
-                             date, type, category, merchant_name)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (transaction_id) DO NOTHING
-                    """
+            with engine.connect() as conn:
+                for account_row in accounts:
+                    account_db_id, account_id = account_row
                     
-                    self.db.execute_query(
-                        insert_query,
-                        (
-                            account_db_id,
-                            trans['id'],
-                            trans.get('description'),
-                            trans.get('amount'),
-                            trans.get('date'),
-                            trans.get('type'),
-                            trans.get('category'),
-                            trans.get('merchantName')
-                        )
+                    # Buscar transações no Pluggy
+                    transactions = self.client.list_transactions(
+                        account_id=account_id,
+                        from_date=from_date
                     )
+                    
+                    # Salvar no banco
+                    for trans in transactions:
+                        conn.execute(
+                            text("""
+                                INSERT INTO bank_transactions
+                                    (account_id, transaction_id, description, amount, 
+                                     date, type, category, merchant_name)
+                                VALUES (:account_id, :transaction_id, :description, :amount,
+                                        :date, :type, :category, :merchant_name)
+                                ON CONFLICT (transaction_id) DO NOTHING
+                            """),
+                            {
+                                "account_id": account_db_id,
+                                "transaction_id": trans['id'],
+                                "description": trans.get('description'),
+                                "amount": trans.get('amount'),
+                                "date": trans.get('date'),
+                                "type": trans.get('type'),
+                                "category": trans.get('category'),
+                                "merchant_name": trans.get('merchantName')
+                            }
+                        )
+                    
+                    total_transactions += len(transactions)
                 
-                total_transactions += len(transactions)
+                conn.commit()
             
             logger.info(f"✅ {total_transactions} transações sincronizadas")
             
@@ -392,38 +420,40 @@ class BankConnector:
         days: int = 30
     ) -> List[Dict]:
         """Lista transações recentes de um usuário"""
-        query = """
-            SELECT 
-                bt.description,
-                bt.amount,
-                bt.date,
-                bt.type,
-                bt.category,
-                bt.merchant_name,
-                ba.account_name,
-                bc.connector_name
-            FROM bank_transactions bt
-            JOIN bank_accounts ba ON bt.account_id = ba.id
-            JOIN bank_connections bc ON ba.connection_id = bc.id
-            WHERE bc.user_id = %s
-                AND bt.date >= CURRENT_DATE - INTERVAL '%s days'
-            ORDER BY bt.date DESC, bt.created_at DESC
-            LIMIT %s
-        """
-        
-        results = self.db.execute_query(query, (user_id, days, limit), fetch=True)
-        
-        transactions = []
-        for row in results:
-            transactions.append({
-                'description': row[0],
-                'amount': float(row[1]) if row[1] else 0.0,
-                'date': row[2],
-                'type': row[3],
-                'category': row[4],
-                'merchant': row[5],
-                'account': row[6],
-                'bank': row[7]
-            })
-        
-        return transactions
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT 
+                        bt.description,
+                        bt.amount,
+                        bt.date,
+                        bt.type,
+                        bt.category,
+                        bt.merchant_name,
+                        ba.account_name,
+                        bc.connector_name
+                    FROM bank_transactions bt
+                    JOIN bank_accounts ba ON bt.account_id = ba.id
+                    JOIN bank_connections bc ON ba.connection_id = bc.id
+                    WHERE bc.user_id = :user_id
+                        AND bt.date >= CURRENT_DATE - INTERVAL ':days days'
+                    ORDER BY bt.date DESC, bt.created_at DESC
+                    LIMIT :limit
+                """),
+                {"user_id": user_id, "days": days, "limit": limit}
+            )
+            
+            transactions = []
+            for row in result:
+                transactions.append({
+                    'description': row[0],
+                    'amount': float(row[1]) if row[1] else 0.0,
+                    'date': row[2],
+                    'type': row[3],
+                    'category': row[4],
+                    'merchant': row[5],
+                    'account': row[6],
+                    'bank': row[7]
+                })
+            
+            return transactions
