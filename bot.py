@@ -182,15 +182,16 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
-# 🏦 OPEN FINANCE
-try:
-    from gerente_financeiro.open_finance_handler import OpenFinanceHandler
-    from open_finance.data_sync import schedule_daily_sync
-    OPEN_FINANCE_ENABLED = True
-    logger.info("✅ Open Finance habilitado")
-except ImportError as e:
-    OPEN_FINANCE_ENABLED = False
-    logger.warning(f"⚠️ Open Finance não disponível: {e}")
+# 🏦 OPEN FINANCE (TEMPORARIAMENTE DESABILITADO)
+OPEN_FINANCE_ENABLED = False
+# try:
+#     from gerente_financeiro.open_finance_handler import OpenFinanceHandler
+#     from open_finance.data_sync import schedule_daily_sync
+#     OPEN_FINANCE_ENABLED = True
+#     logging.info("✅ Open Finance habilitado")
+# except ImportError as e:
+#     OPEN_FINANCE_ENABLED = False
+#     logging.warning(f"⚠️ Open Finance não disponível: {e}")
 
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("debugocr")

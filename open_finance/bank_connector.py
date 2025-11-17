@@ -6,7 +6,8 @@ Gerencia conexões de usuários com instituições financeiras
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime
-from database.database import Database
+from database.database import SessionLocal, engine  # Import correto
+from sqlalchemy import text
 from .pluggy_client import PluggyClient
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,6 @@ class BankConnector:
     """Gerenciador de conexões bancárias por usuário"""
     
     def __init__(self):
-        self.db = Database()
         self.client = PluggyClient()
         self._ensure_tables()
     
@@ -81,12 +81,15 @@ class BankConnector:
         ]
         
         try:
-            for query in queries:
-                self.db.execute_query(query)
+            with engine.connect() as conn:
+                for query in queries:
+                    conn.execute(text(query))
+                conn.commit()
             logger.info("✅ Tabelas Open Finance criadas/verificadas")
         except Exception as e:
             logger.error(f"❌ Erro ao criar tabelas: {e}")
-            raise
+            # Não raise - deixa bot funcionar mesmo sem Open Finance
+            logger.warning("⚠️ Open Finance indisponível (sem tabelas)")
     
     # ==================== CONEXÕES ====================
     
