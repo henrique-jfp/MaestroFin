@@ -49,6 +49,28 @@ def load_environment():
         logger.error(f"❌ Erro ao carregar ambiente: {e}")
         return False
 
+def start_health_check_server():
+    """Inicia servidor HTTP simples para health checks (Koyeb/Render)"""
+    from flask import Flask
+    
+    health_app = Flask(__name__)
+    
+    @health_app.route('/')
+    @health_app.route('/health')
+    @health_app.route('/healthz')
+    def health():
+        return {'status': 'healthy', 'service': 'maestrofin-bot'}, 200
+    
+    port = int(os.getenv('PORT', 8000))
+    logger.info(f"🏥 Health check server iniciado na porta {port}")
+    
+    # Rodar em modo silencioso
+    import logging as flask_logging
+    flask_log = flask_logging.getLogger('werkzeug')
+    flask_log.setLevel(flask_logging.ERROR)
+    
+    health_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
 def start_telegram_bot():
     """Inicia o bot do Telegram"""
     try:
@@ -56,6 +78,13 @@ def start_telegram_bot():
         logger.info(f"📍 Python version: {sys.version}")
         logger.info(f"📍 Working directory: {os.getcwd()}")
         logger.info(f"📍 TELEGRAM_TOKEN presente: {bool(os.getenv('TELEGRAM_TOKEN'))}")
+        
+        # 🏥 INICIAR HEALTH CHECK SERVER EM THREAD SEPARADA
+        # (Para Koyeb/Render que precisam de health checks HTTP)
+        if os.getenv('PORT'):
+            health_thread = Thread(target=start_health_check_server, daemon=True)
+            health_thread.start()
+            logger.info("✅ Health check server iniciado em thread separada")
         
         from bot import main
         logger.info("✅ Módulo bot importado com sucesso")
