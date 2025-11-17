@@ -41,12 +41,42 @@ class OpenFinanceHandler:
         try:
             # Listar bancos disponíveis
             connectors = self.client.list_connectors(country="BR")
-            
-            # Filtrar principais bancos (top 20)
-            main_banks = [c for c in connectors if c.get('featured', False)][:20]
-            
-            if not main_banks:
-                main_banks = connectors[:20]
+
+            # Destacar bancos populares para facilitar a busca do usuário
+            priority_keywords = [
+                "itau",
+                "itaú",
+                "inter",
+                "nubank",
+                "nu bank",
+                "caixa",
+                "cef",
+                "bradesco",
+                "santander",
+                "sicredi",
+                "sicoob",
+                "banco do brasil",
+            ]
+
+            def is_priority(connector_name: str) -> bool:
+                name_lower = connector_name.lower()
+                return any(keyword in name_lower for keyword in priority_keywords)
+
+            priority_connectors = []
+            priority_ids = set()
+
+            for conn in connectors:
+                if is_priority(conn.get('name', '')):
+                    priority_connectors.append(conn)
+                    priority_ids.add(conn['id'])
+
+            # Complementa com destacados pela Pluggy (featured) e demais em ordem
+            featured = [c for c in connectors if c.get('featured', False) and c['id'] not in priority_ids]
+            remaining = [c for c in connectors if c['id'] not in priority_ids and c not in featured]
+
+            # Limitar lista final mantendo prioridade
+            main_banks = priority_connectors + featured + remaining
+            main_banks = main_banks[:40]
             
             # Criar teclado inline
             keyboard = []
