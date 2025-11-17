@@ -182,6 +182,16 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
+# 🏦 OPEN FINANCE
+try:
+    from gerente_financeiro.open_finance_handler import OpenFinanceHandler
+    from open_finance.data_sync import schedule_daily_sync
+    OPEN_FINANCE_ENABLED = True
+    logger.info("✅ Open Finance habilitado")
+except ImportError as e:
+    OPEN_FINANCE_ENABLED = False
+    logger.warning(f"⚠️ Open Finance não disponível: {e}")
+
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("debugocr")
 async def debug_ocr_command(update, context):
@@ -424,7 +434,17 @@ def main() -> None:
     application.add_handler(CommandHandler("perfil", show_profile))
     application.add_handler(CommandHandler("ranking", show_rankings))
     
-    # 🌐 DASHBOARD HANDLERS
+    # � OPEN FINANCE HANDLERS
+    if OPEN_FINANCE_ENABLED:
+        try:
+            of_handler = OpenFinanceHandler()
+            for handler in of_handler.get_handlers():
+                application.add_handler(handler)
+            logger.info("✅ Handlers Open Finance adicionados")
+        except Exception as e:
+            logger.error(f"❌ Erro ao adicionar handlers Open Finance: {e}")
+    
+    # �🌐 DASHBOARD HANDLERS
     application.add_handler(CommandHandler("dashboard", cmd_dashboard))  # DASHBOARD PRINCIPAL
     application.add_handler(CommandHandler("dashstatus", cmd_dashstatus))
     application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))  # DEBUG
@@ -643,6 +663,14 @@ def create_application():
 
         # 🔥 ERROR HANDLER ULTRA-ROBUSTO
         application.add_error_handler(error_handler)
+        
+        # 🏦 OPEN FINANCE AUTO-SYNC
+        if OPEN_FINANCE_ENABLED:
+            try:
+                scheduler = schedule_daily_sync()
+                logger.info("✅ Sincronização automática Open Finance ativada (6h + a cada 6h)")
+            except Exception as e:
+                logger.error(f"❌ Erro ao agendar sync Open Finance: {e}")
         
         logger.info("🎯 [ULTRA-ROBUST] Aplicação criada com SUCESSO!")
         return application

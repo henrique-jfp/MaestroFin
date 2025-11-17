@@ -1,0 +1,33 @@
+# ⚠️ VERSÃO SIMPLIFICADA - APENAS BOT
+# Use este arquivo se o render.yaml completo estiver dando problema
+
+services:
+  # Bot do Telegram (APENAS ESTE)
+  - type: worker
+    name: maestrofin-bot
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 launcher.py
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_MODEL_NAME
+        value: gemini-1.5-flash
+      - key: RENDER
+        value: true
+      - key: SENDER_EMAIL
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_RECEIVER
+        sync: false
+      - key: PIX_KEY
+        sync: false
