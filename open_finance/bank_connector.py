@@ -4,6 +4,7 @@ Gerencia conexões de usuários com instituições financeiras
 """
 
 import logging
+import time
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from database.database import SessionLocal, engine
@@ -11,6 +12,22 @@ from sqlalchemy import text
 from .pluggy_client import PluggyClient
 
 logger = logging.getLogger(__name__)
+
+
+class BankConnectorError(Exception):
+    """Exceção base para erros de conexão bancária."""
+
+
+class BankConnectorUserActionRequired(BankConnectorError):
+    """Indica que o banco requer ação adicional do usuário (ex.: OTP)."""
+
+    def __init__(self, message: str, detail: Optional[str] = None):
+        super().__init__(message)
+        self.detail = detail
+
+
+class BankConnectorTimeout(BankConnectorError):
+    """Indica que o tempo de espera pela instituição estourou."""
 
 
 class BankConnector:
@@ -115,6 +132,12 @@ class BankConnector:
         try:
             # Criar item no Pluggy
             item = self.client.create_item(connector_id, credentials)
+            item_id = item['id']
+
+            # Aguardar processamento pelo banco antes de seguir
+            final_item = self._wait_until_ready(item_id)
+            status = final_item.get('status')
+            status_detail = final_item.get('statusDetail')
             
             # Obter nome do conector
             connector = self.client.get_connector(connector_id)
@@ -131,10 +154,10 @@ class BankConnector:
                     """),
                     {
                         "user_id": user_id,
-                        "item_id": item['id'],
+                        "item_id": item_id,
                         "connector_id": connector_id,
                         "connector_name": connector_name,
-                        "status": item.get('status')
+                        "status": status
                     }
                 )
                 conn.commit()
@@ -142,23 +165,39 @@ class BankConnector:
                 
                 if row:
                     connection_id = row[0]
-                    logger.info(f"✅ Conexão criada: {row[1]}")
+                    logger.info(f"✅ Conexão criada: {row[1]} (status {status})")
                     
                     # Sincronizar contas imediatamente
-                    self._sync_accounts(connection_id, item['id'])
+                    self._sync_accounts(connection_id, item_id)
                     
                     return {
                         'id': row[0],
                         'item_id': row[1],
                         'connector_name': row[2],
                         'status': row[3],
-                        'created_at': row[4]
+                        'created_at': row[4],
+                        'status_detail': status_detail
                     }
             
             raise Exception("Erro ao salvar conexão no banco")
             
+        except BankConnectorUserActionRequired as action_err:
+            logger.warning(f"⚠️ Ação adicional requerida pelo banco: {action_err.detail}")
+            raise
+        except BankConnectorTimeout as timeout_err:
+            logger.error(f"⏱️ Tempo excedido aguardando retorno do banco: {timeout_err}")
+            try:
+                self.client.delete_item(item_id)
+            except Exception:
+                logger.debug("Não foi possível remover item após timeout")
+            raise
         except Exception as e:
             logger.error(f"❌ Erro ao criar conexão: {e}")
+            try:
+                if 'item_id' in locals():
+                    self.client.delete_item(item_id)
+            except Exception:
+                logger.debug("Não foi possível remover item após erro")
             raise
     
     def list_connections(self, user_id: int) -> List[Dict]:
@@ -289,6 +328,36 @@ class BankConnector:
         except Exception as e:
             logger.error(f"❌ Erro ao sincronizar contas: {e}")
             raise
+
+    def _wait_until_ready(self, item_id: str, timeout: int = 90, interval: int = 4) -> Dict:
+        """Espera a instituição responder com sucesso ou erro."""
+        start = time.time()
+        last_status = None
+        last_detail = None
+
+        while time.time() - start < timeout:
+            item = self.client.get_item(item_id)
+            status = item.get('status')
+            detail = item.get('statusDetail')
+
+            if status != last_status:
+                logger.info(f"⌛ Status item {item_id}: {status} ({detail})")
+                last_status = status
+                last_detail = detail
+
+            if status in {"HEALTHY", "PARTIAL_SUCCESS"}:
+                return item
+
+            if status == "WAITING_USER_INPUT":
+                message = detail or "Abra o app do banco e autorize a conexão."
+                raise BankConnectorUserActionRequired(message, detail)
+
+            if status in {"LOGIN_ERROR", "INVALID_CREDENTIALS", "ERROR", "SUSPENDED"}:
+                raise BankConnectorError(detail or "O banco rejeitou as credenciais informadas.")
+
+            time.sleep(interval)
+
+        raise BankConnectorTimeout("O banco ainda está processando sua autorização. Tente novamente em alguns minutos.")
     
     def list_accounts(self, user_id: int) -> List[Dict]:
         """Lista todas as contas bancárias de um usuário"""
@@ -457,3 +526,11 @@ class BankConnector:
                 })
             
             return transactions
+
+    def get_item_status(self, item_id: str) -> Dict:
+        """Obtém status atual de um item direto do Pluggy."""
+        try:
+            return self.client.get_item(item_id)
+        except Exception as exc:
+            logger.error(f"❌ Erro ao consultar status do item {item_id}: {exc}")
+            return {}

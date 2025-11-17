@@ -16,7 +16,12 @@ from telegram.ext import (
     filters
 )
 from datetime import datetime
-from open_finance.bank_connector import BankConnector
+from open_finance.bank_connector import (
+    BankConnector,
+    BankConnectorError,
+    BankConnectorTimeout,
+    BankConnectorUserActionRequired,
+)
 from open_finance.pluggy_client import PluggyClient, format_currency, format_account_type
 
 logger = logging.getLogger(__name__)
@@ -78,7 +83,22 @@ class OpenFinanceHandler:
 
             # Limitar lista final mantendo prioridade
             main_banks = priority_connectors + featured + remaining
-            main_banks = main_banks[:40]
+            main_banks = main_banks[:80]
+
+            # Remover duplicados por nome para evitar poluição visual
+            seen_names = set()
+            unique_banks = []
+            for bank in main_banks:
+                name = (bank.get('name') or '').strip()
+                if not name:
+                    continue
+                key = name.lower()
+                if key in seen_names:
+                    continue
+                seen_names.add(key)
+                unique_banks.append(bank)
+
+            main_banks = unique_banks
             
             # Criar teclado inline
             keyboard = []
@@ -576,10 +596,18 @@ class OpenFinanceHandler:
                     "Use /extrato para ver suas transações."
                 )
             else:
+                status_info = await asyncio.to_thread(
+                    self.connector.get_item_status,
+                    connection.get('item_id')
+                )
+                status_detail = status_info.get('statusDetail') if isinstance(status_info, dict) else None
+                detail_message = status_detail or (
+                    "O banco informou que ainda está processando seus dados."
+                )
                 success_message = (
-                    "✅ Conexão criada, mas nenhuma conta foi retornada.\n\n"
-                    "Isso pode acontecer se o banco exigir um passo adicional."
-                    " Tente novamente em alguns minutos ou verifique no app do banco."
+                    "⚠️ Conexão recebida, mas nenhuma conta foi liberada ainda.\n\n"
+                    f"Status informado pela instituição: {detail_message}\n\n"
+                    "Abra o app ou internet banking para confirmar a autorização e tente novamente em alguns minutos."
                 )
 
             await processing_msg.edit_text(success_message, parse_mode='HTML')
@@ -587,6 +615,30 @@ class OpenFinanceHandler:
             context.user_data.clear()
             return ConversationHandler.END
 
+        except BankConnectorUserActionRequired as action_err:
+            logger.warning("Banco solicitou ação adicional do usuário")
+            await processing_msg.edit_text(
+                "⚠️ O banco pediu uma confirmação adicional.\n"
+                f"{action_err.args[0]}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+        except BankConnectorTimeout as timeout_err:
+            logger.warning("Tempo esgotado aguardando retorno do banco")
+            await processing_msg.edit_text(
+                "⏱️ A instituição ainda não liberou a conexão."
+                f"\n{timeout_err}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+        except BankConnectorError as connector_err:
+            logger.error(f"Erro do banco ao finalizar conexão: {connector_err}")
+            await processing_msg.edit_text(
+                "❌ O banco recusou o acesso. Verifique as credenciais ou tente novamente mais tarde."
+                f"\nDetalhe: {connector_err}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
         except Exception:
             logger.exception("Erro ao finalizar conexão")
             await processing_msg.edit_text(
