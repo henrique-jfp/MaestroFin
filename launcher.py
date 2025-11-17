@@ -86,16 +86,16 @@ def start_telegram_bot():
             health_thread.start()
             logger.info("✅ Health check server iniciado em thread separada")
         
-        from bot import main
+        from bot import create_application
         logger.info("✅ Módulo bot importado com sucesso")
-        logger.info("▶️  Chamando main() do bot...")
+        logger.info("▶️  Criando aplicação do bot...")
         
-        # main() retorna a application, precisamos rodar ela!
-        application = main()
+        # create_application() cria o bot de forma ultra-robusta
+        application = create_application()
         
         if application:
             logger.info("🚀 Iniciando polling do bot...")
-            application.run_polling(allowed_updates=None)
+            application.run_polling(allowed_updates=None, drop_pending_updates=True)
             logger.info("✅ Bot iniciado com sucesso!")
         else:
             logger.error("❌ Falha ao criar aplicação do bot")
