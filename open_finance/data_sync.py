@@ -6,6 +6,7 @@ Job que roda periodicamente para atualizar saldos e transações
 import logging
 from datetime import datetime
 from open_finance.bank_connector import BankConnector
+from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class DataSynchronizer:
     def __init__(self):
         self.connector = BankConnector()
     
-    async def sync_all_connections(self):
+    async def sync_all_connections(self, context: ContextTypes.DEFAULT_TYPE | None = None):
         """
         Sincroniza todas as conexões ativas
         Chamado automaticamente via APScheduler
