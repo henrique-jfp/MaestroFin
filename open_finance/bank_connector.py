@@ -35,7 +35,7 @@ class BankConnector:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_sync_at TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES usuarios(user_id) ON DELETE CASCADE
+                FOREIGN KEY (user_id) REFERENCES usuarios(telegram_id) ON DELETE CASCADE
             )
             """,
             
