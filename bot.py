@@ -342,6 +342,149 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _register_default_handlers(application: Application, safe_mode: bool = False) -> None:
+    """Registra em um único ponto os handlers necessários para o bot."""
+
+    def add(handler, name: str) -> None:
+        try:
+            application.add_handler(handler)
+            logger.debug("Handler %s registrado", name)
+        except Exception as exc:
+            if safe_mode:
+                logger.warning("⚠️ Handler %s indisponível: %s", name, exc)
+            else:
+                raise
+
+    def build_and_add(name: str, builder) -> None:
+        try:
+            handler = builder()
+        except Exception as exc:
+            if safe_mode:
+                logger.warning("⚠️ Falha ao construir %s: %s", name, exc)
+                return
+            raise
+        add(handler, name)
+
+    logger.info("🔧 Registrando handlers padrão do bot...")
+
+    conversation_builders = [
+        ("configurar_conv", lambda: configurar_conv),
+        ("gerente_conv", create_gerente_conversation_handler),
+        ("cadastro_email_conv", create_cadastro_email_conversation_handler),
+        ("manual_entry_conv", lambda: manual_entry_conv),
+        ("fatura_conv", lambda: fatura_conv),
+        ("delete_user_conv", lambda: delete_user_conv),
+        ("contact_conv", lambda: contact_conv),
+        ("grafico_conv", lambda: grafico_conv),
+        ("objetivo_conv", lambda: objetivo_conv),
+        ("edit_meta_conv", lambda: edit_meta_conv),
+        ("agendamento_conv", lambda: agendamento_conv),
+        ("edit_conv", lambda: edit_conv),
+        ("extrato_conv", criar_conversation_handler_extrato),
+    ]
+
+    for name, builder in conversation_builders:
+        build_and_add(name, builder)
+
+    command_builders = [
+        ("relatorio_handler", lambda: relatorio_handler),
+        ("/help", lambda: CommandHandler("help", help_command)),
+        ("/alerta", lambda: CommandHandler("alerta", schedule_alerts)),
+        ("/metas", lambda: CommandHandler("metas", listar_metas_command)),
+        ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
+        ("/notificacoes", lambda: CommandHandler("notificacoes", painel_notificacoes)),
+        ("/perfil", lambda: CommandHandler("perfil", show_profile)),
+        ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
+        ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
+        ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),
+        ("/dashboarddebug", lambda: CommandHandler("dashboarddebug", debug_dashboard)),
+        ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),
+        ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
+    ]
+
+    for name, builder in command_builders:
+        build_and_add(name, builder)
+
+    callback_builders = [
+        ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^help_")),
+        ("analise_callback", lambda: CallbackQueryHandler(handle_analise_impacto_callback, pattern="^analise_")),
+        ("deletar_meta_callback", lambda: CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_")),
+        ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
+        ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
+        ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
+        ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
+        ("fatura_agendar_sim", lambda: CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$")),
+        ("fatura_agendar_nao", lambda: CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$")),
+    ]
+
+    for name, builder in callback_builders:
+        build_and_add(name, builder)
+
+    if OPEN_FINANCE_ENABLED:
+        try:
+            of_handler = OpenFinanceHandler()
+            for index, handler in enumerate(of_handler.get_handlers()):
+                add(handler, f"open_finance_handler_{index}")
+            logger.info("✅ Handlers Open Finance adicionados")
+        except Exception as exc:
+            if safe_mode:
+                logger.error("❌ Erro ao adicionar handlers Open Finance: %s", exc)
+            else:
+                raise
+
+    try:
+        from gerente_financeiro.spx_handler import spx_handler
+        from gerente_financeiro.spx_metas_handler import spx_metas_handler
+        from gerente_financeiro.spx_dashboard import spx_dashboard
+
+        spx_conv = ConversationHandler(
+            entry_points=[CommandHandler('spx', spx_handler.comando_spx)],
+            states={
+                spx_handler.SPX_GANHOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_ganhos)],
+                spx_handler.SPX_COMBUSTIVEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_combustivel)],
+                spx_handler.SPX_OUTROS_GASTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_outros_gastos)],
+                spx_handler.SPX_QUILOMETRAGEM: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_quilometragem)],
+                spx_handler.SPX_HORAS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_horas),
+                    CallbackQueryHandler(spx_handler.pular_horas, pattern="^spx_pular_horas$")
+                ],
+                spx_handler.SPX_ENTREGAS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_entregas),
+                    CallbackQueryHandler(spx_handler.finalizar_sem_entregas, pattern="^spx_finalizar_sem_entregas$")
+                ],
+                spx_handler.SPX_OBSERVACOES: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_observacoes),
+                    CallbackQueryHandler(spx_handler.pular_observacoes, pattern="^spx_confirmar_registro$")
+                ],
+                spx_handler.SPX_CONFIRMAR: [
+                    CallbackQueryHandler(spx_handler.salvar_registro, pattern="^spx_salvar$"),
+                    CallbackQueryHandler(spx_handler.cancelar_registro, pattern="^spx_cancelar$")
+                ]
+            },
+            fallbacks=[
+                CommandHandler('cancel', spx_handler.cancelar_registro),
+                CallbackQueryHandler(spx_handler.cancelar_registro, pattern="^spx_cancelar$")
+            ]
+        )
+
+        add(spx_conv, "spx_conversation")
+        build_and_add("spx_metas_conversation", spx_metas_handler.get_conversation_handler)
+        build_and_add("/spx_hoje", lambda: CommandHandler("spx_hoje", spx_handler.comando_spx_hoje))
+        build_and_add("/spx_semana", lambda: CommandHandler("spx_semana", spx_handler.comando_spx_semana))
+        build_and_add("/spx_mes", lambda: CommandHandler("spx_mes", spx_handler.comando_spx_mes))
+        build_and_add("/spx_metas", lambda: CommandHandler("spx_metas", spx_metas_handler.comando_listar_metas))
+        build_and_add("/spx_dashboard", lambda: CommandHandler("spx_dashboard", spx_dashboard.comando_dashboard))
+        build_and_add("spx_registro_completo_callback", lambda: CallbackQueryHandler(spx_handler.iniciar_registro_completo, pattern="^spx_registro_completo$"))
+        build_and_add("spx_dashboard_callback", lambda: CallbackQueryHandler(spx_dashboard.callback_dashboard, pattern="^spx_dash_"))
+    except Exception as exc:
+        if safe_mode:
+            logger.warning("⚠️ SPX handlers indisponíveis: %s", exc)
+        else:
+            raise
+
+    logger.info("✅ Handlers padrão registrados")
+
+
 # --- FUNÇÕES PRINCIPAIS DO BOT ---
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -400,85 +543,15 @@ def main() -> None:
     application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
     logger.info("Aplicação do bot criada.")
 
-    
-    gerente_conv = create_gerente_conversation_handler()
-    email_conv = create_cadastro_email_conversation_handler()
-    
-    # Adicionando todos os handlers à aplicação
-    logger.info("Adicionando handlers...")
-    
-    # Handlers de Conversa (ConversationHandler)
-    application.add_handler(configurar_conv)  # Inclui o /start agora
-    application.add_handler(gerente_conv)
-    application.add_handler(email_conv)
-    application.add_handler(manual_entry_conv)
-    application.add_handler(fatura_conv)        # Adicionado aqui
-    application.add_handler(delete_user_conv)
-    application.add_handler(contact_conv)
-    application.add_handler(grafico_conv)
-    application.add_handler(objetivo_conv)
-    application.add_handler(edit_meta_conv)
-    application.add_handler(agendamento_conv)
-    application.add_handler(edit_conv)
-    application.add_handler(criar_conversation_handler_extrato())
-    
-    # Handlers de Comando (CommandHandler)
-    application.add_handler(relatorio_handler)  # É um CommandHandler, não uma conversa
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("alerta", schedule_alerts))
-    application.add_handler(CommandHandler("metas", listar_metas_command))
-    application.add_handler(CommandHandler("agendar", agendamento_start))
-    application.add_handler(CommandHandler("notificacoes", painel_notificacoes))
-    
-    # 🎮 GAMIFICATION HANDLERS
-    application.add_handler(CommandHandler("perfil", show_profile))
-    application.add_handler(CommandHandler("ranking", show_rankings))
-    
-    # � OPEN FINANCE HANDLERS
-    if OPEN_FINANCE_ENABLED:
-        try:
-            of_handler = OpenFinanceHandler()
-            for handler in of_handler.get_handlers():
-                application.add_handler(handler)
-            logger.info("✅ Handlers Open Finance adicionados")
-        except Exception as e:
-            logger.error(f"❌ Erro ao adicionar handlers Open Finance: {e}")
-    
-    # �🌐 DASHBOARD HANDLERS
-    application.add_handler(CommandHandler("dashboard", cmd_dashboard))  # DASHBOARD PRINCIPAL
-    application.add_handler(CommandHandler("dashstatus", cmd_dashstatus))
-    application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))  # DEBUG
-    
-    # 🧪 DEBUG HANDLERS
-    application.add_handler(CommandHandler("debugocr", debug_ocr_command))
-    application.add_handler(CommandHandler("debuglogs", debug_logs_command))
-    
-    # Handlers de Callback (CallbackQueryHandler) para menus e botões
-    application.add_handler(CallbackQueryHandler(help_callback, pattern="^help_"))
-    application.add_handler(CallbackQueryHandler(handle_analise_impacto_callback, pattern="^analise_"))
-    application.add_handler(CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_"))
-    application.add_handler(CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_"))
-    application.add_handler(CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_"))
-    
-    # 🎮 GAMIFICATION CALLBACKS
-    application.add_handler(CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$"))
-    
-    # 🌐 DASHBOARD CALLBACKS
-    application.add_handler(CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_"))
-    
-    # 🆕 NOVOS: Handlers independentes para callbacks de agendamento de parcelas
-    application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$"))
-    application.add_handler(CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$"))
-    
-    # Handler de Erro
+    _register_default_handlers(application)
     application.add_error_handler(error_handler)
     logger.info("Todos os handlers adicionados com sucesso.")
-    
+
     # Configuração e inicialização dos Jobs agendados
     job_queue = application.job_queue
     configurar_jobs(job_queue)
     logger.info("Jobs de metas e agendamentos configurados.")
-    
+
     return application
 
 def create_application():
@@ -531,138 +604,21 @@ def create_application():
         application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
         logger.info("✅ Aplicação do bot criada.")
 
-        # 🔥 HANDLERS ULTRA-ROBUSTOS (COM TRY/CATCH)
-        logger.info("🔧 Adicionando handlers...")
-        
         try:
-            from gerente_financeiro.handlers import create_gerente_conversation_handler, create_cadastro_email_conversation_handler
-            from gerente_financeiro.onboarding_handler import configurar_conv
-            
-            gerente_conv = create_gerente_conversation_handler()
-            email_conv = create_cadastro_email_conversation_handler()
-            
-            # Handlers de Conversa ESSENCIAIS
-            application.add_handler(gerente_conv)
-            application.add_handler(email_conv)
-            
-            # Handlers modulares PROTEGIDOS
-            handlers_modulares = [
-                ('manual_entry_conv', 'gerente_financeiro.manual_entry_handler'),
-                ('edit_conv', 'gerente_financeiro.editing_handler'),
-                ('agendamento_conv', 'gerente_financeiro.agendamentos_handler'),
-                ('edit_meta_conv', 'gerente_financeiro.metas_handler'),
-                ('configurar_conv', 'gerente_financeiro.onboarding_handler'),
-                ('grafico_conv', 'gerente_financeiro.graficos'),
-                ('contact_conv', 'gerente_financeiro.contact_handler'),
-                ('delete_user_conv', 'gerente_financeiro.delete_user_handler'),
-                ('fatura_conv', 'gerente_financeiro.fatura_handler'),
-            ]
-            
-            for handler_name, module_name in handlers_modulares:
-                try:
-                    module = __import__(module_name, fromlist=[handler_name])
-                    handler = getattr(module, handler_name)
-                    application.add_handler(handler)
-                    logger.info(f"✅ Handler {handler_name} adicionado")
-                except Exception as h_error:
-                    logger.warning(f"⚠️ Handler {handler_name} falhou: {h_error}")
-                    continue
-
-            # Handlers básicos SEMPRE
-            application.add_handler(configurar_conv)  # Inclui o /start
-            # Handlers básicos SEMPRE (decorados para analytics)
-            application.add_handler(CommandHandler("help", help_command))
-            application.add_handler(CommandHandler("debugocr", debug_ocr_command))
-            application.add_handler(CommandHandler("debuglogs", debug_logs_command))
-            application.add_handler(CommandHandler("dashboarddebug", debug_dashboard))
-            
-            # 🚗 SPX HANDLERS - Sistema de Controle de Entregas
-            try:
-                from gerente_financeiro.spx_handler import spx_handler
-                from gerente_financeiro.spx_metas_handler import spx_metas_handler
-                from gerente_financeiro.spx_dashboard import spx_dashboard
-                from telegram.ext import ConversationHandler
-                
-                # Criar conversation handler para SPX
-                spx_conv = ConversationHandler(
-                    entry_points=[CommandHandler('spx', spx_handler.comando_spx)],
-                    states={
-                        spx_handler.SPX_GANHOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_ganhos)],
-                        spx_handler.SPX_COMBUSTIVEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_combustivel)],
-                        spx_handler.SPX_OUTROS_GASTOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_outros_gastos)],
-                        spx_handler.SPX_QUILOMETRAGEM: [MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_quilometragem)],
-                        spx_handler.SPX_HORAS: [
-                            MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_horas),
-                            CallbackQueryHandler(spx_handler.pular_horas, pattern="^spx_pular_horas$")
-                        ],
-                        spx_handler.SPX_ENTREGAS: [
-                            MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_entregas),
-                            CallbackQueryHandler(spx_handler.finalizar_sem_entregas, pattern="^spx_finalizar_sem_entregas$")
-                        ],
-                        spx_handler.SPX_OBSERVACOES: [
-                            MessageHandler(filters.TEXT & ~filters.COMMAND, spx_handler.processar_observacoes),
-                            CallbackQueryHandler(spx_handler.pular_observacoes, pattern="^spx_confirmar_registro$")
-                        ],
-                        spx_handler.SPX_CONFIRMAR: [
-                            CallbackQueryHandler(spx_handler.salvar_registro, pattern="^spx_salvar$"),
-                            CallbackQueryHandler(spx_handler.cancelar_registro, pattern="^spx_cancelar$")
-                        ]
-                    },
-                    fallbacks=[
-                        CommandHandler('cancel', spx_handler.cancelar_registro),
-                        CallbackQueryHandler(spx_handler.cancelar_registro, pattern="^spx_cancelar$")
-                    ]
-                )
-                
-                application.add_handler(spx_conv)
-                
-                # SPX Metas - Conversation handler
-                spx_metas_conv = spx_metas_handler.get_conversation_handler()
-                application.add_handler(spx_metas_conv)
-                
-                # Comandos SPX diretos
-                application.add_handler(CommandHandler("spx_hoje", spx_handler.comando_spx_hoje))
-                application.add_handler(CommandHandler("spx_semana", spx_handler.comando_spx_semana))
-                application.add_handler(CommandHandler("spx_mes", spx_handler.comando_spx_mes))
-                
-                # Comandos SPX Metas
-                application.add_handler(CommandHandler("spx_metas", spx_metas_handler.comando_listar_metas))
-                
-                # Comando SPX Dashboard
-                application.add_handler(CommandHandler("spx_dashboard", spx_dashboard.comando_dashboard))
-                
-                # Callbacks SPX
-                application.add_handler(CallbackQueryHandler(spx_handler.iniciar_registro_completo, pattern="^spx_registro_completo$"))
-                
-                # Callbacks SPX Dashboard
-                application.add_handler(CallbackQueryHandler(spx_dashboard.callback_dashboard, pattern="^spx_dash_"))
-                
-                logger.info("✅ SPX System handlers adicionados com sucesso")
-                
-            except Exception as spx_error:
-                logger.warning(f"⚠️ SPX handlers falharam: {spx_error} - continuando sem SPX")
-            
-            # Extra: garantir tracking /start se existir atributo
-            try:
-                if hasattr(configurar_conv, 'entry_points'):
-                    logger.debug("🔍 Verificando entry_points de /start para tracking")
-            except Exception:
-                pass
-            
-            logger.info("✅ Todos os handlers adicionados com sucesso.")
-            
+            _register_default_handlers(application, safe_mode=True)
+            logger.info("✅ Handlers padrão adicionados.")
         except Exception as handler_error:
             logger.error(f"❌ Erro handlers: {handler_error}")
-            
+
+        # 🔥 ERROR HANDLER ULTRA-ROBUSTO
+        application.add_error_handler(error_handler)
+
         # 🔥 JOBS ULTRA-ROBUSTOS (OPCIONAL)
         try:
             configurar_jobs(application.job_queue)
             logger.info("✅ Jobs agendados configurados.")
         except Exception as job_error:
             logger.warning(f"⚠️ Jobs falhou: {job_error} - continuando")
-
-        # 🔥 ERROR HANDLER ULTRA-ROBUSTO
-        application.add_error_handler(error_handler)
         
         # 🏦 OPEN FINANCE AUTO-SYNC
         if OPEN_FINANCE_ENABLED:
