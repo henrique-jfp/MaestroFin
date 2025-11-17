@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from models import UserBankToken
+from models import UserBankToken, Usuario
 from open_finance.token_encryption import get_encryption
 
 logger = logging.getLogger(__name__)
@@ -25,12 +25,37 @@ class TokenDatabaseManager:
         self.db = db_session
         self.encryption = get_encryption()
     
-    def save_token(self, user_id: int, bank: str, token: str, token_type: str) -> bool:
+    def _get_usuario_id(self, telegram_user_id: int) -> int | None:
+        """
+        Converte telegram_user_id para id de usuário na BD
+        
+        Args:
+            telegram_user_id: ID do Telegram (grande número)
+            
+        Returns:
+            ID do usuário na BD ou None
+        """
+        try:
+            usuario = self.db.query(Usuario).filter(
+                Usuario.telegram_id == telegram_user_id
+            ).first()
+            
+            if usuario:
+                return usuario.id
+            
+            logger.warning(f"⚠️ Usuário com telegram_id {telegram_user_id} não encontrado")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao buscar usuário: {e}")
+            return None
+    
+    def save_token(self, telegram_user_id: int, bank: str, token: str, token_type: str) -> bool:
         """
         Salva token de banco no BD (criptografado)
         
         Args:
-            user_id: ID do usuário
+            telegram_user_id: ID do Telegram do usuário
             bank: Nome do banco ('inter', 'itau', etc)
             token: Token em plain text
             token_type: Tipo de token ('isafe', 'itoken', 'bearer', etc)
@@ -39,10 +64,16 @@ class TokenDatabaseManager:
             True se salvo com sucesso
         """
         try:
+            # Converter telegram_user_id para usuario.id
+            usuario_id = self._get_usuario_id(telegram_user_id)
+            if not usuario_id:
+                logger.error(f"❌ Não foi possível encontrar usuário com telegram_id {telegram_user_id}")
+                return False
+            
             # Verifica se já existe token para este banco
             existing = self.db.query(UserBankToken).filter(
                 and_(
-                    UserBankToken.id_usuario == user_id,
+                    UserBankToken.id_usuario == usuario_id,
                     UserBankToken.banco == bank.lower()
                 )
             ).first()
@@ -56,18 +87,18 @@ class TokenDatabaseManager:
                 existing.token_type = token_type
                 existing.conectado_em = datetime.now(timezone.utc)
                 existing.ativo = True
-                logger.info(f"🔄 Token {bank} atualizado para usuário {user_id}")
+                logger.info(f"🔄 Token {bank} atualizado para usuário {telegram_user_id}")
             else:
                 # Cria novo registro
                 new_token = UserBankToken(
-                    id_usuario=user_id,
+                    id_usuario=usuario_id,
                     banco=bank.lower(),
                     encrypted_token=encrypted_token,
                     token_type=token_type,
                     ativo=True
                 )
                 self.db.add(new_token)
-                logger.info(f"✅ Token {bank} salvo para usuário {user_id}")
+                logger.info(f"✅ Token {bank} salvo para usuário {telegram_user_id}")
             
             self.db.commit()
             return True
@@ -77,28 +108,33 @@ class TokenDatabaseManager:
             self.db.rollback()
             raise
     
-    def get_token(self, user_id: int, bank: str) -> dict | None:
+    def get_token(self, telegram_user_id: int, bank: str) -> dict | None:
         """
         Recupera token do BD (decriptografado)
         
         Args:
-            user_id: ID do usuário
+            telegram_user_id: ID do Telegram do usuário
             bank: Nome do banco
             
         Returns:
             Dict com {token, token_type, conectado_em} ou None
         """
         try:
+            # Converter telegram_user_id para usuario.id
+            usuario_id = self._get_usuario_id(telegram_user_id)
+            if not usuario_id:
+                return None
+            
             token_record = self.db.query(UserBankToken).filter(
                 and_(
-                    UserBankToken.id_usuario == user_id,
+                    UserBankToken.id_usuario == usuario_id,
                     UserBankToken.banco == bank.lower(),
                     UserBankToken.ativo == True
                 )
             ).first()
             
             if not token_record:
-                logger.warning(f"⚠️  Token {bank} não encontrado para usuário {user_id}")
+                logger.warning(f"⚠️  Token {bank} não encontrado para usuário {telegram_user_id}")
                 return None
             
             # Atualiza último acesso
@@ -119,20 +155,25 @@ class TokenDatabaseManager:
             logger.error(f"❌ Erro ao recuperar token do BD: {e}")
             raise
     
-    def get_all_tokens(self, user_id: int) -> list[dict]:
+    def get_all_tokens(self, telegram_user_id: int) -> list[dict]:
         """
         Recupera todos os tokens ativos de um usuário
         
         Args:
-            user_id: ID do usuário
+            telegram_user_id: ID do Telegram do usuário
             
         Returns:
             Lista de dicts com informações dos tokens
         """
         try:
+            # Converter telegram_user_id para usuario.id
+            usuario_id = self._get_usuario_id(telegram_user_id)
+            if not usuario_id:
+                return []
+            
             tokens = self.db.query(UserBankToken).filter(
                 and_(
-                    UserBankToken.id_usuario == user_id,
+                    UserBankToken.id_usuario == usuario_id,
                     UserBankToken.ativo == True
                 )
             ).all()
@@ -146,28 +187,33 @@ class TokenDatabaseManager:
                     'ultimo_acesso': token_record.ultimo_acesso
                 })
             
-            logger.info(f"📋 {len(result)} token(s) recuperado(s) para usuário {user_id}")
+            logger.info(f"📋 {len(result)} token(s) recuperado(s) para usuário {telegram_user_id}")
             return result
             
         except Exception as e:
             logger.error(f"❌ Erro ao recuperar tokens do BD: {e}")
             raise
     
-    def delete_token(self, user_id: int, bank: str) -> bool:
+    def delete_token(self, telegram_user_id: int, bank: str) -> bool:
         """
         Deleta (marca como inativo) um token
         
         Args:
-            user_id: ID do usuário
+            telegram_user_id: ID do Telegram do usuário
             bank: Nome do banco
             
         Returns:
             True se deletado
         """
         try:
+            # Converter telegram_user_id para usuario.id
+            usuario_id = self._get_usuario_id(telegram_user_id)
+            if not usuario_id:
+                return False
+            
             token_record = self.db.query(UserBankToken).filter(
                 and_(
-                    UserBankToken.id_usuario == user_id,
+                    UserBankToken.id_usuario == usuario_id,
                     UserBankToken.banco == bank.lower()
                 )
             ).first()
@@ -175,7 +221,7 @@ class TokenDatabaseManager:
             if token_record:
                 token_record.ativo = False
                 self.db.commit()
-                logger.info(f"🗑️  Token {bank} deletado para usuário {user_id}")
+                logger.info(f"🗑️  Token {bank} deletado para usuário {telegram_user_id}")
                 return True
             
             return False
@@ -185,21 +231,26 @@ class TokenDatabaseManager:
             self.db.rollback()
             raise
     
-    def has_active_token(self, user_id: int, bank: str) -> bool:
+    def has_active_token(self, telegram_user_id: int, bank: str) -> bool:
         """
         Verifica se usuário tem token ativo para um banco
         
         Args:
-            user_id: ID do usuário
+            telegram_user_id: ID do Telegram do usuário
             bank: Nome do banco
             
         Returns:
             True se tem token ativo
         """
         try:
+            # Converter telegram_user_id para usuario.id
+            usuario_id = self._get_usuario_id(telegram_user_id)
+            if not usuario_id:
+                return False
+            
             exists = self.db.query(UserBankToken).filter(
                 and_(
-                    UserBankToken.id_usuario == user_id,
+                    UserBankToken.id_usuario == usuario_id,
                     UserBankToken.banco == bank.lower(),
                     UserBankToken.ativo == True
                 )
