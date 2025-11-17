@@ -6,7 +6,7 @@ Permite que usuários conectem bancos usando tokens de segurança
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
-from open_finance.token_auth import token_manager
+from open_finance.token_auth import TokenAuthManager
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,12 @@ SELECTING_BANK_TOKEN, ENTERING_TOKEN = range(2)
 class TokenAuthHandler:
     """Handler para autenticação por token"""
     
-    def __init__(self):
+    def __init__(self, db_session=None):
+        """
+        Args:
+            db_session: Sessão SQLAlchemy para persistir tokens
+        """
+        self.token_manager = TokenAuthManager(db_session)
         self.supported_banks = {
             'inter': 'Inter',
             'itau': 'Itaú',
@@ -119,10 +124,10 @@ class TokenAuthHandler:
         
         try:
             # Validar formato do token
-            auth_data = token_manager.authenticate(bank_key, token)
+            auth_data = self.token_manager.authenticate(bank_key, token)
             
             # Armazenar token
-            token_manager.store_token(user_id, bank_key, auth_data)
+            self.token_manager.store_token(user_id, bank_key, auth_data)
             
             message = (
                 f"✅ <b>Token de {bank_name} Validado!</b>\n\n"

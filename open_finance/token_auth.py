@@ -5,18 +5,24 @@ gerados diretamente pelo banco
 """
 
 import logging
-import os
+import re
 from typing import Dict, Optional
 from datetime import datetime
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
 class TokenAuthManager:
-    """Gerencia autenticação por token de banco"""
+    """Gerencia autenticação por token de banco com persistência em BD"""
     
-    def __init__(self):
-        self.tokens = {}  # Será salvo em BD depois
+    def __init__(self, db_session: Optional[Session] = None):
+        """
+        Args:
+            db_session: Sessão SQLAlchemy para salvar tokens no BD
+        """
+        self.db = db_session
+        self.tokens = {}  # Cache em memória (sincroniza com BD)
     
     # ==================== INTER ====================
     
@@ -286,18 +292,126 @@ class TokenAuthManager:
             return False
     
     def store_token(self, user_id: int, bank: str, auth_data: Dict) -> None:
-        """Armazena token para o usuário (será expandido para BD)"""
+        """
+        Armazena token para o usuário (em memória + BD se conectado)
+        
+        Args:
+            user_id: ID do usuário Telegram
+            bank: Nome do banco
+            auth_data: Dict com validação do token
+        """
+        # Cache em memória
         if user_id not in self.tokens:
             self.tokens[user_id] = {}
         
         self.tokens[user_id][bank] = auth_data
-        logger.info(f"✅ Token armazenado para usuário {user_id} - Banco: {bank}")
+        
+        # Persiste em BD se sessão disponível
+        if self.db:
+            try:
+                from open_finance.token_database import TokenDatabaseManager
+                db_manager = TokenDatabaseManager(self.db)
+                
+                token = auth_data.get('token')
+                token_type = auth_data.get('type', 'bearer')
+                
+                db_manager.save_token(user_id, bank, token, token_type)
+                logger.info(f"✅ Token persistido em BD para usuário {user_id} - Banco: {bank}")
+            except Exception as e:
+                logger.error(f"⚠️  Erro ao persistir token em BD: {e}")
+                # Continua mesmo se BD falhar (usa cache em memória)
+        else:
+            logger.warning(f"⚠️  DB não configurada - token mantido apenas em memória")
     
     def get_token(self, user_id: int, bank: str) -> Optional[Dict]:
-        """Recupera token do usuário"""
-        if user_id in self.tokens:
-            return self.tokens[user_id].get(bank)
+        """
+        Recupera token do usuário (tenta BD primeiro, depois memória)
+        
+        Args:
+            user_id: ID do usuário Telegram
+            bank: Nome do banco
+            
+        Returns:
+            Dict com token e metadata ou None
+        """
+        bank_lower = bank.lower()
+        
+        # Tenta BD primeiro
+        if self.db:
+            try:
+                from open_finance.token_database import TokenDatabaseManager
+                db_manager = TokenDatabaseManager(self.db)
+                token_data = db_manager.get_token(user_id, bank)
+                
+                if token_data:
+                    logger.info(f"✅ Token recuperado do BD para usuário {user_id} - Banco: {bank}")
+                    return token_data
+            except Exception as e:
+                logger.error(f"⚠️  Erro ao recuperar token do BD: {e}")
+        
+        # Fallback para memória
+        if user_id in self.tokens and bank_lower in self.tokens[user_id]:
+            logger.info(f"✅ Token recuperado de memória para usuário {user_id} - Banco: {bank}")
+            return self.tokens[user_id][bank_lower]
+        
+        logger.warning(f"⚠️  Token não encontrado para usuário {user_id} - Banco: {bank}")
         return None
+    
+    def delete_token(self, user_id: int, bank: str) -> bool:
+        """
+        Deleta token do usuário
+        
+        Args:
+            user_id: ID do usuário Telegram
+            bank: Nome do banco
+            
+        Returns:
+            True se deletado com sucesso
+        """
+        bank_lower = bank.lower()
+        
+        # Deleta do BD
+        if self.db:
+            try:
+                from open_finance.token_database import TokenDatabaseManager
+                db_manager = TokenDatabaseManager(self.db)
+                db_manager.delete_token(user_id, bank)
+            except Exception as e:
+                logger.error(f"⚠️  Erro ao deletar token do BD: {e}")
+        
+        # Deleta de memória
+        if user_id in self.tokens and bank_lower in self.tokens[user_id]:
+            del self.tokens[user_id][bank_lower]
+            logger.info(f"🗑️  Token deletado para usuário {user_id} - Banco: {bank}")
+            return True
+        
+        return False
+    
+    def list_user_tokens(self, user_id: int) -> list[str]:
+        """
+        Lista bancos com tokens ativos para um usuário
+        
+        Args:
+            user_id: ID do usuário Telegram
+            
+        Returns:
+            Lista de nomes de bancos
+        """
+        # Tenta BD primeiro
+        if self.db:
+            try:
+                from open_finance.token_database import TokenDatabaseManager
+                db_manager = TokenDatabaseManager(self.db)
+                tokens = db_manager.get_all_tokens(user_id)
+                return [t['banco'] for t in tokens]
+            except Exception as e:
+                logger.error(f"⚠️  Erro ao listar tokens do BD: {e}")
+        
+        # Fallback para memória
+        if user_id in self.tokens:
+            return list(self.tokens[user_id].keys())
+        
+        return []
 
 
 # Instância global
