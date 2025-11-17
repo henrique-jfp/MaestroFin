@@ -15,6 +15,16 @@ from telegram.ext import (
     MessageHandler, filters
 )
 
+# --- IMPORTS DO PROJETO (precisa ser antes de configurar genai) ---
+import config
+
+# Configurar Gemini API (CRÍTICO - deve ser feito logo após importar config)
+if config.GEMINI_API_KEY:
+    genai.configure(api_key=config.GEMINI_API_KEY)
+    logging.info("✅ Gemini API configurada em handlers.py")
+else:
+    logging.error("❌ GEMINI_API_KEY não encontrada - /gerente não funcionará!")
+
 # Importar analytics
 try:
     from analytics.bot_analytics import BotAnalytics
@@ -49,9 +59,8 @@ def track_analytics(command_name):
         return wrapper
     return decorator
 
-# --- IMPORTS DO PROJETO ---
+# --- IMPORTS RESTANTES DO PROJETO ---
 
-import config
 from database.database import get_db, get_or_create_user, buscar_lancamentos_usuario
 from models import Categoria, Lancamento, Subcategoria, Usuario, ItemLancamento, Conta
 from .prompts import PROMPT_GERENTE_VDM, PROMPT_INSIGHT_FINAL, SUPER_PROMPT_MAESTRO_CONTEXTUAL
