@@ -3,8 +3,10 @@
 Gerencia interação do usuário com conexões bancárias
 """
 
+import asyncio
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import re
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply, ReplyKeyboardRemove
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -20,7 +22,7 @@ from open_finance.pluggy_client import PluggyClient, format_currency, format_acc
 logger = logging.getLogger(__name__)
 
 # Estados da conversa
-SELECTING_BANK, ENTERING_CREDENTIALS = range(2)
+SELECTING_BANK, ENTERING_FIELD = range(2)
 
 
 class OpenFinanceHandler:
@@ -107,6 +109,7 @@ class OpenFinanceHandler:
             
             # Salvar lista de conectores no contexto
             context.user_data['connectors'] = {str(c['id']): c for c in connectors}
+            context.user_data['current_user_id'] = user_id
             
             return SELECTING_BANK
             
@@ -132,35 +135,28 @@ class OpenFinanceHandler:
         if not connector:
             await query.edit_message_text("❌ Banco não encontrado.")
             return ConversationHandler.END
-        
-        # Salvar conector selecionado
+
+        # Preparar coleta sequencial das credenciais
         context.user_data['selected_connector'] = connector
-        
-        # Obter campos de credenciais necessários
-        credentials = connector.get('credentials', [])
-        
-        message = (
-            f"🔐 <b>{connector['name']}</b>\n\n"
-            f"Digite suas credenciais no formato:\n\n"
+        context.user_data['credential_fields'] = connector.get('credentials', [])
+        context.user_data['collected_credentials'] = {}
+        context.user_data['credential_index'] = 0
+        context.user_data['ack_messages'] = []
+
+        await query.edit_message_text(
+            (
+                f"🔐 <b>{connector['name']}</b> selecionado!\n\n"
+                "Vou pedir cada informação em uma mensagem separada."
+                " Assim consigo remover sua resposta para manter tudo seguro."
+            ),
+            parse_mode='HTML'
         )
-        
-        # Exemplo de formato baseado nos campos
-        examples = []
-        for cred in credentials:
-            field_name = cred.get('label', cred.get('name', 'Campo'))
-            examples.append(f"<code>{field_name}: valor</code>")
-        
-        message += "\n".join(examples)
-        message += (
-            "\n\n<b>Exemplo:</b>\n"
-            "<code>CPF: 12345678900\n"
-            "Senha: minhasenha123</code>\n\n"
-            "<i>⚠️ Suas credenciais NÃO são armazenadas!</i>"
-        )
-        
-        await query.edit_message_text(message, parse_mode='HTML')
-        
-        return ENTERING_CREDENTIALS
+
+        if not context.user_data['credential_fields']:
+            # Alguns conectores não solicitam credenciais (ex.: dados públicos)
+            return await self._finalize_connection(query.message.chat_id, context)
+
+        return await self._prompt_next_field(query.message.chat_id, context)
     
     async def conectar_banco_credentials(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Recebe credenciais e cria conexão"""
@@ -171,69 +167,55 @@ class OpenFinanceHandler:
             await update.message.reply_text("❌ Sessão expirada. Use /conectar_banco novamente.")
             return ConversationHandler.END
         
-        # Parsear credenciais do texto
-        text = update.message.text.strip()
-        credentials = {}
-        
+        fields = context.user_data.get('credential_fields', [])
+        index = context.user_data.get('credential_index', 0)
+
+        if not connector or index > len(fields):
+            await update.message.reply_text("❌ Sessão expirada. Use /conectar_banco novamente.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        # Se já coletamos tudo, finalizar
+        if index == len(fields):
+            return await self._finalize_connection(update.message.chat_id, context)
+
+        field = fields[index]
+        raw_value = update.message.text.strip()
+
         try:
-            for line in text.split('\n'):
-                if ':' in line:
-                    key, value = line.split(':', 1)
-                    credentials[key.strip().lower()] = value.strip()
-            
-            if not credentials:
-                await update.message.reply_text(
-                    "❌ Formato inválido. Use o formato:\n"
-                    "<code>Campo: Valor</code>",
-                    parse_mode='HTML'
-                )
-                return ENTERING_CREDENTIALS
-            
-            # Deletar mensagem com credenciais (segurança)
+            value = self._sanitize_credential_input(field, raw_value)
+        except ValueError as err:
+            await update.message.reply_text(f"❌ {err}\nTente novamente.")
             try:
                 await update.message.delete()
-            except:
+            except Exception:
                 pass
-            
-            # Enviar mensagem de processamento
-            processing_msg = await update.message.reply_text(
-                "⏳ Conectando com o banco...\n"
-                "Isso pode levar alguns segundos."
-            )
-            
-            # Criar conexão
-            connection = self.connector.create_connection(
-                user_id=user_id,
-                connector_id=int(connector['id']),
-                credentials=credentials
-            )
-            
-            # Sincronizar transações
-            self.connector.sync_transactions(connection['id'], days=30)
-            
-            # Sucesso!
-            await processing_msg.edit_text(
-                f"✅ <b>Banco conectado com sucesso!</b>\n\n"
-                f"🏦 {connector['name']}\n"
-                f"📅 {connection['created_at'].strftime('%d/%m/%Y %H:%M')}\n\n"
-                f"Use /minhas_contas para ver suas contas\n"
-                f"Use /saldo para ver saldo consolidado\n"
-                f"Use /extrato para ver transações recentes",
-                parse_mode='HTML'
-            )
-            
-            # Limpar contexto
-            context.user_data.clear()
-            
-            return ConversationHandler.END
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao conectar banco: {e}")
-            await update.message.reply_text(
-                f"❌ Erro ao conectar: {str(e)}\n\n"
-                f"Verifique suas credenciais e tente novamente."
-            )
-            return ConversationHandler.END
+            return ENTERING_FIELD
+
+        field_name = field.get('name') or re.sub(r'\W+', '_', field.get('label', 'campo')).strip('_') or f'field_{index}'
+        context.user_data['collected_credentials'][field_name] = value
+        context.user_data['credential_index'] = index + 1
+
+        # Remover mensagem original por segurança
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        # Breve confirmação (removida em seguida)
+        ack = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="🔒 Informação recebida e removida da conversa.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        context.user_data['ack_messages'].append(ack.message_id)
+        await asyncio.sleep(1.5)
+        try:
+            await context.bot.delete_message(update.message.chat_id, ack.message_id)
+        except Exception:
+            pass
+
+        return await self._prompt_next_field(update.message.chat_id, context)
     
     # ==================== /minhas_contas ====================
     
@@ -441,11 +423,11 @@ class OpenFinanceHandler:
                 SELECTING_BANK: [
                     CallbackQueryHandler(self.conectar_banco_selected)
                 ],
-                ENTERING_CREDENTIALS: [
+                ENTERING_FIELD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.conectar_banco_credentials)
                 ]
             },
-            fallbacks=[CommandHandler('cancelar', lambda u, c: ConversationHandler.END)]
+            fallbacks=[CommandHandler('cancelar', self.cancel_conversation)]
         )
         
         return [
@@ -456,3 +438,168 @@ class OpenFinanceHandler:
             CommandHandler('desconectar_banco', self.desconectar_banco),
             CallbackQueryHandler(self.desconectar_banco_confirm, pattern='^disconnect_')
         ]
+
+    async def cancel_conversation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Permite ao usuário cancelar o fluxo de conexão com segurança."""
+        chat = update.effective_chat
+        if chat:
+            await self._cleanup_sensitive_messages(chat.id, context)
+
+        if update.message:
+            await update.message.reply_text(
+                "❌ Conexão cancelada. Nenhum dado foi salvo.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    async def _prompt_next_field(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Pede o próximo campo de credencial necessário."""
+        fields = context.user_data.get('credential_fields', [])
+        index = context.user_data.get('credential_index', 0)
+
+        if index >= len(fields):
+            return await self._finalize_connection(chat_id, context)
+
+        field = fields[index]
+        label = field.get('label') or field.get('name', 'Informação')
+        label_fmt = label.strip().rstrip(':') or 'Informação'
+        hint = field.get('hint') or ''
+
+        instructions = [
+            f"🔐 <b>{label_fmt}</b>",
+            "Envie a informação agora. Eu removo sua mensagem assim que receber."
+        ]
+
+        if hint:
+            instructions.append(f"<i>{hint}</i>")
+
+        message = "\n".join(instructions)
+
+        placeholder = field.get('placeholder') or label_fmt
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode='HTML',
+            reply_markup=ForceReply(selective=True, input_field_placeholder=placeholder)
+        )
+
+        return ENTERING_FIELD
+
+    def _sanitize_credential_input(self, field: dict, value: str) -> str:
+        """Normaliza e valida a entrada de credenciais antes do envio."""
+        if not value:
+            raise ValueError("Esse campo não pode ficar vazio.")
+
+        name = (field.get('name') or '').lower()
+        label = (field.get('label') or '').lower()
+        field_type = (field.get('type') or '').lower()
+
+        normalized = value.strip()
+
+        if 'cpf' in name or 'cpf' in label:
+            digits = re.sub(r'\D', '', normalized)
+            if len(digits) != 11:
+                raise ValueError("CPF deve ter 11 dígitos.")
+            return digits
+
+        if 'cnpj' in name or 'cnpj' in label:
+            digits = re.sub(r'\D', '', normalized)
+            if len(digits) != 14:
+                raise ValueError("CNPJ deve ter 14 dígitos.")
+            return digits
+
+        if any(keyword in name for keyword in ('agencia', 'agência', 'agenc', 'branch')) or field_type == 'number':
+            digits = re.sub(r'\D', '', normalized)
+            if not digits:
+                raise ValueError("Informe apenas números.")
+            return digits
+
+        if 'password' in name or 'senha' in name or 'password' in label or 'senha' in label:
+            if len(normalized) < 4:
+                raise ValueError("Senha muito curta.")
+            return normalized
+
+        return normalized
+
+    async def _finalize_connection(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Cria a conexão no Pluggy e sincroniza as informações."""
+        connector = context.user_data.get('selected_connector')
+        user_id = context.user_data.get('current_user_id')
+        credentials = context.user_data.get('collected_credentials', {})
+
+        if not connector or not user_id:
+            await context.bot.send_message(chat_id, "❌ Sessão expirada. Use /conectar_banco novamente.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        await self._cleanup_sensitive_messages(chat_id, context)
+
+        processing_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text="⏳ Conectando com o banco... Isso pode levar alguns segundos."
+        )
+
+        try:
+            connection = await asyncio.to_thread(
+                self.connector.create_connection,
+                user_id=user_id,
+                connector_id=int(connector['id']),
+                credentials=credentials
+            )
+
+            await asyncio.to_thread(self.connector.sync_transactions, connection['id'], 30)
+
+            accounts = await asyncio.to_thread(self.connector.list_accounts, user_id)
+
+            created_at = connection.get('created_at')
+            if isinstance(created_at, datetime):
+                created_str = created_at.strftime('%d/%m/%Y %H:%M')
+            else:
+                created_str = str(created_at) if created_at else datetime.now().strftime('%d/%m/%Y %H:%M')
+
+            if accounts:
+                first_account = accounts[0]
+                bank_name = first_account.get('bank_name') or connector.get('name')
+                account_label = first_account.get('account_name') or first_account.get('type') or 'Conta'
+                balance = format_currency(first_account.get('balance', 0))
+
+                success_message = (
+                    "✅ <b>Banco conectado com sucesso!</b>\n\n"
+                    f"🏦 {bank_name}\n"
+                    f"📅 {created_str}\n"
+                    f"💳 {account_label}\n"
+                    f"💰 Saldo: <b>{balance}</b>\n\n"
+                    "Use /minhas_contas para ver todas as contas conectadas.\n"
+                    "Use /extrato para ver suas transações."
+                )
+            else:
+                success_message = (
+                    "✅ Conexão criada, mas nenhuma conta foi retornada.\n\n"
+                    "Isso pode acontecer se o banco exigir um passo adicional."
+                    " Tente novamente em alguns minutos ou verifique no app do banco."
+                )
+
+            await processing_msg.edit_text(success_message, parse_mode='HTML')
+
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        except Exception:
+            logger.exception("Erro ao finalizar conexão")
+            await processing_msg.edit_text(
+                "❌ Não foi possível conectar. Verifique as credenciais e tente novamente.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+    async def _cleanup_sensitive_messages(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Remove mensagens auxiliares que possam conter IDs."""
+        ack_messages = context.user_data.get('ack_messages', [])
+        for message_id in ack_messages:
+            try:
+                await context.bot.delete_message(chat_id, message_id)
+            except Exception:
+                pass
+        context.user_data['ack_messages'] = []
