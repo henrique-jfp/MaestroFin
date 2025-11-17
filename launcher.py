@@ -86,20 +86,27 @@ def start_telegram_bot():
             health_thread.start()
             logger.info("✅ Health check server iniciado em thread separada")
         
-        logger.info("📦 Importando módulo bot...")
-        from bot import create_application
-        logger.info("✅ Módulo bot importado com sucesso!")
-        
-        logger.info("🔧 Criando aplicação do bot...")
-        application = create_application()
-        logger.info("✅ Aplicação criada!")
-        
-        if application:
-            logger.info("🚀 Iniciando polling do bot (isso pode demorar 10-30s)...")
-            application.run_polling(allowed_updates=None, drop_pending_updates=True)
-            logger.info("✅ Bot iniciado com sucesso!")
-        else:
-            logger.error("❌ Falha ao criar aplicação do bot")
+        try:
+            logger.info("📦 Importando módulo bot...")
+            from bot import create_application
+            logger.info("✅ Módulo bot importado com sucesso!")
+            
+            logger.info("🔧 Criando aplicação do bot...")
+            application = create_application()
+            logger.info("✅ Aplicação criada!")
+            
+            if application:
+                logger.info("🚀 Iniciando polling do bot (isso pode demorar 10-30s)...")
+                application.run_polling(allowed_updates=None, drop_pending_updates=True)
+                logger.info("✅ Bot iniciado com sucesso!")
+            else:
+                logger.error("❌ Falha ao criar aplicação do bot")
+                sys.exit(1)
+                
+        except Exception as e:
+            logger.error(f"❌ ERRO FATAL ao importar/iniciar bot: {e}", exc_info=True)
+            import traceback
+            logger.error(f"📋 Traceback completo:\n{traceback.format_exc()}")
             sys.exit(1)
         
     except Exception as e:
