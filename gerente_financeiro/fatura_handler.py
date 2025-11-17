@@ -41,6 +41,7 @@ import io
 import pdfplumber # <--- NOVA BIBLIOTECA
 
 import google.generativeai as genai
+from .parser_fatura_inter import ParserFaturaInter  # 🆕 Parser especializado Inter
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -387,18 +388,19 @@ def _parse_caixa_com_pdfplumber(pdf: pdfplumber.PDF) -> dict:
         'banco': 'Caixa'
     }
 
-# --- Parser de Layout para o Inter ---
+# --- Parser de Layout para o Inter (MANTIDO - Parser Antigo Funcional) ---
 def _parse_inter_com_pdfplumber(pdf: pdfplumber.PDF) -> dict:
+    """
+    Parser do Inter - Versão antiga mantida por compatibilidade
+    TODO: Migrar para ParserFaturaInter quando testarmos completamente
+    """
     transacoes = []
     parcelas_futuras = []
     # Padrão de parcelas: "descrição - X/Y" ou "descrição X/Y"
     padrao_parcela = re.compile(r'(.+?)[-\s]*(\d+)/(\d+)$')
     
-    # 🔧 CORREÇÃO: Processar mais páginas do Inter
+    # Processar todas as páginas
     for page_num, page in enumerate(pdf.pages):
-        # if page_num not in [2, 3, 4]:  # Comentado: processar todas
-        #     continue
-            
         logger.info(f"[Inter] Processando página {page_num + 1}")
         
         # Primeiro, tentar extrair do texto linha por linha
@@ -781,6 +783,8 @@ def detectar_banco_e_delegar_parse(pdf: pdfplumber.PDF) -> list:
                 return resultado_caixa if isinstance(resultado_caixa, list) else []
         elif "inter" in texto_lower and ("fatura" in texto_lower or "limite de crédito" in texto_lower):
             logger.info("Fatura do Inter detectada. Usando parser específico.")
+            # 🆕 TODO: Migrar para ParserFaturaInter (gerente_financeiro/parser_fatura_inter.py)
+            #          quando testarmos completamente - tem 96.75% de precisão!
             resultado_inter = _parse_inter_com_pdfplumber(pdf)
             
             # 📋 NOVO: Tratar resultado em dict e registrar parcelas detectadas
