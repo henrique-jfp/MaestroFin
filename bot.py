@@ -667,7 +667,24 @@ def create_application():
         # 🏦 OPEN FINANCE AUTO-SYNC
         if OPEN_FINANCE_ENABLED:
             try:
-                scheduler = schedule_daily_sync()
+                from open_finance.data_sync import DataSynchronizer
+                synchronizer = DataSynchronizer()
+                
+                # Usar o scheduler existente do bot
+                application.job_queue.run_daily(
+                    synchronizer.sync_all_connections,
+                    time=datetime.strptime("06:00", "%H:%M").time(),
+                    name="daily_bank_sync"
+                )
+                
+                # Também rodar a cada 6 horas
+                application.job_queue.run_repeating(
+                    synchronizer.sync_all_connections,
+                    interval=21600,  # 6 horas em segundos
+                    first=10,  # Esperar 10 segundos para primeira execução
+                    name="periodic_bank_sync"
+                )
+                
                 logger.info("✅ Sincronização automática Open Finance ativada (6h + a cada 6h)")
             except Exception as e:
                 logger.error(f"❌ Erro ao agendar sync Open Finance: {e}")
