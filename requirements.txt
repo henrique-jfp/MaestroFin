@@ -46,3 +46,4 @@ reportlab==4.4.3
 
 # === FINANCIAL DATA ===
 yfinance==0.2.65
+feedparser==6.0.11
