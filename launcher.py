@@ -53,11 +53,17 @@ def start_telegram_bot():
     """Inicia o bot do Telegram"""
     try:
         logger.info("🤖 Iniciando bot do Telegram...")
+        logger.info(f"📍 Python version: {sys.version}")
+        logger.info(f"📍 Working directory: {os.getcwd()}")
+        logger.info(f"📍 TELEGRAM_TOKEN presente: {bool(os.getenv('TELEGRAM_TOKEN'))}")
+        
         from bot import main
+        logger.info("✅ Módulo bot importado com sucesso")
+        logger.info("▶️  Chamando main() do bot...")
         main()  # main() do bot.py é síncrono, não assíncrono!
         
     except Exception as e:
-        logger.error(f"❌ Erro no bot do Telegram: {e}")
+        logger.error(f"❌ Erro no bot do Telegram: {e}", exc_info=True)
         sys.exit(1)
 
 def start_dashboard():
@@ -100,6 +106,12 @@ def main():
     # No Render: PORT é setado para web services, não é setado para workers
     port = os.getenv('PORT')
     is_render = os.getenv('RENDER') or os.getenv('RAILWAY_ENVIRONMENT')
+    
+    logger.info(f"🔍 Detecção de modo:")
+    logger.info(f"  PORT={port}")
+    logger.info(f"  RENDER={os.getenv('RENDER')}")
+    logger.info(f"  RAILWAY_ENVIRONMENT={os.getenv('RAILWAY_ENVIRONMENT')}")
+    logger.info(f"  is_render={is_render}")
     
     if port and is_render:
         # Modo web - rodar dashboard Flask (Render Web Service)
