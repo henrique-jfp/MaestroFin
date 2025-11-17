@@ -103,17 +103,28 @@ def main():
         sys.exit(1)
     
     # Verificar modo de execução
-    # No Render: PORT é setado para web services, não é setado para workers
+    # Priorizar variável manual MAESTROFIN_MODE
+    force_mode = os.getenv('MAESTROFIN_MODE', '').lower()
     port = os.getenv('PORT')
     is_render = os.getenv('RENDER') or os.getenv('RAILWAY_ENVIRONMENT')
     
     logger.info(f"🔍 Detecção de modo:")
+    logger.info(f"  MAESTROFIN_MODE={force_mode}")
     logger.info(f"  PORT={port}")
     logger.info(f"  RENDER={os.getenv('RENDER')}")
     logger.info(f"  RAILWAY_ENVIRONMENT={os.getenv('RAILWAY_ENVIRONMENT')}")
     logger.info(f"  is_render={is_render}")
     
-    if port and is_render:
+    # Se MAESTROFIN_MODE está setado, usar ele
+    if force_mode == 'bot':
+        logger.info("🤖 Modo FORÇADO: BOT (via MAESTROFIN_MODE=bot)")
+        start_telegram_bot()
+        
+    elif force_mode == 'dashboard':
+        logger.info("🌐 Modo FORÇADO: DASHBOARD (via MAESTROFIN_MODE=dashboard)")
+        start_dashboard()
+        
+    elif port and is_render:
         # Modo web - rodar dashboard Flask (Render Web Service)
         logger.info("🌐 Modo WEB (Render): Iniciando dashboard Flask")
         start_dashboard()
