@@ -19,6 +19,7 @@ from datetime import datetime
 from open_finance.bank_connector import (
     BankConnector,
     BankConnectorError,
+    BankConnectorAdditionalAuthRequired,
     BankConnectorTimeout,
     BankConnectorUserActionRequired,
 )
@@ -49,74 +50,110 @@ class OpenFinanceHandler:
             # Listar bancos disponíveis
             connectors = self.client.list_connectors(country="BR")
 
-            # Destacar bancos populares para facilitar a busca do usuário
-            priority_keywords = [
-                "itau",
-                "itaú",
-                "inter",
-                "nubank",
-                "nu bank",
-                "caixa",
-                "cef",
-                "bradesco",
-                "santander",
-                "sicredi",
-                "sicoob",
-                "banco do brasil",
+            # Limitar para bancos suportados (PF)
+            allowed_banks = [
+                {
+                    "label": "Inter",
+                    "keywords": ["inter"],
+                },
+                {
+                    "label": "Itaú",
+                    "keywords": ["itaú", "itau"],
+                },
+                {
+                    "label": "Bradesco",
+                    "keywords": ["bradesco"],
+                },
+                {
+                    "label": "Nubank",
+                    "keywords": ["nubank", "nu bank"],
+                },
+                {
+                    "label": "Caixa",
+                    "keywords": ["caixa", "cef"],
+                },
+                {
+                    "label": "Santander",
+                    "keywords": ["santander"],
+                },
             ]
 
-            def is_priority(connector_name: str) -> bool:
-                name_lower = connector_name.lower()
-                return any(keyword in name_lower for keyword in priority_keywords)
+            blocked_terms = [
+                "empresa",
+                "empresas",
+                "empresarial",
+                "business",
+                "corporate",
+                "pj",
+                "bba",
+                "pro",
+                "emps",
+            ]
 
-            priority_connectors = []
-            priority_ids = set()
+            def is_blocked(name_lower: str) -> bool:
+                return any(term in name_lower for term in blocked_terms)
 
-            for conn in connectors:
-                if is_priority(conn.get('name', '')):
-                    priority_connectors.append(conn)
-                    priority_ids.add(conn['id'])
+            # Seleciona conectores na ordem desejada, sem duplicar nomes
+            selected_connectors = []
+            used_connector_ids = set()
 
-            # Complementa com destacados pela Pluggy (featured) e demais em ordem
-            featured = [c for c in connectors if c.get('featured', False) and c['id'] not in priority_ids]
-            remaining = [c for c in connectors if c['id'] not in priority_ids and c not in featured]
+            for bank_cfg in allowed_banks:
+                matches = []
+                for conn in connectors:
+                    connector_name = (conn.get('name') or '').strip()
+                    if not connector_name:
+                        continue
+                    if conn['id'] in used_connector_ids:
+                        continue
+                    name_lower = connector_name.lower()
+                    if is_blocked(name_lower):
+                        continue
+                    if any(keyword in name_lower for keyword in bank_cfg['keywords']):
+                        matches.append(conn)
 
-            # Limitar lista final mantendo prioridade
-            main_banks = priority_connectors + featured + remaining
-            main_banks = main_banks[:80]
-
-            # Remover duplicados por nome para evitar poluição visual
-            seen_names = set()
-            unique_banks = []
-            for bank in main_banks:
-                name = (bank.get('name') or '').strip()
-                if not name:
+                if not matches:
                     continue
-                key = name.lower()
-                if key in seen_names:
-                    continue
-                seen_names.add(key)
-                unique_banks.append(bank)
 
-            main_banks = unique_banks
-            
+                # Ordena priorizando conta corrente antes de cartões
+                def sort_key(connector: dict) -> tuple:
+                    name_lower = (connector.get('name') or '').lower()
+                    is_card = 1 if "cart" in name_lower else 0
+                    return (is_card, connector.get('name', ''))
+
+                matches.sort(key=sort_key)
+
+                for match in matches:
+                    used_connector_ids.add(match['id'])
+                    selected_connectors.append(match)
+
+            main_banks = selected_connectors
+
+            if not main_banks:
+                await update.message.reply_text(
+                    "❌ Nenhum banco suportado está disponível agora."
+                    " Tente novamente em alguns minutos."
+                )
+                return ConversationHandler.END
+
             # Criar teclado inline
             keyboard = []
             for bank in main_banks:
+                display_name = bank.get('name', '').strip() or bank.get('name', '')
                 keyboard.append([
                     InlineKeyboardButton(
-                        bank['name'],
+                        display_name,
                         callback_data=f"bank_{bank['id']}"
                     )
                 ])
-            
+
             keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cancel")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             message = (
                 "🏦 <b>Conectar Banco</b>\n\n"
-                "Selecione sua instituição financeira:\n\n"
+                "Suportamos, por enquanto, apenas contas e cartões PF destes bancos:\n"
+                "Inter, Itaú, Bradesco, Nubank, Caixa e Santander.\n\n"
                 "<i>Seus dados são criptografados e seguros. "
                 "Usamos Open Finance do Banco Central.</i>"
             )
@@ -162,6 +199,11 @@ class OpenFinanceHandler:
         context.user_data['collected_credentials'] = {}
         context.user_data['credential_index'] = 0
         context.user_data['ack_messages'] = []
+        context.user_data['login_credentials'] = {}
+        context.user_data['additional_credentials'] = {}
+        context.user_data['current_phase'] = 'login'
+        context.user_data['pending_item_id'] = None
+        context.user_data['pending_connector_id'] = int(connector['id'])
 
         await query.edit_message_text(
             (
@@ -215,6 +257,12 @@ class OpenFinanceHandler:
         field_name = field.get('name') or re.sub(r'\W+', '_', field.get('label', 'campo')).strip('_') or f'field_{index}'
         context.user_data['collected_credentials'][field_name] = value
         context.user_data['credential_index'] = index + 1
+
+        phase = context.user_data.get('current_phase', 'login')
+        if phase == 'login':
+            context.user_data.setdefault('login_credentials', {})[field_name] = value
+        else:
+            context.user_data.setdefault('additional_credentials', {})[field_name] = value
 
         # Remover mensagem original por segurança
         try:
@@ -480,7 +528,10 @@ class OpenFinanceHandler:
         index = context.user_data.get('credential_index', 0)
 
         if index >= len(fields):
-            return await self._finalize_connection(chat_id, context)
+            phase = context.user_data.get('current_phase', 'login')
+            if phase == 'login':
+                return await self._finalize_connection(chat_id, context)
+            return await self._continue_connection(chat_id, context)
 
         field = fields[index]
         label = field.get('label') or field.get('name', 'Informação')
@@ -548,7 +599,7 @@ class OpenFinanceHandler:
         """Cria a conexão no Pluggy e sincroniza as informações."""
         connector = context.user_data.get('selected_connector')
         user_id = context.user_data.get('current_user_id')
-        credentials = context.user_data.get('collected_credentials', {})
+        credentials = context.user_data.get('login_credentials', {})
 
         if not connector or not user_id:
             await context.bot.send_message(chat_id, "❌ Sessão expirada. Use /conectar_banco novamente.")
@@ -615,6 +666,45 @@ class OpenFinanceHandler:
             context.user_data.clear()
             return ConversationHandler.END
 
+        except BankConnectorAdditionalAuthRequired as action_err:
+            form_items = []
+            if isinstance(action_err.form, dict):
+                form_items = action_err.form.get('items') or []
+
+            if form_items:
+                logger.warning("Banco solicitou formulário adicional de autenticação")
+                context.user_data['current_phase'] = 'additional'
+                context.user_data['credential_fields'] = form_items
+                context.user_data['credential_index'] = 0
+                context.user_data['pending_item_id'] = action_err.item.get('id')
+                context.user_data['pending_connector_id'] = int(connector['id'])
+                context.user_data['additional_credentials'] = {}
+                context.user_data['collected_credentials'] = {}
+                context.user_data['ack_messages'] = []
+
+                insights_msg = action_err.insights.get('providerMessage') if isinstance(action_err.insights, dict) else None
+                next_step = action_err.next_step if isinstance(action_err.next_step, str) else None
+                info_parts = [action_err.args[0]] if action_err.args else []
+                if insights_msg and insights_msg not in info_parts:
+                    info_parts.append(insights_msg)
+                if next_step and next_step not in info_parts:
+                    info_parts.append(f"Próximo passo: {next_step}")
+
+                await processing_msg.edit_text(
+                    "⚠️ " + "\n".join(filter(None, info_parts)) + "\n\n"
+                    "Vou pedir as informações extras agora.",
+                    parse_mode='HTML'
+                )
+                return await self._prompt_next_field(chat_id, context)
+
+            logger.warning("Banco solicitou ação adicional sem formulário específico")
+            await processing_msg.edit_text(
+                "⚠️ O banco pediu uma confirmação adicional.\n"
+                f"{action_err.args[0] if action_err.args else ''}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
         except BankConnectorUserActionRequired as action_err:
             logger.warning("Banco solicitou ação adicional do usuário")
             await processing_msg.edit_text(
@@ -655,3 +745,138 @@ class OpenFinanceHandler:
             except Exception:
                 pass
         context.user_data['ack_messages'] = []
+
+    async def _continue_connection(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Envio de credenciais adicionais (OTP/token) para concluir a conexão."""
+
+        connector = context.user_data.get('selected_connector')
+        user_id = context.user_data.get('current_user_id')
+        item_id = context.user_data.get('pending_item_id')
+        connector_id = context.user_data.get('pending_connector_id')
+        login_credentials = context.user_data.get('login_credentials', {})
+        additional_credentials = context.user_data.get('additional_credentials', {})
+
+        if not all([connector, user_id, item_id, connector_id]):
+            await context.bot.send_message(chat_id, "❌ Sessão expirada. Use /conectar_banco novamente.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        await self._cleanup_sensitive_messages(chat_id, context)
+
+        processing_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text="⏳ Validando as informações adicionais..."
+        )
+
+        try:
+            connection = await asyncio.to_thread(
+                self.connector.resume_connection,
+                user_id=user_id,
+                connector_id=connector_id,
+                item_id=item_id,
+                login_credentials=login_credentials,
+                additional_credentials=additional_credentials,
+            )
+
+            await asyncio.to_thread(self.connector.sync_transactions, connection['id'], 30)
+            accounts = await asyncio.to_thread(self.connector.list_accounts, user_id)
+
+            created_at = connection.get('created_at')
+            created_str = (
+                created_at.strftime('%d/%m/%Y %H:%M')
+                if isinstance(created_at, datetime)
+                else datetime.now().strftime('%d/%m/%Y %H:%M')
+            )
+
+            if accounts:
+                first_account = accounts[0]
+                bank_name = first_account.get('bank_name') or connector.get('name')
+                account_label = first_account.get('account_name') or first_account.get('type') or 'Conta'
+                balance = format_currency(first_account.get('balance', 0))
+                message = (
+                    "✅ <b>Banco conectado com sucesso!</b>\n\n"
+                    f"🏦 {bank_name}\n"
+                    f"📅 {created_str}\n"
+                    f"💳 {account_label}\n"
+                    f"💰 Saldo: <b>{balance}</b>\n\n"
+                    "Use /minhas_contas para ver todas as contas conectadas.\n"
+                    "Use /extrato para ver suas transações."
+                )
+            else:
+                status_detail = connection.get('status_detail') or "O banco ainda está processando seus dados."
+                message = (
+                    "⚠️ Conexão recebida, mas nenhuma conta foi liberada ainda.\n\n"
+                    f"Status informado pela instituição: {status_detail}\n\n"
+                    "Abra o app ou internet banking para confirmar a autorização e tente novamente em alguns minutos."
+                )
+
+            await processing_msg.edit_text(message, parse_mode='HTML')
+
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        except BankConnectorAdditionalAuthRequired as action_err:
+            form_items = []
+            if isinstance(action_err.form, dict):
+                form_items = action_err.form.get('items') or []
+
+            if form_items:
+                logger.warning("Banco solicitou nova rodada de credenciais adicionais")
+                context.user_data['credential_fields'] = form_items
+                context.user_data['credential_index'] = 0
+                context.user_data['pending_item_id'] = action_err.item.get('id')
+                context.user_data['additional_credentials'] = {}
+                context.user_data['collected_credentials'] = {}
+                context.user_data['ack_messages'] = []
+
+                insights_msg = action_err.insights.get('providerMessage') if isinstance(action_err.insights, dict) else None
+                info_parts = [action_err.args[0]] if action_err.args else []
+                if insights_msg and insights_msg not in info_parts:
+                    info_parts.append(insights_msg)
+
+                await processing_msg.edit_text(
+                    "⚠️ " + "\n".join(filter(None, info_parts)) + "\n\n"
+                    "Preciso de mais informações. Me envie conforme solicitado.",
+                    parse_mode='HTML'
+                )
+                return await self._prompt_next_field(chat_id, context)
+
+            await processing_msg.edit_text(
+                "⚠️ O banco ainda está aguardando uma confirmação adicional."
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        except BankConnectorUserActionRequired as action_err:
+            logger.warning("Banco ainda requer ação manual do usuário")
+            await processing_msg.edit_text(
+                "⚠️ O banco pediu uma confirmação adicional.\n"
+                f"{action_err.args[0]}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        except BankConnectorTimeout as timeout_err:
+            logger.warning("Tempo esgotado aguardando retorno do banco (etapa adicional)")
+            await processing_msg.edit_text(
+                "⏱️ A instituição ainda não liberou a conexão."
+                f"\n{timeout_err}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        except BankConnectorError as connector_err:
+            logger.error(f"Erro do banco ao concluir conexão com dados adicionais: {connector_err}")
+            await processing_msg.edit_text(
+                "❌ O banco recusou o acesso. Verifique as informações e tente novamente."
+                f"\nDetalhe: {connector_err}"
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        except Exception:
+            logger.exception("Erro ao finalizar conexão com dados adicionais")
+            await processing_msg.edit_text(
+                "❌ Não foi possível conectar. Verifique as credenciais e tente novamente.")
+            context.user_data.clear()
+            return ConversationHandler.END

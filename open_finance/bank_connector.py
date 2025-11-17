@@ -21,9 +21,29 @@ class BankConnectorError(Exception):
 class BankConnectorUserActionRequired(BankConnectorError):
     """Indica que o banco requer ação adicional do usuário (ex.: OTP)."""
 
-    def __init__(self, message: str, detail: Optional[str] = None):
+    def __init__(self, message: str, detail: Optional[str] = None, *, item: Optional[Dict] = None):
         super().__init__(message)
         self.detail = detail
+        self.item = item or {}
+
+
+class BankConnectorAdditionalAuthRequired(BankConnectorUserActionRequired):
+    """Indica que o banco pediu dados extras (ex.: OTP, token, pergunta secreta)."""
+
+    def __init__(
+        self,
+        message: str,
+        detail: Optional[str] = None,
+        *,
+        item: Optional[Dict] = None,
+        form: Optional[Dict] = None,
+        next_step: Optional[str] = None,
+        insights: Optional[Dict] = None,
+    ):
+        super().__init__(message, detail, item=item)
+        self.form = form or {}
+        self.next_step = next_step
+        self.insights = insights or {}
 
 
 class BankConnectorTimeout(BankConnectorError):
@@ -181,6 +201,9 @@ class BankConnector:
             
             raise Exception("Erro ao salvar conexão no banco")
             
+        except BankConnectorAdditionalAuthRequired as action_err:
+            logger.warning("⚠️ Banco solicitou credenciais adicionais (OTP/token)")
+            raise
         except BankConnectorUserActionRequired as action_err:
             logger.warning(f"⚠️ Ação adicional requerida pelo banco: {action_err.detail}")
             raise
@@ -339,9 +362,19 @@ class BankConnector:
             item = self.client.get_item(item_id)
             status = item.get('status')
             detail = item.get('statusDetail')
+            next_step = item.get('nextStep')
+            parameter_form = item.get('parameterForm') or {}
+            connector_insights = item.get('connectorInsights') or {}
+            provider_message = connector_insights.get('providerMessage')
 
             if status != last_status:
-                logger.info(f"⌛ Status item {item_id}: {status} ({detail})")
+                logger.info(
+                    "⌛ Status item %s: %s (detail=%s, next_step=%s)",
+                    item_id,
+                    status,
+                    detail,
+                    next_step,
+                )
                 last_status = status
                 last_detail = detail
 
@@ -349,8 +382,24 @@ class BankConnector:
                 return item
 
             if status == "WAITING_USER_INPUT":
-                message = detail or "Abra o app do banco e autorize a conexão."
-                raise BankConnectorUserActionRequired(message, detail)
+                message = (
+                    detail
+                    or provider_message
+                    or (next_step if isinstance(next_step, str) else None)
+                    or "O banco solicitou uma confirmação adicional."
+                )
+                form_items = parameter_form.get('items') if isinstance(parameter_form, dict) else None
+                if form_items:
+                    raise BankConnectorAdditionalAuthRequired(
+                        message,
+                        detail,
+                        item=item,
+                        form=parameter_form,
+                        next_step=next_step,
+                        insights=connector_insights,
+                    )
+
+                raise BankConnectorUserActionRequired(message, detail, item=item)
 
             if status in {"LOGIN_ERROR", "INVALID_CREDENTIALS", "ERROR", "SUSPENDED"}:
                 raise BankConnectorError(detail or "O banco rejeitou as credenciais informadas.")
@@ -534,3 +583,74 @@ class BankConnector:
         except Exception as exc:
             logger.error(f"❌ Erro ao consultar status do item {item_id}: {exc}")
             return {}
+
+    def resume_connection(
+        self,
+        user_id: int,
+        connector_id: int,
+        item_id: str,
+        login_credentials: Dict,
+        additional_credentials: Dict,
+    ) -> Dict:
+        """Continua uma conexão aguardando dados extras (OTP, token, etc)."""
+
+        logger.info(
+            "🔁 Continuando conexão %s para usuário %s com credenciais adicionais",
+            item_id,
+            user_id,
+        )
+
+        credentials = dict(login_credentials or {})
+        credentials.update(additional_credentials or {})
+
+        try:
+            self.client.update_item(item_id, credentials)
+            final_item = self._wait_until_ready(item_id)
+            status = final_item.get('status')
+            status_detail = final_item.get('statusDetail')
+
+            connector = self.client.get_connector(connector_id)
+            connector_name = connector.get('name', 'Desconhecido')
+
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        """
+                        INSERT INTO bank_connections
+                            (user_id, item_id, connector_id, connector_name, status)
+                        VALUES (:user_id, :item_id, :connector_id, :connector_name, :status)
+                        ON CONFLICT (item_id) DO UPDATE SET
+                            status = EXCLUDED.status,
+                            updated_at = CURRENT_TIMESTAMP
+                        RETURNING id, item_id, connector_name, status, created_at
+                        """
+                    ),
+                    {
+                        "user_id": user_id,
+                        "item_id": item_id,
+                        "connector_id": connector_id,
+                        "connector_name": connector_name,
+                        "status": status,
+                    },
+                )
+                conn.commit()
+                row = result.fetchone()
+
+            if not row:
+                raise Exception("Erro ao atualizar/registrar conexão após etapa adicional")
+
+            connection_id = row[0]
+            self._sync_accounts(connection_id, item_id)
+
+            return {
+                "id": row[0],
+                "item_id": row[1],
+                "connector_name": row[2],
+                "status": row[3],
+                "created_at": row[4],
+                "status_detail": status_detail,
+            }
+
+        except Exception as exc:
+            logger.error(f"❌ Erro ao continuar conexão {item_id}: {exc}")
+            raise
