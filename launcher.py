@@ -89,7 +89,17 @@ def start_telegram_bot():
         from bot import main
         logger.info("✅ Módulo bot importado com sucesso")
         logger.info("▶️  Chamando main() do bot...")
-        main()  # main() do bot.py é síncrono, não assíncrono!
+        
+        # main() retorna a application, precisamos rodar ela!
+        application = main()
+        
+        if application:
+            logger.info("🚀 Iniciando polling do bot...")
+            application.run_polling(allowed_updates=None)
+            logger.info("✅ Bot iniciado com sucesso!")
+        else:
+            logger.error("❌ Falha ao criar aplicação do bot")
+            sys.exit(1)
         
     except Exception as e:
         logger.error(f"❌ Erro no bot do Telegram: {e}", exc_info=True)
