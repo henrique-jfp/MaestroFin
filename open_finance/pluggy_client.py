@@ -9,7 +9,6 @@ import logging
 import requests
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
-import base64
 
 logger = logging.getLogger(__name__)
 
@@ -54,16 +53,13 @@ class PluggyClient:
         
         url = f"{self.BASE_URL}/auth"
         
-        # Criar Basic Auth
-        credentials = f"{self.client_id}:{self.client_secret}"
-        encoded = base64.b64encode(credentials.encode()).decode()
-        
-        headers = {
-            "Authorization": f"Basic {encoded}",
-            "Content-Type": "application/json"
+        payload = {
+            "clientId": self.client_id,
+            "clientSecret": self.client_secret,
         }
-        
-        response = requests.post(url, headers=headers)
+        headers = {"Content-Type": "application/json"}
+
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
         
         data = response.json()
