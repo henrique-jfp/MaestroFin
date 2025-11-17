@@ -3,6 +3,7 @@
 Gerencia conexões de usuários com instituições financeiras
 """
 
+import json
 import logging
 import time
 from typing import Dict, List, Optional
@@ -382,12 +383,40 @@ class BankConnector:
                 return item
 
             if status == "WAITING_USER_INPUT":
+                action_links: List[str] = []
+                link_candidates = [
+                    connector_insights.get('authorizationUrl') if isinstance(connector_insights, dict) else None,
+                    connector_insights.get('providerUrl') if isinstance(connector_insights, dict) else None,
+                    connector_insights.get('authUrl') if isinstance(connector_insights, dict) else None,
+                    connector_insights.get('linkUrl') if isinstance(connector_insights, dict) else None,
+                    item.get('linkUrl'),
+                ]
+
+                for candidate in link_candidates:
+                    if isinstance(candidate, str) and candidate.startswith("http"):
+                        action_links.append(candidate)
+
                 message = (
                     detail
                     or provider_message
                     or (next_step if isinstance(next_step, str) else None)
                     or "O banco solicitou uma confirmação adicional."
                 )
+
+                if action_links:
+                    links_text = "\n".join(action_links)
+                    message = f"{message}\nAcesse para autorizar: {links_text}"
+
+                if parameter_form:
+                    try:
+                        logger.debug(
+                            "WAITING_USER_INPUT parameter_form=%s insights=%s",
+                            json.dumps(parameter_form, ensure_ascii=False),
+                            json.dumps(connector_insights, ensure_ascii=False) if isinstance(connector_insights, dict) else connector_insights,
+                        )
+                    except Exception:
+                        logger.debug("WAITING_USER_INPUT parameter_form could not be serialized")
+
                 form_items = parameter_form.get('items') if isinstance(parameter_form, dict) else None
                 if form_items:
                     raise BankConnectorAdditionalAuthRequired(

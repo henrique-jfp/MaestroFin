@@ -28,7 +28,7 @@ from open_finance.pluggy_client import PluggyClient, format_currency, format_acc
 logger = logging.getLogger(__name__)
 
 # Estados da conversa
-SELECTING_BANK, ENTERING_FIELD = range(2)
+SELECTING_BANK, ENTERING_FIELD, WAITING_RETRY = range(3)
 
 
 class OpenFinanceHandler:
@@ -489,10 +489,16 @@ class OpenFinanceHandler:
             entry_points=[CommandHandler('conectar_banco', self.conectar_banco_start)],
             states={
                 SELECTING_BANK: [
-                    CallbackQueryHandler(self.conectar_banco_selected)
+                    CallbackQueryHandler(self.conectar_banco_selected),
+                    CallbackQueryHandler(self.retry_connection, pattern="^retry_connection$"),
+                    CallbackQueryHandler(self.cancel_retry, pattern="^cancel$")
                 ],
                 ENTERING_FIELD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.conectar_banco_credentials)
+                ],
+                WAITING_RETRY: [
+                    CallbackQueryHandler(self.retry_connection, pattern="^retry_connection$"),
+                    CallbackQueryHandler(self.cancel_retry, pattern="^cancel$")
                 ]
             },
             fallbacks=[CommandHandler('cancelar', self.cancel_conversation)]
@@ -519,6 +525,128 @@ class OpenFinanceHandler:
                 reply_markup=ReplyKeyboardRemove()
             )
 
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    async def retry_connection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Tenta reconectar após autorização bancária"""
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = update.effective_user.id
+        pending_item_id = context.user_data.get('pending_item_id')
+        connector_id = context.user_data.get('pending_connector_id')
+        connector = context.user_data.get('selected_connector')
+        
+        if not all([pending_item_id, connector_id, user_id]):
+            await query.edit_message_text("❌ Sessão expirada. Use /conectar_banco novamente.")
+            context.user_data.clear()
+            return ConversationHandler.END
+        
+        retry_count = context.user_data.get('retry_count', 0)
+        if retry_count > 3:
+            await query.edit_message_text(
+                "❌ Muitas tentativas de reconexão. "
+                "Use /conectar_banco para começar do zero."
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+        
+        processing_msg = await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="⏳ Verificando status da autorização bancária..."
+        )
+        
+        try:
+            # Consultar status do item
+            status_info = await asyncio.to_thread(
+                self.connector.get_item_status,
+                pending_item_id
+            )
+            
+            status = status_info.get('status') if isinstance(status_info, dict) else 'UNKNOWN'
+            
+            logger.info(f"🔄 Retry {retry_count + 1}: Item {pending_item_id} status = {status}")
+            
+            if status in {"HEALTHY", "PARTIAL_SUCCESS"}:
+                # Sucesso! Carregar as contas
+                accounts = await asyncio.to_thread(
+                    self.connector.list_accounts, 
+                    user_id
+                )
+                
+                if accounts:
+                    first_account = accounts[0]
+                    bank_name = first_account.get('bank_name') or connector.get('name')
+                    account_label = first_account.get('account_name') or first_account.get('type') or 'Conta'
+                    balance = format_currency(first_account.get('balance', 0))
+                    message = (
+                        "✅ <b>Banco conectado com sucesso!</b>\n\n"
+                        f"🏦 {bank_name}\n"
+                        f"💳 {account_label}\n"
+                        f"💰 Saldo: <b>{balance}</b>\n\n"
+                        "Use /minhas_contas para ver todas as contas conectadas.\n"
+                        "Use /extrato para ver suas transações."
+                    )
+                else:
+                    message = (
+                        "✅ <b>Conexão autorizada!</b>\n\n"
+                        "As contas serão carregadas em instantes.\n"
+                        "Use /minhas_contas para verificar."
+                    )
+                
+                await processing_msg.edit_text(message, parse_mode='HTML')
+                context.user_data.clear()
+                return ConversationHandler.END
+            
+            elif status == "WAITING_USER_INPUT":
+                # Ainda aguardando... Oferecer retry novamente
+                context.user_data['retry_count'] = retry_count + 1
+                
+                keyboard = [
+                    [InlineKeyboardButton("✅ Já autorizei! Tentar novamente", callback_data="retry_connection")],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                msg = (
+                    "⏳ <b>Aguardando Autorização...</b>\n\n"
+                    "O banco ainda não confirmou a autorização.\n"
+                    f"Tentativa {retry_count + 1} de 3\n\n"
+                    "<b>Dica:</b> Verifique se recebeu notificação push,\n"
+                    "SMS ou email do seu banco pedindo confirmação."
+                )
+                
+                await processing_msg.edit_text(msg, reply_markup=reply_markup, parse_mode='HTML')
+                return WAITING_RETRY
+            
+            else:
+                # Erro no banco
+                await processing_msg.edit_text(
+                    f"❌ Erro do banco: Status {status}\n\n"
+                    "Use /conectar_banco para começar novamente."
+                )
+                context.user_data.clear()
+                return ConversationHandler.END
+                
+        except Exception as e:
+            logger.error(f"Erro ao fazer retry: {e}")
+            await processing_msg.edit_text(
+                f"❌ Erro ao verificar status: {e}\n\n"
+                "Use /conectar_banco para começar novamente."
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+    async def cancel_retry(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Cancela o retry"""
+        query = update.callback_query
+        await query.answer()
+        
+        await query.edit_message_text(
+            "❌ Conexão cancelada.\n\n"
+            "Use /conectar_banco para conectar seu banco novamente."
+        )
         context.user_data.clear()
         return ConversationHandler.END
 
@@ -698,21 +826,61 @@ class OpenFinanceHandler:
                 return await self._prompt_next_field(chat_id, context)
 
             logger.warning("Banco solicitou ação adicional sem formulário específico")
-            await processing_msg.edit_text(
-                "⚠️ O banco pediu uma confirmação adicional.\n"
-                f"{action_err.args[0] if action_err.args else ''}"
+            # Salvar estado para retry automático
+            context.user_data['pending_item_id'] = action_err.item.get('id') if action_err.item else None
+            context.user_data['pending_connector_id'] = int(connector['id']) if connector else None
+            context.user_data['retry_count'] = context.user_data.get('retry_count', 0) + 1
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Já autorizei! Tentar novamente", callback_data="retry_connection")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = (
+                "⚠️ <b>Autorização Bancária Necessária</b>\n\n"
+                f"{action_err.args[0] if action_err.args else 'Confirme a autenticação no app do seu banco.'}\n\n"
+                "<b>O que fazer:</b>\n"
+                "1️⃣ Abra o app do seu banco ou internet banking\n"
+                "2️⃣ Procure por notificações de autorização ou confirmação\n"
+                "3️⃣ Autorize o acesso (geralmente via OTP, fingerprint ou código)\n"
+                "4️⃣ Volte aqui e clique em 'Já autorizei!'\n\n"
+                "<i>⏱️ Isso costuma levar de 30 segundos a 5 minutos.</i>"
             )
-            context.user_data.clear()
-            return ConversationHandler.END
+            
+            await processing_msg.edit_text(message, reply_markup=reply_markup, parse_mode='HTML')
+            
+            # Não limpar context.user_data - guardar para retry
+            return SELECTING_BANK
 
         except BankConnectorUserActionRequired as action_err:
             logger.warning("Banco solicitou ação adicional do usuário")
-            await processing_msg.edit_text(
-                "⚠️ O banco pediu uma confirmação adicional.\n"
-                f"{action_err.args[0]}"
+            # Salvar estado para retry automático
+            context.user_data['pending_item_id'] = action_err.item.get('id') if action_err.item else None
+            context.user_data['pending_connector_id'] = int(connector['id']) if connector else None
+            context.user_data['retry_count'] = context.user_data.get('retry_count', 0) + 1
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Já autorizei! Tentar novamente", callback_data="retry_connection")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = (
+                "⚠️ <b>Confirmação Bancária Necessária</b>\n\n"
+                f"{action_err.args[0] if action_err.args else 'Confirme a autorização no app do seu banco.'}\n\n"
+                "<b>O que fazer:</b>\n"
+                "1️⃣ Abra o app do seu banco ou internet banking\n"
+                "2️⃣ Verifique notificações de segurança ou confirmação\n"
+                "3️⃣ Autorize o acesso (OTP, token, fingerprint ou pergunta secreta)\n"
+                "4️⃣ Volte aqui e clique em 'Já autorizei!'\n\n"
+                "<i>⏱️ Geralmente leva poucos minutos.</i>"
             )
-            context.user_data.clear()
-            return ConversationHandler.END
+            
+            await processing_msg.edit_text(message, reply_markup=reply_markup, parse_mode='HTML')
+            
+            # Não limpar context.user_data - guardar para retry
+            return SELECTING_BANK
         except BankConnectorTimeout as timeout_err:
             logger.warning("Tempo esgotado aguardando retorno do banco")
             await processing_msg.edit_text(
