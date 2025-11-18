@@ -351,6 +351,11 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         accounts_data = pluggy_request("GET", f"/accounts", params={"itemId": item_id})
         accounts = accounts_data.get("results", [])
         
+        # 🔍 LOG DETALHADO: Ver tipos de contas retornadas
+        logger.info(f"📊 Total de {len(accounts)} conta(s) retornada(s) pela API Pluggy")
+        for acc in accounts:
+            logger.info(f"   💳 Conta: {acc.get('name')} | Tipo: {acc.get('type')} | Subtipo: {acc.get('subtype')}")
+        
         if not accounts:
             logger.info(f"ℹ️  Nenhuma account encontrada para item {item_id}")
             return True
@@ -2724,6 +2729,98 @@ Categorias:"""
         
         # Redirecionar para o comando /minhas_contas
         await self.minhas_contas(update, context)
+    
+    # ==================== /debug_open_finance ====================
+    
+    async def debug_open_finance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Comando DEBUG: Mostra detalhes técnicos das conexões Open Finance"""
+        user_id = update.effective_user.id
+        
+        logger.info(f"🔍 DEBUG: Usuário {user_id} solicitando debug Open Finance")
+        
+        # 🔐 VERIFICAR WHITELIST
+        from config import PLUGGY_WHITELIST_IDS
+        if PLUGGY_WHITELIST_IDS and user_id not in PLUGGY_WHITELIST_IDS:
+            await update.message.reply_text("🔒 Funcionalidade restrita.")
+            return
+        
+        try:
+            from database.database import get_db
+            from models import Usuario, PluggyItem, PluggyAccount, Investment
+            
+            db = next(get_db())
+            
+            # Buscar usuário
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await update.message.reply_text("❌ Usuário não encontrado.")
+                return
+            
+            # Buscar itens conectados
+            items = db.query(PluggyItem).filter(PluggyItem.id_usuario == usuario.id).all()
+            
+            if not items:
+                await update.message.reply_text("❌ Nenhum banco conectado.")
+                return
+            
+            message = "🔍 *DEBUG: Open Finance*\n\n"
+            
+            for item in items:
+                message += f"━━━━━━━━━━━━━━━━\n"
+                message += f"🏦 *{item.connector_name}*\n"
+                message += f"📋 Item ID: `{item.pluggy_item_id}`\n"
+                message += f"📅 Status: {item.status}\n"
+                message += f"🕐 Conectado: {item.created_at.strftime('%d/%m/%Y %H:%M')}\n\n"
+                
+                # Buscar contas deste item
+                accounts = db.query(PluggyAccount).filter(PluggyAccount.id_item == item.id).all()
+                message += f"💳 *Contas ({len(accounts)}):*\n"
+                
+                for acc in accounts:
+                    message += f"  • {acc.name}\n"
+                    message += f"    Tipo: `{acc.type}`\n"
+                    message += f"    Subtipo: `{acc.subtype or 'N/A'}`\n"
+                    message += f"    Saldo: R$ {acc.balance or 0:.2f}\n"
+                    if acc.credit_limit:
+                        message += f"    Limite: R$ {acc.credit_limit:.2f}\n"
+                    message += "\n"
+                
+                # Buscar investimentos via endpoint direto
+                try:
+                    inv_data = pluggy_request("GET", "/investments", params={"itemId": item.pluggy_item_id})
+                    inv_results = inv_data.get("results", [])
+                    
+                    message += f"📈 *Investimentos (API):* {len(inv_results)}\n"
+                    if inv_results:
+                        for inv in inv_results[:3]:  # Mostrar até 3
+                            message += f"  • {inv.get('name', 'N/A')}\n"
+                            message += f"    Valor: R$ {inv.get('balance', 0):.2f}\n"
+                    else:
+                        message += "  ℹ️ Nenhum investimento retornado pela API\n"
+                except Exception as e:
+                    message += f"  ⚠️ Erro ao buscar: {str(e)[:50]}\n"
+                
+                message += "\n"
+            
+            # Investimentos salvos no banco
+            investments = db.query(Investment).filter(
+                Investment.id_usuario == usuario.id,
+                Investment.ativo == True,
+                Investment.fonte == "PLUGGY"
+            ).all()
+            
+            message += f"━━━━━━━━━━━━━━━━\n"
+            message += f"💎 *Investimentos no Banco:* {len(investments)}\n"
+            for inv in investments:
+                message += f"  • {inv.nome}\n"
+                message += f"    Tipo: {inv.tipo}\n"
+                message += f"    Valor: R$ {inv.valor_atual:.2f}\n"
+            
+            await update.message.reply_text(message, parse_mode="Markdown")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro no debug: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Erro: {e}")
     
     # ==================== CONVERSATION HANDLER ====================
     
