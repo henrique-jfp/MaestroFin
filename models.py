@@ -257,29 +257,3 @@ class MetaSPX(Base):
     
     def __repr__(self):
         return f"<MetaSPX(tipo={self.tipo}, lucro_meta=R${self.meta_lucro_liquido})>"
-
-
-# ==================== TOKEN AUTENTICAÇÃO COM BANCOS ====================
-
-class UserBankToken(Base):
-    """Armazena tokens de autenticação com bancos de forma segura (criptografado)"""
-    __tablename__ = 'user_bank_tokens'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False, index=True)
-    banco = Column(String(20), nullable=False)  # 'inter', 'itau', 'bradesco', etc
-    
-    # Token criptografado (nunca plain text!)
-    encrypted_token = Column(Text, nullable=False)
-    token_type = Column(String(50), nullable=False)  # 'isafe', 'itoken', 'cpf_token', 'bearer', etc
-    
-    # Metadata
-    conectado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    ultimo_acesso = Column(DateTime, nullable=True)
-    ativo = Column(Boolean, default=True, index=True)
-    
-    # Relacionamento com usuário
-    usuario = relationship("Usuario", backref="bank_tokens")
-    
-    def __repr__(self):
-        return f"<UserBankToken(usuario_id={self.id_usuario}, banco={self.banco}, tipo={self.token_type})>"

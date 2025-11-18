@@ -7,7 +7,6 @@ from datetime import time, datetime
 from telegram.warnings import PTBUserWarning
 import threading
 from flask import Flask, jsonify
-from database.database import SessionLocal
 
 # 🔐 CARREGAR SECRET FILES PRIMEIRO
 try:
@@ -178,7 +177,6 @@ from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.fatura_handler import (
     fatura_conv, callback_agendar_parcelas_sim, callback_agendar_parcelas_nao
 )  # <-- Importar também os callbacks
-from gerente_financeiro.token_auth_handler import TokenAuthHandler
 from gerente_financeiro.dashboard_handler import (
     cmd_dashboard, cmd_dashstatus, dashboard_callback_handler
 )
@@ -383,7 +381,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("agendamento_conv", lambda: agendamento_conv),
         ("edit_conv", lambda: edit_conv),
         ("extrato_conv", criar_conversation_handler_extrato),
-        ("token_auth_conv", lambda: TokenAuthHandler(db_session=SessionLocal()).get_conversation_handler()),
     ]
 
     for name, builder in conversation_builders:
