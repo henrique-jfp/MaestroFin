@@ -74,6 +74,8 @@ if not PIX_KEY:
     missing_vars.append("PIX_KEY")
 if not EMAIL_HOST_PASSWORD:
     missing_vars.append("EMAIL_HOST_PASSWORD")
+if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
+    missing_vars.append("PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET")
 
 if missing_vars:
     logging.warning(f"⚠️ Variáveis não configuradas: {', '.join(missing_vars)}")
