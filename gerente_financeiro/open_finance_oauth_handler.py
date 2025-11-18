@@ -4,6 +4,7 @@ Gerencia conexões bancárias via OAuth/Open Finance (substitui handler antigo)
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
