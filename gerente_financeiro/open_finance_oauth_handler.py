@@ -2234,8 +2234,8 @@ Categoria escolhida:"""
             
             await status_msg.edit_text(
                 f"🔥 *Encontrados {len(lancamentos_sem_categoria)} lançamentos sem categoria\\!*\n\n"
-                f"🤖 Iniciando categorização com IA\\.\\.\\.\n"
-                f"⏱️ Isso pode levar alguns segundos\\.",
+                f"🤖 Iniciando categorização em lote com IA\\.\\.\\.\n"
+                f"⚡ Modo turbo ativado\\! Processando até 15 por vez\\.",
                 parse_mode="MarkdownV2"
             )
             
@@ -2243,74 +2243,115 @@ Categoria escolhida:"""
             sucesso = 0
             falha = 0
             
-            # Categorizar cada lançamento
-            for idx, lancamento in enumerate(lancamentos_sem_categoria, 1):
+            # ⚡ BATCH PROCESSING - Processar em lotes de 15
+            BATCH_SIZE = 15
+            total_lotes = (len(lancamentos_sem_categoria) + BATCH_SIZE - 1) // BATCH_SIZE
+            
+            for lote_idx in range(total_lotes):
+                inicio = lote_idx * BATCH_SIZE
+                fim = min(inicio + BATCH_SIZE, len(lancamentos_sem_categoria))
+                lote = lancamentos_sem_categoria[inicio:fim]
+                
                 try:
-                    # Atualizar progresso a cada 5 lançamentos
-                    if idx % 5 == 0:
-                        await status_msg.edit_text(
-                            f"🔥 *Categorizando\\.\\.\\.*\n\n"
-                            f"📊 Progresso: {idx}/{len(lancamentos_sem_categoria)}\n"
-                            f"✅ Sucesso: {sucesso}\n"
-                            f"❌ Falhas: {falha}",
-                            parse_mode="MarkdownV2"
-                        )
+                    # Atualizar progresso
+                    await status_msg.edit_text(
+                        f"🔥 *Categorizando\\.\\.\\.*\n\n"
+                        f"📊 Lote {lote_idx + 1}/{total_lotes}\n"
+                        f"� Progresso: {fim}/{len(lancamentos_sem_categoria)}\n"
+                        f"✅ Sucesso: {sucesso}\n"
+                        f"❌ Falhas: {falha}",
+                        parse_mode="MarkdownV2"
+                    )
                     
-                    # Preparar prompt para o Gemini
-                    prompt = f"""Você é um especialista em categorização de transações financeiras.
+                    # Construir prompt em lote
+                    transacoes_texto = ""
+                    for idx, lanc in enumerate(lote, inicio + 1):
+                        transacoes_texto += f"{idx}. Descrição: \"{lanc.descricao}\" | Valor: R$ {abs(lanc.valor):.2f} | Tipo: {'DESPESA' if lanc.tipo == 'despesa' else 'RECEITA'}\n"
+                    
+                    prompt_batch = f"""Você é um especialista em categorização de transações financeiras.
 
-Analise esta transação e escolha a categoria MAIS APROPRIADA:
+Analise estas {len(lote)} transações e categorize cada uma de forma CONSISTENTE:
 
-Descrição: "{lancamento.descricao}"
-Valor: R$ {abs(lancamento.valor)}
-Tipo: {"DESPESA" if lancamento.tipo == "despesa" else "RECEITA"}
+TRANSAÇÕES:
+{transacoes_texto}
 
-Categorias disponíveis:
+CATEGORIAS DISPONÍVEIS:
 {', '.join(categorias_lista)}
 
 REGRAS IMPORTANTES:
-- Responda APENAS o nome exato da categoria (sem explicações, aspas ou pontuação)
-- Se não tiver certeza, escolha a categoria mais próxima
+- Analise padrões entre as transações (ex: valores repetidos mensais = assinaturas)
+- Seja CONSISTENTE: transações similares devem ter a mesma categoria
 - Para PIX/TED/Transferências → "Transferências"
-- Para supermercado/feira → "Alimentação"
-- Para Uber/99/combustível → "Transporte"
-- Para Netflix/Spotify → "Lazer"
-- Para farmácia/médico → "Saúde"
+- Para supermercado/feira/padaria → "Alimentação"
+- Para Uber/99/combustível/gasolina → "Transporte"
+- Para Netflix/Spotify/Disney+/Amazon Prime → "Lazer"
+- Para farmácia/médico/hospital → "Saúde"
+- Para aluguel/condomínio/luz/água → "Moradia"
 
-Categoria:"""
+FORMATO DE RESPOSTA (uma linha por transação):
+1: Nome_da_Categoria
+2: Nome_da_Categoria
+3: Nome_da_Categoria
+...
+
+Categorias:"""
                     
-                    # Solicitar categorização ao Gemini
-                    response = model.generate_content(prompt)
-                    categoria_sugerida = response.text.strip().strip('"').strip("'")
+                    # Solicitar categorização ao Gemini (batch)
+                    response = model.generate_content(prompt_batch)
+                    linhas_resposta = response.text.strip().split('\n')
                     
-                    # Buscar categoria no banco (case-insensitive)
-                    categoria = categorias_dict.get(categoria_sugerida.lower())
-                    
-                    if not categoria:
-                        # Tentar match parcial
-                        for cat_nome, cat_obj in categorias_dict.items():
-                            if categoria_sugerida.lower() in cat_nome or cat_nome in categoria_sugerida.lower():
-                                categoria = cat_obj
-                                break
-                    
-                    if categoria:
-                        lancamento.id_categoria = categoria.id
-                        sucesso += 1
-                        logger.info(f"✅ '{lancamento.descricao}' → {categoria.nome}")
-                    else:
-                        # Fallback: categoria "Outros"
-                        categoria_outros = categorias_dict.get("outros")
-                        if categoria_outros:
-                            lancamento.id_categoria = categoria_outros.id
-                            sucesso += 1
-                            logger.warning(f"⚠️ '{lancamento.descricao}' → Outros (fallback)")
-                        else:
+                    # Processar cada resultado
+                    for idx, lanc in enumerate(lote):
+                        try:
+                            # Encontrar linha correspondente (formato: "1: Categoria" ou "1. Categoria" ou apenas "Categoria")
+                            linha = None
+                            for l in linhas_resposta:
+                                if l.strip().startswith(f"{inicio + idx + 1}:") or l.strip().startswith(f"{inicio + idx + 1}."):
+                                    linha = l
+                                    break
+                            
+                            if not linha and idx < len(linhas_resposta):
+                                linha = linhas_resposta[idx]
+                            
+                            if not linha:
+                                raise Exception(f"Resposta não encontrada para transação {inicio + idx + 1}")
+                            
+                            # Extrair categoria (remover número e pontuação)
+                            categoria_sugerida = linha.split(':', 1)[-1].split('.', 1)[-1].strip().strip('"').strip("'")
+                            
+                            # Buscar categoria no banco
+                            categoria = categorias_dict.get(categoria_sugerida.lower())
+                            
+                            if not categoria:
+                                # Tentar match parcial
+                                for cat_nome, cat_obj in categorias_dict.items():
+                                    if categoria_sugerida.lower() in cat_nome or cat_nome in categoria_sugerida.lower():
+                                        categoria = cat_obj
+                                        break
+                            
+                            if categoria:
+                                lanc.id_categoria = categoria.id
+                                sucesso += 1
+                                logger.info(f"✅ Lote {lote_idx + 1}: '{lanc.descricao}' → {categoria.nome}")
+                            else:
+                                # Fallback: categoria "Outros"
+                                categoria_outros = categorias_dict.get("outros")
+                                if categoria_outros:
+                                    lanc.id_categoria = categoria_outros.id
+                                    sucesso += 1
+                                    logger.warning(f"⚠️ Lote {lote_idx + 1}: '{lanc.descricao}' → Outros (fallback)")
+                                else:
+                                    falha += 1
+                                    logger.error(f"❌ Lote {lote_idx + 1}: Categoria '{categoria_sugerida}' não encontrada para '{lanc.descricao}'")
+                        
+                        except Exception as e:
                             falha += 1
-                            logger.error(f"❌ Não foi possível categorizar: {lancamento.descricao}")
+                            logger.error(f"❌ Lote {lote_idx + 1}: Erro ao categorizar '{lanc.descricao}': {e}")
                     
                 except Exception as e:
-                    falha += 1
-                    logger.error(f"❌ Erro ao categorizar '{lancamento.descricao}': {e}")
+                    # Erro no lote inteiro - marcar todas como falha
+                    falha += len(lote)
+                    logger.error(f"❌ Erro ao processar lote {lote_idx + 1}: {e}")
                     continue
             
             # Salvar alterações
