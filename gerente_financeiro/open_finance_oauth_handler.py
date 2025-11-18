@@ -1486,9 +1486,12 @@ class OpenFinanceOAuthHandler:
                 logger.warning(f"⚠️  OAuth URL não encontrado. parameter={parameter}, userAction={item_updated.get('userAction')}")
             
             if oauth_url:
-                # 🔍 DETECTAR SE É BRADESCO OU BANCO QUE EXIGE APP
-                is_bradesco = "bradesco" in connector['name'].lower()
-                requires_app = is_bradesco  # Adicionar outros bancos aqui se necessário
+                # 🔍 DETECTAR SE É BRADESCO, NUBANK OU OUTRO BANCO QUE EXIGE APP
+                bank_name_lower = connector['name'].lower()
+                is_bradesco = "bradesco" in bank_name_lower
+                is_nubank = "nubank" in bank_name_lower or "nu bank" in bank_name_lower
+                is_inter = "inter" in bank_name_lower
+                requires_app = is_bradesco or is_nubank or is_inter  # Bancos que têm problemas com OAuth web no iOS
                 
                 # Criar botão inline com URL
                 keyboard = [
@@ -1500,20 +1503,24 @@ class OpenFinanceOAuthHandler:
                 
                 # Mensagem principal adaptada por banco
                 if requires_app:
-                    # 📱 BRADESCO: Instruções específicas para app
+                    # 📱 BRADESCO/NUBANK: Instruções específicas para app
                     msg_text = (
                         f"🔐 *Autorização via App do Banco*\n\n"
                         f"🏦 Banco: *{connector['name']}*\n"
                         f"🆔 Conexão: `{item_id}`\n\n"
                         f"⚠️ *IMPORTANTE:* O {connector['name']} exige autorização pelo *app oficial*\\.\n\n"
-                        f"📱 *Como autorizar:*\n"
-                        f"1\\. Abra o *App {connector['name']}* no seu celular\n"
-                        f"2\\. Vá em: *Menu* → *Open Finance* ou *Compartilhar Dados*\n"
-                        f"3\\. Procure por *Maestro Financeiro* ou *Pluggy*\n"
-                        f"4\\. Autorize o compartilhamento de dados\n"
+                        f"📱 *Como autorizar \\(iPhone/iOS\\):*\n"
+                        f"1\\. Abra o *App {connector['name']}* diretamente \\(não pelo link\\)\n"
+                        f"2\\. Vá em: *Menu* → *Configurações* → *Open Finance* / *Open Banking*\n"
+                        f"3\\. Procure por *Maestro Financeiro*, *Pluggy* ou *Novas Autorizações*\n"
+                        f"4\\. Autorize o compartilhamento de dados financeiros\n"
                         f"5\\. Volte aqui e clique em *'Já Autorizei'*\n\n"
-                        f"💡 *Alternativa:* Tente clicar no botão abaixo\\. Se abrir uma página pedindo para baixar o app, ignore e siga as instruções acima\\.\n\n"
-                        f"🔗 *Link OAuth* \\(se o app pedir\\):\n"
+                        f"🍎 *Problema no iPhone?*\n"
+                        f"• Links podem não abrir o app automaticamente no iOS\n"
+                        f"• Ignore se abrir página pedindo para baixar o app\n"
+                        f"• Abra o app manualmente e procure *Open Finance* nas configurações\n"
+                        f"• Se não encontrar, tente: *Perfil* → *Privacidade* → *Dados Compartilhados*\n\n"
+                        f"🔗 *Link OAuth* \\(apenas se o app solicitar\\):\n"
                         f"`{oauth_url}`"
                     )
                 else:
@@ -2203,10 +2210,14 @@ class OpenFinanceOAuthHandler:
                             reply_markup = InlineKeyboardMarkup(keyboard)
                             
                             # 🔍 DETECTAR SE É BRADESCO OU BANCO QUE EXIGE APP
-                            is_bradesco = "bradesco" in bank_name.lower()
+                            bank_lower = bank_name.lower()
+                            is_bradesco = "bradesco" in bank_lower
+                            is_nubank = "nubank" in bank_lower or "nu bank" in bank_lower
+                            is_inter = "inter" in bank_lower
+                            requires_app = is_bradesco or is_nubank or is_inter
                             
-                            if is_bradesco:
-                                # 📱 Instruções específicas para Bradesco
+                            if requires_app:
+                                # 📱 Instruções específicas para bancos que exigem app (especialmente iOS)
                                 await context.bot.send_message(
                                     chat_id=user_id,
                                     text=f"⏰ *A autorização está demorando\\.\\.\\.*\n\n"
