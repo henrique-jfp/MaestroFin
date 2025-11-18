@@ -24,6 +24,7 @@ from open_finance.bank_connector import (
     BankConnectorUserActionRequired,
 )
 from open_finance.pluggy_client import PluggyClient, format_currency, format_account_type
+from open_finance.connector_map import filter_and_sort_connectors, get_preferred_connector_id
 
 logger = logging.getLogger(__name__)
 
@@ -50,83 +51,8 @@ class OpenFinanceHandler:
             # Listar bancos disponíveis
             connectors = self.client.list_connectors(country="BR")
 
-            # Limitar para bancos suportados (PF)
-            allowed_banks = [
-                {
-                    "label": "Inter",
-                    "keywords": ["inter"],
-                },
-                {
-                    "label": "Itaú",
-                    "keywords": ["itaú", "itau"],
-                },
-                {
-                    "label": "Bradesco",
-                    "keywords": ["bradesco"],
-                },
-                {
-                    "label": "Nubank",
-                    "keywords": ["nubank", "nu bank"],
-                },
-                {
-                    "label": "Caixa",
-                    "keywords": ["caixa", "cef"],
-                },
-                {
-                    "label": "Santander",
-                    "keywords": ["santander"],
-                },
-            ]
-
-            blocked_terms = [
-                "empresa",
-                "empresas",
-                "empresarial",
-                "business",
-                "corporate",
-                "pj",
-                "bba",
-                "pro",
-                "emps",
-            ]
-
-            def is_blocked(name_lower: str) -> bool:
-                return any(term in name_lower for term in blocked_terms)
-
-            # Seleciona conectores na ordem desejada, sem duplicar nomes
-            selected_connectors = []
-            used_connector_ids = set()
-
-            for bank_cfg in allowed_banks:
-                matches = []
-                for conn in connectors:
-                    connector_name = (conn.get('name') or '').strip()
-                    if not connector_name:
-                        continue
-                    if conn['id'] in used_connector_ids:
-                        continue
-                    name_lower = connector_name.lower()
-                    if is_blocked(name_lower):
-                        continue
-                    if any(keyword in name_lower for keyword in bank_cfg['keywords']):
-                        matches.append(conn)
-
-                if not matches:
-                    continue
-
-                # Ordena priorizando conta corrente antes de cartões
-                def sort_key(connector: dict) -> tuple:
-                    name_lower = (connector.get('name') or '').lower()
-                    is_card = 1 if "cart" in name_lower else 0
-                    return (is_card, connector.get('name', ''))
-
-                matches.sort(key=sort_key)
-
-                for match in matches:
-                    used_connector_ids.add(match['id'])
-                    selected_connectors.append(match)
-
-            main_banks = selected_connectors
+            # Usar novo mapeamento de conectores otimizado
+            main_banks = filter_and_sort_connectors(connectors)
 
             if not main_banks:
                 await update.message.reply_text(

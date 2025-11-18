@@ -49,6 +49,10 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
 PIX_KEY = os.getenv("PIX_KEY")
 
+# ----- PLUGGY / OPEN FINANCE -----
+PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID")
+PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET")
+
 
 # --- VALIDAÇÃO E CONFIGURAÇÃO ADICIONAL ---
 
@@ -88,6 +92,10 @@ logging.info(f"   📧 EMAIL_HOST_PASSWORD: {'✅ Configurado' if EMAIL_HOST_PAS
 logging.info(f"   📧 SENDER_EMAIL: {'✅ Configurado' if SENDER_EMAIL else '❌ Não encontrado'}")
 logging.info(f"   📧 EMAIL_RECEIVER: {'✅ Configurado' if EMAIL_RECEIVER else '❌ Não encontrado'}")
 logging.info(f"   💳 PIX_KEY: {'✅ Configurado' if PIX_KEY else '❌ Não encontrado'}")
+
+# Log de Pluggy / Open Finance
+logging.info(f"   🔌 PLUGGY_CLIENT_ID: {'✅ Configurado' if PLUGGY_CLIENT_ID else '❌ Não encontrado'}")
+logging.info(f"   🔌 PLUGGY_CLIENT_SECRET: {'✅ Configurado' if PLUGGY_CLIENT_SECRET else '❌ Não encontrado'}")
 
 # Configurar credenciais do Google de forma mais flexível
 if GOOGLE_APPLICATION_CREDENTIALS:
