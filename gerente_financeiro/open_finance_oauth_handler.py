@@ -242,36 +242,35 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db, raw_accounts: List[
         
         # Filtrar contas que são investimentos
         # Aceitar: type=INVESTMENT OU nome contém "cofrinho" OU subtype indica investimento
-        # OU possui transações de rendimento de aplicação financeira
-        # OU possui automaticallyInvestedBalance > 0
+        # 🚫 NÃO usar automaticallyInvestedBalance (rendimento conta corrente não é investimento)
         investment_accounts = []
         for acc in all_accounts:
             nome_lower = (acc.name or "").lower()
             subtype_lower = (acc.subtype or "").lower()
             
-            # Verificar se tem transações de rendimento (indica investimento)
-            has_rendimentos = False
-            try:
-                from models import PluggyTransaction
-                rendimentos_count = db.query(PluggyTransaction).filter(
-                    PluggyTransaction.id_account == acc.id,
-                    PluggyTransaction.type == "CREDIT"
-                ).filter(
-                    (PluggyTransaction.category.ilike("%interest%")) |
-                    (PluggyTransaction.category.ilike("%dividend%")) |
-                    (PluggyTransaction.description.ilike("%rendimento%"))
-                ).count()
-                has_rendimentos = rendimentos_count > 0
-            except Exception as e:
-                logger.warning(f"⚠️ Erro ao verificar rendimentos: {e}")
+            # ⚠️ DESABILITADO: Verificação de rendimentos (rendimento de CC não é investimento)
+            # has_rendimentos = False
+            # try:
+            #     from models import PluggyTransaction
+            #     rendimentos_count = db.query(PluggyTransaction).filter(
+            #         PluggyTransaction.id_account == acc.id,
+            #         PluggyTransaction.type == "CREDIT"
+            #     ).filter(
+            #         (PluggyTransaction.category.ilike("%interest%")) |
+            #         (PluggyTransaction.category.ilike("%dividend%")) |
+            #         (PluggyTransaction.description.ilike("%rendimento%"))
+            #     ).count()
+            #     has_rendimentos = rendimentos_count > 0
+            # except Exception as e:
+            #     logger.warning(f"⚠️ Erro ao verificar rendimentos: {e}")
             
-            # Verificar automaticallyInvestedBalance nos dados crus
-            is_remunerated = False
-            raw_data = raw_map.get(acc.pluggy_account_id)
-            if raw_data and "bankData" in raw_data and raw_data["bankData"]:
-                auto_invested = raw_data["bankData"].get("automaticallyInvestedBalance", 0) or 0
-                if float(auto_invested) > 0:
-                    is_remunerated = True
+            # ⚠️ REMOVIDO: automaticallyInvestedBalance gera falsos positivos (rendimento CC)
+            # is_remunerated = False
+            # raw_data = raw_map.get(acc.pluggy_account_id)
+            # if raw_data and "bankData" in raw_data and raw_data["bankData"]:
+            #     auto_invested = raw_data["bankData"].get("automaticallyInvestedBalance", 0) or 0
+            #     if float(auto_invested) > 0:
+            #         is_remunerated = True
             
             is_investment = (
                 acc.type == "INVESTMENT" or
@@ -282,21 +281,18 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db, raw_accounts: List[
                 "investment" in subtype_lower or
                 "savings" in subtype_lower or
                 "poupança" in nome_lower or
-                "poupanca" in nome_lower or
-                has_rendimentos or
-                is_remunerated
+                "poupanca" in nome_lower
+                # ⚠️ REMOVIDO: has_rendimentos e is_remunerated causavam falsos positivos
             )
             
             if is_investment:
-                # Armazenar flag temporária no objeto para usar depois
-                acc._is_remunerated = is_remunerated
                 investment_accounts.append(acc)
                 
                 motivo = []
                 if acc.type == "INVESTMENT": motivo.append("tipo=INVESTMENT")
                 if "cofrinho" in nome_lower or "cofre" in nome_lower: motivo.append("nome contém cofrinho/cofre")
-                if has_rendimentos: motivo.append("possui transações de rendimento")
-                if is_remunerated: motivo.append("saldo automático investido")
+                if "poupança" in nome_lower or "poupanca" in nome_lower: motivo.append("poupança")
+                if "caixinha" in nome_lower: motivo.append("caixinha")
                 
                 logger.info(f"💰 Detectado investimento: {acc.name} (tipo: {acc.type}, razão: {', '.join(motivo)})")
         
@@ -310,9 +306,9 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db, raw_accounts: List[
             # Tentar descobrir o tipo de investimento pelo nome/subtype
             tipo = _guess_investment_type(account.name, account.subtype)
             
-            # Se for conta remunerada e caiu como OUTRO, ajustar
-            if getattr(account, "_is_remunerated", False) and tipo == "OUTRO":
-                tipo = "CONTA REMUNERADA"
+            # ⚠️ REMOVIDO: _is_remunerated não é mais usado (causava falsos positivos)
+            # if getattr(account, "_is_remunerated", False) and tipo == "OUTRO":
+            #     tipo = "CONTA REMUNERADA"
             
             valor_atual = Decimal(account.balance) if account.balance else Decimal(0)
             
@@ -1851,24 +1847,21 @@ class OpenFinanceOAuthHandler:
                         else:
                             emoji = "🔴"
                         
-                        # Exibir apenas se há dados válidos
-                        if limite_total > 0:
-                            # Limite Total
-                            limite_total_str = f"R$ {limite_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            limite_total_str = escape_markdown_v2(limite_total_str)
-                            message += f"   💰 Limite: {limite_total_str}\n"
-                            
-                            # Fatura Atual
-                            fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            fatura_str = escape_markdown_v2(fatura_str)
-                            message += f"   {emoji} Fatura: {fatura_str} \\({percentual_usado:.0f}%\\)\n"
-                            
-                            # Disponível
-                            limite_disp_str = f"R$ {limite_disponivel:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            limite_disp_str = escape_markdown_v2(limite_disp_str)
-                            message += f"   ✅ Disponível: {limite_disp_str}\n"
-                        else:
-                            message += f"   ⚠️ _Aguardando sincronização\\.\\.\\._\n"
+                        # Exibir dados válidos (sempre mostrar, mesmo se zerados)
+                        # Limite Total
+                        limite_total_str = f"R$ {limite_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        limite_total_str = escape_markdown_v2(limite_total_str)
+                        message += f"   💰 Limite: {limite_total_str}\n"
+                        
+                        # Fatura Atual
+                        fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        fatura_str = escape_markdown_v2(fatura_str)
+                        message += f"   {emoji} Fatura: {fatura_str} \\({percentual_usado:.0f}%\\)\n"
+                        
+                        # Disponível
+                        limite_disp_str = f"R$ {limite_disponivel:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        limite_disp_str = escape_markdown_v2(limite_disp_str)
+                        message += f"   ✅ Disponível: {limite_disp_str}\n"
                 
                 # Investimentos (se houver) - MELHORADO
                 if investments:
@@ -1929,7 +1922,14 @@ class OpenFinanceOAuthHandler:
     
     async def sincronizar(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Sincroniza transações bancárias manualmente"""
-        user_id = update.effective_user.id
+        # Suportar tanto Update quanto CallbackQuery
+        if hasattr(update, 'callback_query') and update.callback_query:
+            query = update.callback_query
+            user_id = query.from_user.id
+            message = query.message
+        else:
+            user_id = update.effective_user.id
+            message = update.message
         
         logger.info(f"👤 Usuário {user_id} solicitou sincronização manual")
         
@@ -1937,14 +1937,14 @@ class OpenFinanceOAuthHandler:
         from config import PLUGGY_WHITELIST_IDS
         if PLUGGY_WHITELIST_IDS and user_id not in PLUGGY_WHITELIST_IDS:
             logger.warning(f"🚫 Usuário {user_id} NÃO autorizado a usar Open Finance")
-            await update.message.reply_text(
+            await message.reply_text(
                 "🔒 *Open Finance Restrito*\n\n"
                 "Esta funcionalidade está temporariamente restrita durante o período de licença acadêmica.",
                 parse_mode="Markdown"
             )
             return
         
-        status_msg = await update.message.reply_text(
+        status_msg = await message.reply_text(
             "🔄 Sincronizando transações bancárias...\n"
             "Isso pode levar alguns segundos."
         )
@@ -2422,8 +2422,8 @@ class OpenFinanceOAuthHandler:
         if data == "action_sync":
             # Redirecionar para sincronização
             await query.message.reply_text("🔄 Iniciando sincronização...")
-            # Simular comando /sincronizar
-            await self.sincronizar(query, context)
+            # Passar o update completo (não apenas query)
+            await self.sincronizar(update, context)
             return
         
         elif data == "action_connect":
