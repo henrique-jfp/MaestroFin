@@ -211,7 +211,7 @@ def calcular_metas_ano(usuario_id: int, ano: int) -> Dict:
         metas_criadas = db.query(Objetivo).filter(
             and_(
                 Objetivo.id_usuario == usuario_id,
-                extract('year', Objetivo.data_criacao) == ano
+                extract('year', Objetivo.criado_em) == ano
             )
         ).all()
         
