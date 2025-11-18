@@ -242,26 +242,49 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
         from database.database import get_db
         from models import PluggyAccount, PluggyTransaction
         from datetime import datetime, timedelta
+        import json
         
         db = next(get_db())
         
+        # Buscar informações da conta primeiro
+        account = db.query(PluggyAccount).filter(PluggyAccount.id == account_id).first()
+        if account:
+            logger.info(f"🔍 Sincronizando conta: {account.name} (tipo: {account.type}, subtype: {account.subtype})")
+        
         # Calcular data inicial
         date_from = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        date_to = datetime.now().strftime("%Y-%m-%d")
         
         # Buscar transações na API Pluggy
-        logger.info(f"🔄 Buscando transações da account {pluggy_account_id} (últimos {days} dias)...")
+        logger.info(f"🔄 Buscando transações da account {pluggy_account_id} (de {date_from} até {date_to})...")
         
-        transactions_data = pluggy_request(
-            "GET", 
-            "/transactions", 
-            params={
-                "accountId": pluggy_account_id,
-                "from": date_from
-            }
-        )
+        # Fazer request com logging detalhado
+        try:
+            transactions_data = pluggy_request(
+                "GET", 
+                "/transactions", 
+                params={
+                    "accountId": pluggy_account_id,
+                    "from": date_from,
+                    "to": date_to
+                }
+            )
+            
+            # Log da resposta completa
+            logger.info(f"📡 Response da API Pluggy: {json.dumps(transactions_data, indent=2, default=str)}")
+            
+        except Exception as api_error:
+            logger.error(f"❌ Erro na API Pluggy ao buscar transações: {api_error}")
+            return {"new": 0, "updated": 0, "total": 0, "error": str(api_error)}
         
         transactions = transactions_data.get("results", [])
-        logger.info(f"📊 {len(transactions)} transações encontradas na API")
+        total_count = transactions_data.get("total", len(transactions))
+        
+        logger.info(f"📊 {len(transactions)} transações retornadas na página (total: {total_count})")
+        
+        if len(transactions) > 0:
+            # Log da primeira transação para debug
+            logger.info(f"🔍 Exemplo de transação: {json.dumps(transactions[0], indent=2, default=str)}")
         
         new_count = 0
         updated_count = 0
@@ -347,18 +370,26 @@ def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
             logger.info(f"ℹ️  Usuário {user_id} não tem conexões ativas")
             return {"items": 0, "accounts": 0, "new": 0, "updated": 0}
         
+        logger.info(f"🏦 {len(items)} item(s) encontrado(s) para sincronização")
+        
         total_new = 0
         total_updated = 0
         total_accounts = 0
         
         for item in items:
+            logger.info(f"🔍 Processando item: {item.connector_name} (status: {item.status})")
+            
             # Buscar accounts deste item
             accounts = db.query(PluggyAccount).filter(
                 PluggyAccount.id_item == item.id
             ).all()
             
+            logger.info(f"📊 {len(accounts)} conta(s) encontrada(s) neste item")
+            
             for account in accounts:
                 total_accounts += 1
+                
+                logger.info(f"💳 Sincronizando conta: {account.name} (tipo: {account.type}, subtipo: {account.subtype})")
                 
                 # Sincronizar transações desta account
                 stats = sync_transactions_for_account(
@@ -366,6 +397,9 @@ def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
                     account.pluggy_account_id, 
                     days
                 )
+                
+                if "error" in stats:
+                    logger.error(f"❌ Erro ao sincronizar conta {account.name}: {stats['error']}")
                 
                 total_new += stats.get("new", 0)
                 total_updated += stats.get("updated", 0)
