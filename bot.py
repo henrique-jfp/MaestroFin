@@ -179,6 +179,9 @@ from gerente_financeiro.gamification_handler import show_profile, show_rankings,
 # 📈 INVESTMENT HANDLER
 from gerente_financeiro.investment_handler import get_investment_handlers
 
+# 🤖 ASSISTENTE PROATIVO
+from gerente_financeiro.assistente_proativo_handler import teste_assistente_handler
+
 # 🏦 OPEN FINANCE OAUTH (substitui handler antigo)
 try:
     from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
@@ -409,6 +412,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/dashboarddebug", lambda: CommandHandler("dashboarddebug", debug_dashboard)),
         ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),
         ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
+        ("/teste_assistente", lambda: teste_assistente_handler),
     ]
     
     # Adicionar comandos Open Finance se habilitado

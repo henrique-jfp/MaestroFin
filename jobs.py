@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, time
 from telegram.ext import ContextTypes
 from alerts import agendar_notificacoes_diarias, checar_objetivos_semanal
+from gerente_financeiro.assistente_proativo import job_assistente_proativo
 
 logger = logging.getLogger(__name__)
 
@@ -102,10 +103,18 @@ def configurar_jobs(job_queue):
             name="sync_open_finance_transactions"
         )
         
+        # Job diário às 20:00 - Assistente Proativo (alertas inteligentes)
+        job_queue.run_daily(
+            job_assistente_proativo,
+            time=time(hour=20, minute=0),
+            name="assistente_proativo_diario"
+        )
+        
         logger.info("✅ Jobs agendados configurados com sucesso:")
         logger.info("   📅 Notificações diárias: 01:00")
         logger.info("   🎯 Verificação de metas: Sábado 10:00")
         logger.info("   🔄 Sincronização Open Finance: A cada 1 hora")
+        logger.info("   🤖 Assistente Proativo: 20:00 (alertas inteligentes)")
         
     except Exception as e:
         logger.error(f"❌ Erro ao configurar jobs: {e}")
