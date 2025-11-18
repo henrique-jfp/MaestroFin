@@ -188,9 +188,9 @@ try:
     from open_finance.data_sync import schedule_daily_sync
     OPEN_FINANCE_OAUTH_ENABLED = True
     logging.info("✅ Open Finance OAuth habilitado")
-except ImportError as e:
+except Exception as e:
     OPEN_FINANCE_OAUTH_ENABLED = False
-    logging.warning(f"⚠️ Open Finance OAuth não disponível: {e}")
+    logging.error(f"❌ Open Finance OAuth não disponível: {e}", exc_info=True)
 
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("debugocr")
@@ -386,13 +386,15 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     # 🔐 Open Finance OAuth - Substitui handler antigo
     if OPEN_FINANCE_OAUTH_ENABLED:
         try:
+            logger.info("🔄 Instanciando OpenFinanceOAuthHandler...")
             of_oauth_handler = OpenFinanceOAuthHandler()
+            logger.info("🔄 Criando conversation handler...")
             conversation_builders.append(
                 ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
             )
             logger.info("✅ Open Finance OAuth handler registrado")
         except Exception as e:
-            logger.warning(f"⚠️ Erro ao registrar Open Finance OAuth: {e}")
+            logger.error(f"❌ Erro ao registrar Open Finance OAuth: {e}", exc_info=True)
 
     for name, builder in conversation_builders:
         build_and_add(name, builder)
