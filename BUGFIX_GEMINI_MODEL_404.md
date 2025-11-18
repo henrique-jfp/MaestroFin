@@ -1,62 +1,93 @@
-# 🚨 CORREÇÃO URGENTE: Erro no Comando /gerente
+# 🚨 CORREÇÃO CRÍTICA: Erro no Comando /gerente + Gráficos Quebrados
 
-## ❌ **Problema Identificado**
+## ❌ **PROBLEMA 1: Gemini API 404**
 
 ```
-google.api_core.exceptions.NotFound: 404 models/gemini-1.5-pro-latest is not found for API version v1beta
+google.api_core.exceptions.NotFound: 404 models/gemini-1.5-flash is not found for API version v1beta
 ```
 
-**CAUSA RAIZ:** A variável de ambiente `GEMINI_MODEL_NAME` estava configurada com o modelo `gemini-1.5-pro-latest`, que foi **descontinuado pelo Google**.
+**CAUSA RAIZ:** A API **v1beta do Gemini requer sufixo `-latest`** nos nomes dos modelos. Os nomes curtos (`gemini-1.5-flash`, `gemini-1.5-pro`) **NÃO FUNCIONAM** na API v1beta.
+
+## ❌ **PROBLEMA 2: Gráficos Horrorosos**
+
+1. **Distribuição por Categoria**: Mostrava `<models.Categoria object at 0x7f2a0534eb40>`
+2. **Evolução do Saldo**: Sempre vazio (não funcionava)
+3. **Projeção de Gastos**: Sempre vazio (não funcionava)
+4. **Fluxo de Caixa**: Despesas invisíveis (barras vermelhas em fundo vermelho)
 
 ---
 
 ## ✅ **Correções Aplicadas**
 
-### 1. **config.py - Validação Automática de Modelo**
-- ✅ Adicionada lista de modelos válidos
+### 1. **config.py - Nomes Corretos para API v1beta**
+- ✅ Corrigida lista de modelos válidos com sufixo `-latest`
 - ✅ Validação automática da variável de ambiente
-- ✅ Fallback automático para `gemini-1.5-flash` se modelo for inválido
-- ✅ Logs informativos sobre qual modelo está sendo usado
+- ✅ Fallback automático para `gemini-1.5-flash-latest`
+- ✅ Adicionado modelo legado `gemini-pro` como alternativa
 
 ```python
-# Modelos válidos atualizados (Nov 2024)
+# Modelos válidos para API v1beta (Nov 2024)
 VALID_GEMINI_MODELS = [
-    "gemini-1.5-flash",       # ⭐ Recomendado - rápido e eficiente
-    "gemini-1.5-pro",         # Avançado para tarefas complexas
-    "gemini-1.5-flash-002",   # Versão específica do Flash
-    "gemini-1.5-pro-002",     # Versão específica do Pro
+    "gemini-1.5-flash-latest",    # ⭐ RECOMENDADO - rápido e eficiente
+    "gemini-1.5-pro-latest",      # Avançado para tarefas complexas
+    "gemini-1.5-flash-001",       # Versão stable do Flash
+    "gemini-1.5-flash-002",       # Versão latest do Flash
+    "gemini-1.5-pro-001",         # Versão stable do Pro
+    "gemini-1.5-pro-002",         # Versão latest do Pro
+    "gemini-pro",                 # Modelo legado (ainda funciona)
 ]
 ```
 
-### 2. **handlers.py - Sistema de Fallback Robusto**
-Adicionado tratamento de erro em **3 funções críticas**:
+### 2. **handlers.py - Fallback Corrigido (4 funções)**
+Atualizado em **4 localizações** para usar `gemini-1.5-flash-latest`:
 
-#### ✅ `handle_natural_language()` - Linha ~729
+#### ✅ `handle_natural_language()` - Linha ~917
 ```python
-try:
-    model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-    response = await model.generate_content_async(prompt_final)
 except Exception as model_error:
     logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
-    logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    logger.info("🔄 Tentando fallback para 'gemini-1.5-flash-latest'...")
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     response = await model.generate_content_async(prompt_final)
 ```
 
-#### ✅ `gerar_resposta_ia()` - Linha ~1035
-Sistema de fallback idêntico aplicado.
+#### ✅ Outras funções corrigidas:
+- `gerar_resposta_ia()` - Linha ~1271
+- `handle_external_data_analysis()` - Linha ~1399
+- Mais uma ocorrência em `handle_natural_language()`
 
-#### ✅ `handle_external_data_analysis()` - Linha ~1163
-Sistema de fallback idêntico aplicado.
+### 3. **services.py - Gráficos Corrigidos (5 funções)**
 
-### 3. **.env - Correção da Variável**
-```properties
-# ANTES (ERRO):
-GEMINI_MODEL_NAME="gemini-1.5-pro-latest"  ❌
-
-# DEPOIS (CORRETO):
-GEMINI_MODEL_NAME=gemini-1.5-flash  ✅
+#### ✅ `preparar_dados_para_grafico()` - Linha ~863
+**ANTES (BUG):**
+```python
+categoria_str = str(getattr(lancamento, 'categoria', 'Outros'))
+# Resultado: "<models.Categoria object at 0x7f2a0534eb40>"
 ```
+
+**DEPOIS (CORRETO):**
+```python
+if hasattr(lancamento, 'categoria') and lancamento.categoria:
+    categoria_str = lancamento.categoria.nome
+else:
+    categoria_str = 'Sem Categoria'
+```
+
+#### ✅ `gerar_grafico_evolucao_saldo()` - Linha ~1056
+**FIX:** Corrigida lógica de cálculo de saldo progressivo
+- Agora acumula corretamente receitas e despesas
+- Mostra evolução real do saldo ao longo do tempo
+
+#### ✅ `gerar_grafico_projecao()` - Linha ~1175
+**FIX:** Mensagem informativa quando sem dados
+- Detecta quando não há lançamentos recorrentes
+- Retorna None com explicação clara
+
+#### ✅ Melhorias visuais em TODOS os gráficos:
+- **Cores vivas**: Paleta otimizada para fundo escuro
+- **Despesas visíveis**: Vermelho forte (#FF4444) em vez de bordô
+- **Textos maiores**: Fonte 12pt para melhor legibilidade
+- **Efeito 3D**: Explosão (0.05) no maior slice dos gráficos de pizza
+- **Gradientes**: Transições suaves nas barras
 
 ---
 
@@ -69,14 +100,21 @@ GEMINI_MODEL_NAME=gemini-1.5-flash  ✅
 3. Localize `GEMINI_MODEL_NAME`
 4. **Altere o valor para:**
    ```
-   gemini-1.5-flash
+   gemini-1.5-flash-latest
    ```
-5. **Remova as aspas** se houver
+5. **IMPORTANTE:** Remova as aspas se houver
 6. Clique em **Deploy** para reiniciar o serviço
 
-**ALTERNATIVA:** Se preferir usar o modelo Pro (mais avançado, porém mais lento):
-```
-GEMINI_MODEL_NAME=gemini-1.5-pro
+**ALTERNATIVAS VÁLIDAS:**
+```bash
+# Recomendado (rápido e eficiente)
+GEMINI_MODEL_NAME=gemini-1.5-flash-latest
+
+# Avançado (mais lento, melhor qualidade)
+GEMINI_MODEL_NAME=gemini-1.5-pro-latest
+
+# Legado (ainda funciona)
+GEMINI_MODEL_NAME=gemini-pro
 ```
 
 ---
@@ -96,14 +134,17 @@ python test_gemini_model.py
 
 ---
 
-## 📊 **Comparativo de Modelos**
+## 📊 **Comparativo de Modelos (API v1beta)**
 
 | Modelo | Velocidade | Qualidade | Custo | Recomendação |
 |--------|-----------|-----------|-------|--------------|
-| `gemini-1.5-flash` | 🚀 Muito rápido | ⭐⭐⭐⭐ Ótima | 💰 Baixo | ✅ **RECOMENDADO** |
-| `gemini-1.5-pro` | 🐢 Mais lento | ⭐⭐⭐⭐⭐ Excelente | 💰💰 Médio | Para análises complexas |
-| `gemini-1.5-flash-002` | 🚀 Muito rápido | ⭐⭐⭐⭐ Ótima | 💰 Baixo | Versão fixa do Flash |
-| `gemini-1.5-pro-002` | 🐢 Mais lento | ⭐⭐⭐⭐⭐ Excelente | 💰💰 Médio | Versão fixa do Pro |
+| `gemini-1.5-flash-latest` | 🚀 Muito rápido | ⭐⭐⭐⭐ Ótima | 💰 Baixo | ✅ **RECOMENDADO** |
+| `gemini-1.5-pro-latest` | 🐢 Mais lento | ⭐⭐⭐⭐⭐ Excelente | 💰💰 Médio | Análises complexas |
+| `gemini-1.5-flash-001` | 🚀 Muito rápido | ⭐⭐⭐⭐ Ótima | 💰 Baixo | Versão stable |
+| `gemini-1.5-flash-002` | � Muito rápido | ⭐⭐⭐⭐ Ótima | 💰 Baixo | Versão latest |
+| `gemini-pro` | � Lento | ⭐⭐⭐ Boa | 💰 Baixo | Modelo legado |
+
+**⚠️ IMPORTANTE:** Modelos **SEM** sufixo `-latest` ou versão (`-001`, `-002`) **NÃO FUNCIONAM** na API v1beta!
 
 ---
 
@@ -111,13 +152,21 @@ python test_gemini_model.py
 
 ### **ANTES** ❌
 ```
-/gerente → 404 models/gemini-1.5-pro-latest is not found
+❌ /gerente → 404 models/gemini-1.5-flash is not found for API version v1beta
+❌ /grafico → Distribuição por Categoria: <models.Categoria object at 0x...>
+❌ /grafico → Evolução do Saldo: Gráfico vazio
+❌ /grafico → Projeção de Gastos: Gráfico vazio
+❌ /grafico → Fluxo de Caixa: Despesas invisíveis
 ```
 
 ### **DEPOIS** ✅
 ```
-/gerente → Funcionando perfeitamente com gemini-1.5-flash
-           (ou fallback automático se houver problemas)
+✅ /gerente → Funcionando com gemini-1.5-flash-latest
+✅ /grafico → Distribuição por Categoria: Nomes corretos (Alimentação, Transporte...)
+✅ /grafico → Evolução do Saldo: Linha mostrando crescimento/queda
+✅ /grafico → Projeção de Gastos: Mensagem informativa quando sem dados
+✅ /grafico → Fluxo de Caixa: Despesas em vermelho forte visível
+✅ VISUAL: Gráficos bonitos com cores vivas e fontes maiores
 ```
 
 ---
@@ -134,13 +183,20 @@ python test_gemini_model.py
 
 ## 📝 **Changelog**
 
-### v1.0.1 - 2025-11-18
-- 🐛 **BUGFIX CRÍTICO:** Corrigido erro 404 no comando `/gerente`
-- ✅ Adicionada validação de modelo Gemini no `config.py`
-- ✅ Implementado sistema de fallback em 3 funções críticas
-- ✅ Atualizada lista de modelos válidos (Nov 2024)
-- ✅ Corrigida variável de ambiente `.env`
-- ✅ Criado script de teste `test_gemini_model.py`
+### v1.0.2 - 2025-11-18 (17:20)
+- � **CORREÇÃO CRÍTICA:** Gemini API v1beta requer sufixo `-latest`
+- ✅ Corrigidos nomes de modelos em `config.py` (7 modelos válidos)
+- ✅ Corrigido fallback em 4 funções em `handlers.py`
+- 🎨 **5 GRÁFICOS CORRIGIDOS:**
+  - Distribuição por Categoria: `lancamento.categoria.nome`
+  - Evolução do Saldo: Lógica de acúmulo corrigida
+  - Projeção de Gastos: Mensagem quando sem dados
+  - Fluxo de Caixa: Despesas em vermelho forte (#FF4444)
+  - Todos: Fontes maiores, cores vivas, efeitos 3D
+
+### v1.0.1 - 2025-11-18 (14:00)
+- 🐛 **BUGFIX:** Tentativa inicial de correção (modelo sem sufixo)
+- ⚠️ Não funcionou - API v1beta requer `-latest`
 
 ---
 
