@@ -575,11 +575,19 @@ class OpenFinanceOAuthHandler:
             await update.message.reply_text("❌ Erro: banco não selecionado.")
             return ConversationHandler.END
         
-        # Deletar mensagem com CPF (segurança)
+        # Deletar mensagem com CPF (segurança) e confirmar com versão mascarada
         try:
             await update.message.delete()
         except:
             pass
+        
+        # Enviar confirmação com CPF mascarado
+        cpf_masked = f"{cpf[:3]}.***.***-{cpf[-2:]}" if len(cpf) == 11 else "***"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"✅ CPF recebido: `{cpf_masked}`\n🔄 Processando conexão...",
+            parse_mode="Markdown"
+        )
         
         status_msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
