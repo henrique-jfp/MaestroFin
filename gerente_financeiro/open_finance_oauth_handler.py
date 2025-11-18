@@ -724,7 +724,15 @@ def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
         for item in items:
             logger.info(f"🔍 Processando item: {item.connector_name} (status: {item.status})")
             
-            # Buscar accounts deste item
+            # 🆕 ATUALIZAR CONTAS E INVESTIMENTOS DO BANCO
+            try:
+                logger.info(f"🔄 Atualizando lista de contas e investimentos para {item.connector_name}...")
+                save_pluggy_accounts_to_db(item.pluggy_item_id)
+                logger.info(f"✅ Contas e investimentos atualizados")
+            except Exception as e:
+                logger.warning(f"⚠️  Erro ao atualizar contas: {e}")
+            
+            # Buscar accounts deste item (agora atualizadas!)
             accounts = db.query(PluggyAccount).filter(
                 PluggyAccount.id_item == item.id
             ).all()
