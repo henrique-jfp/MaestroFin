@@ -653,9 +653,9 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
                     }
                 )
                 
-                # Log da resposta na primeira página
+                # Log da resposta na primeira página (RESUMIDO para evitar spam)
                 if page == 1:
-                    logger.info(f"📡 Response da API Pluggy (página {page}): {json.dumps(transactions_data, indent=2, default=str)}")
+                    logger.info(f"📡 Response da API Pluggy (página {page}): {len(transactions_data.get('results', []))} itens")
                 
                 page_transactions = transactions_data.get("results", [])
                 total_pages = transactions_data.get("totalPages", 1)
@@ -677,8 +677,9 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
         logger.info(f"✅ Total de {len(all_transactions)} transações recuperadas de {page-1} página(s)")
         
         if len(all_transactions) > 0:
-            # Log da primeira transação para debug
-            logger.info(f"🔍 Exemplo de transação: {json.dumps(all_transactions[0], indent=2, default=str)}")
+            # Log da primeira transação para debug (RESUMIDO)
+            first_txn = all_transactions[0]
+            logger.info(f"🔍 Exemplo de transação: ID={first_txn.get('id')}, Desc={first_txn.get('description')}, Amount={first_txn.get('amount')}")
         
         new_count = 0
         updated_count = 0
@@ -689,10 +690,52 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
                 PluggyTransaction.pluggy_transaction_id == txn["id"]
             ).first()
             
+            # Extrair dados do estabelecimento/recebedor com mais detalhes
+            merchant_name = None
+            merchant_category = None
+            
+            # 1. Tentar do objeto merchant (comum em cartão de crédito)
+            merchant_data = txn.get("merchant")
+            if merchant_data:
+                merchant_name = merchant_data.get("name") or merchant_data.get("businessName")
+                merchant_category = merchant_data.get("category")
+            
+            # 2. Se não achou nome, tentar do paymentData (comum em PIX)
+            if not merchant_name:
+                payment_data = txn.get("paymentData")
+                if payment_data:
+                    # Tentar determinar a outra parte baseado no fluxo do dinheiro
+                    amount = txn.get("amount", 0)
+                    
+                    # Se for saída (negativo), queremos saber quem recebeu
+                    if amount < 0 and payment_data.get("receiver"):
+                        merchant_name = payment_data.get("receiver").get("name")
+                    
+                    # Se for entrada (positivo), queremos saber quem pagou
+                    elif amount > 0 and payment_data.get("payer"):
+                        merchant_name = payment_data.get("payer").get("name")
+                    
+                    # Fallback: se ainda null, tenta receiver (padrão mais comum)
+                    if not merchant_name and payment_data.get("receiver"):
+                        merchant_name = payment_data.get("receiver").get("name")
+
             if existing:
                 # Atualizar status se mudou
+                changed = False
                 if existing.status != txn.get("status"):
                     existing.status = txn.get("status")
+                    changed = True
+                
+                # Atualizar merchant info se estiver faltando no banco e presente na API
+                if not existing.merchant_name and merchant_name:
+                    existing.merchant_name = merchant_name
+                    changed = True
+                
+                if not existing.merchant_category and merchant_category:
+                    existing.merchant_category = merchant_category
+                    changed = True
+                    
+                if changed:
                     existing.updated_at = datetime.now()
                     updated_count += 1
             else:
@@ -706,8 +749,8 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
                     category=txn.get("category"),
                     status=txn.get("status"),
                     type=txn.get("type"),
-                    merchant_name=txn.get("merchant", {}).get("name") if txn.get("merchant") else None,
-                    merchant_category=txn.get("merchant", {}).get("category") if txn.get("merchant") else None,
+                    merchant_name=merchant_name,
+                    merchant_category=merchant_category,
                     imported_to_lancamento=False
                 )
                 
