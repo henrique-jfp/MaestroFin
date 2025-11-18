@@ -118,30 +118,28 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
                     except Exception as e:
                         logging.warning(f"⚠️ Erro ao deletar item {item.pluggy_item_id} na Pluggy: {e}")
                 
-                # 2. Deletar do banco LOCAL na ORDEM CORRETA (evitar FK violation)
-                item_ids = [item.id for item in pluggy_items]
-                
-                # 2.1. Primeiro: pluggy_transactions (referencia pluggy_accounts)
-                deleted_txns = db.query(PluggyTransaction).filter(
-                    PluggyTransaction.account_id.in_(
-                        db.query(PluggyAccount.id).filter(PluggyAccount.item_id.in_(item_ids))
-                    )
-                ).delete(synchronize_session=False)
-                logging.info(f"✅ {deleted_txns} transações Open Finance deletadas")
-                
-                # 2.2. Segundo: pluggy_accounts (referencia pluggy_items)
-                deleted_accounts = db.query(PluggyAccount).filter(
-                    PluggyAccount.item_id.in_(item_ids)
-                ).delete(synchronize_session=False)
-                logging.info(f"✅ {deleted_accounts} contas Open Finance deletadas")
-                
-                # 2.3. Terceiro: pluggy_items (agora sem dependências)
-                deleted_items = db.query(PluggyItem).filter(
-                    PluggyItem.id_usuario == usuario_a_deletar.id
-                ).delete(synchronize_session=False)
-                logging.info(f"✅ {deleted_items} conexões Open Finance deletadas")
-                
-                db.flush()  # Aplica as mudanças imediatamente
+            # 2. Deletar do banco LOCAL na ORDEM CORRETA (evitar FK violation)
+            item_ids = [item.id for item in pluggy_items]
+            
+            # 2.1. Primeiro: pluggy_transactions (referencia pluggy_accounts via id_account)
+            deleted_txns = db.query(PluggyTransaction).filter(
+                PluggyTransaction.id_account.in_(
+                    db.query(PluggyAccount.id).filter(PluggyAccount.item_id.in_(item_ids))
+                )
+            ).delete(synchronize_session=False)
+            logging.info(f"✅ {deleted_txns} transações Open Finance deletadas")
+            
+            # 2.2. Segundo: pluggy_accounts (referencia pluggy_items via item_id)
+            deleted_accounts = db.query(PluggyAccount).filter(
+                PluggyAccount.item_id.in_(item_ids)
+            ).delete(synchronize_session=False)
+            logging.info(f"✅ {deleted_accounts} contas Open Finance deletadas")
+            
+            # 2.3. Terceiro: pluggy_items (agora sem dependências)
+            deleted_items = db.query(PluggyItem).filter(
+                PluggyItem.id_usuario == usuario_a_deletar.id
+            ).delete(synchronize_session=False)
+            logging.info(f"✅ {deleted_items} conexões Open Finance deletadas")                db.flush()  # Aplica as mudanças imediatamente
         
         except ImportError:
             logging.info("ℹ️ Tabelas Open Finance ainda não existem, pulando deleção...")
