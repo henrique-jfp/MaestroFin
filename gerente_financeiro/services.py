@@ -861,9 +861,14 @@ def preparar_dados_para_grafico(lancamentos: List[Lancamento], agrupar_por: str)
     # Converter lançamentos para DataFrame
     dados = []
     for lancamento in lancamentos:
-        # Converter categoria para string se for um objeto
-        categoria_str = str(getattr(lancamento, 'categoria', 'Outros'))
-        forma_pagamento_str = str(getattr(lancamento, 'forma_pagamento', 'Não informado'))
+        # CORREÇÃO: Extrair nome da categoria corretamente
+        if hasattr(lancamento, 'categoria') and lancamento.categoria:
+            categoria_str = lancamento.categoria.nome
+        else:
+            categoria_str = 'Sem Categoria'
+        
+        # forma_pagamento já é string no modelo Lancamento
+        forma_pagamento_str = lancamento.forma_pagamento or 'Não informado'
         
         dados.append({
             'data': lancamento.data_transacao,
@@ -946,156 +951,272 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
             
             # GRÁFICO DE PIZZA (AGORA DONUT CHART)
             if tipo_grafico == 'pizza':
-                ax.set_title(f'Distribuição de Valores por {agrupar_por.replace("_", " ").title()}', pad=20)
+                nome_agrupamento = 'Categoria' if agrupar_por == 'categoria' else 'Forma de Pagamento'
+                ax.set_title(f'Distribuição de Valores por {nome_agrupamento}', pad=20, fontsize=16, weight='bold')
                 
-                # Paleta de cores mais bonita (Set2 é boa para categorias distintas)
-                colors = plt.cm.Set2(np.linspace(0, 1, len(df['grupo'])))
+                # Paleta de cores vibrante e profissional
+                colors = plt.cm.Set3(np.linspace(0, 1, len(df['grupo'])))
                 
-                # Explode as fatias para melhor visualização
-                explode = [0.05] * len(df['grupo'])
+                # Explode as fatias para melhor visualização (maior fatia com destaque)
+                valores_norm = df['valor'] / df['valor'].sum()
+                explode = [0.08 if v == valores_norm.max() else 0.03 for v in valores_norm]
                 
                 wedges, texts, autotexts = ax.pie(
                     df['valor'], 
                     autopct='%1.1f%%', 
                     startangle=90, 
                     colors=colors, 
-                    pctdistance=0.85,
+                    pctdistance=0.82,
                     explode=explode,
-                    wedgeprops={'edgecolor': 'white', 'linewidth': 2}
+                    wedgeprops={'edgecolor': 'white', 'linewidth': 3, 'antialiased': True},
+                    textprops={'fontsize': 11, 'weight': 'bold'}
                 )
-                plt.setp(autotexts, size=12, weight="bold", color="white")
+                
+                # Melhora visibilidade dos percentuais
+                for autotext in autotexts:
+                    autotext.set_color('white')
+                    autotext.set_fontsize(12)
+                    autotext.set_weight('bold')
+                    autotext.set_bbox(dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.3))
                 
                 # Desenha o círculo no centro para criar o efeito DONUT
-                centre_circle = plt.Circle((0,0), 0.70, fc='white')
+                centre_circle = plt.Circle((0,0), 0.68, fc='white', linewidth=0)
                 fig.gca().add_artist(centre_circle)
                 
-                # Legenda limpa e organizada
-                legend_labels = [f"{label}: R$ {valor:.2f}" for label, valor in zip(df['grupo'], df['valor'])]
-                ax.legend(wedges, legend_labels, title="Valores", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1), fontsize=11)
+                # Total no centro do donut
+                total = df['valor'].sum()
+                ax.text(0, 0, f'Total\nR$ {total:,.2f}'.replace(',', '.'), 
+                       ha='center', va='center', fontsize=14, weight='bold', color='#2c3e50')
+                
+                # Legenda limpa e organizada com valores
+                legend_labels = [f"{label}: R$ {valor:,.2f}".replace(',', '.') for label, valor in zip(df['grupo'], df['valor'])]
+                ax.legend(wedges, legend_labels, title=nome_agrupamento, title_fontsize=12,
+                         loc="center left", bbox_to_anchor=(1, 0, 0.5, 1), fontsize=10,
+                         frameon=True, fancybox=True, shadow=True)
                 ax.axis('equal')
 
             # GRÁFICO DE BARRAS HORIZONTAIS
             elif tipo_grafico == 'barra_h':
-                ax.set_title(f'Total de Valores por {agrupar_por.replace("_", " ").title()}', pad=20)
+                nome_agrupamento = 'Categoria' if agrupar_por == 'categoria' else 'Forma de Pagamento'
+                ax.set_title(f'Gastos por {nome_agrupamento}', pad=20, fontsize=16, weight='bold')
                 df = df.sort_values('valor', ascending=True) # Ordena do menor para o maior
                 
-                palette = sns.color_palette("viridis_r", len(df))
-                bars = ax.barh(df['grupo'], df['valor'], color=palette, edgecolor='black', linewidth=0.7)
+                # Paleta de cores gradiente moderna
+                colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(df)))
+                bars = ax.barh(df['grupo'], df['valor'], color=colors, edgecolor='white', linewidth=1.5, height=0.7)
                 
-                ax.set_xlabel('Valor Gasto (R$)', fontsize=12)
+                ax.set_xlabel('Valor Gasto (R$)', fontsize=13, weight='bold')
                 ax.set_ylabel('')
-                ax.grid(axis='y', linestyle='', alpha=0) # Remove linhas de grade horizontais
+                ax.grid(axis='x', linestyle='--', alpha=0.3) # Grade vertical sutil
+                ax.set_axisbelow(True)
                 
-                # Rótulos de valor inteligentes
-                for bar in bars:
+                # Rótulos de valor formatados
+                max_valor = df['valor'].max()
+                for i, (bar, valor) in enumerate(zip(bars, df['valor'])):
                     width = bar.get_width()
-                    ax.text(width + 50, bar.get_y() + bar.get_height()/2, f'R$ {width:,.2f}'.replace(',', '.'),
-                            va='center', ha='left', fontsize=11, weight='bold', color=bar.get_facecolor())
+                    # Posiciona rótulo dentro da barra se for grande, fora se for pequena
+                    if valor > max_valor * 0.15:
+                        ax.text(width * 0.95, bar.get_y() + bar.get_height()/2,
+                               f'R$ {width:,.2f}'.replace(',', '.'),
+                               va='center', ha='right', fontsize=11, weight='bold', color='white')
+                    else:
+                        ax.text(width + (max_valor * 0.02), bar.get_y() + bar.get_height()/2,
+                               f'R$ {width:,.2f}'.replace(',', '.'),
+                               va='center', ha='left', fontsize=11, weight='bold', color='#2c3e50')
 
         # --- GRÁFICOS BASEADOS EM DATA ---
         elif agrupar_por in ['data', 'fluxo_caixa', 'projecao']:
             
             # GRÁFICO DE EVOLUÇÃO DO SALDO (LINHA)
             if agrupar_por == 'data':
-                if len(df) < 3: return None # Precisa de pelo menos 3 pontos para suavizar
+                if len(df) < 2: return None # Precisa de pelo menos 2 pontos
                 ax.set_title('Evolução do Saldo Financeiro', pad=20)
                 
-                # Verificar se temos a coluna data como datetime
-                if 'data' not in df.columns:
-                    # Converter grupo de volta para data se necessário
-                    df['data'] = pd.to_datetime(df['grupo'])
-                else:
+                # Verificar se temos a coluna 'Saldo Acumulado' (preparada em preparar_dados_para_grafico)
+                if 'Saldo Acumulado' not in df.columns:
+                    logger.error("Coluna 'Saldo Acumulado' não encontrada no DataFrame")
+                    return None
+                
+                # Converter data para datetime se necessário
+                if not pd.api.types.is_datetime64_any_dtype(df['data']):
                     df['data'] = pd.to_datetime(df['data'])
                 
                 df = df.sort_values('data')
                 
-                # Suavização da linha
-                x_smooth = np.linspace(df['data'].astype(np.int64).min(), df['data'].astype(np.int64).max(), 300)
-                x_smooth_dt = pd.to_datetime(x_smooth)
-                spl = make_interp_spline(df['data'].astype(np.int64), df['Saldo Acumulado'], k=2)
-                y_smooth = spl(x_smooth)
-                
-                ax.plot(x_smooth_dt, y_smooth, label='Saldo Acumulado (suave)', color='#3498db', linewidth=3)
-                ax.fill_between(x_smooth_dt, y_smooth, alpha=0.15, color='#3498db')
+                # Decidir se suaviza ou não baseado no número de pontos
+                if len(df) >= 5:
+                    # Suavização da linha (apenas se tiver dados suficientes)
+                    try:
+                        x_smooth = np.linspace(df['data'].astype(np.int64).min(), df['data'].astype(np.int64).max(), 300)
+                        x_smooth_dt = pd.to_datetime(x_smooth)
+                        spl = make_interp_spline(df['data'].astype(np.int64), df['Saldo Acumulado'], k=min(2, len(df)-1))
+                        y_smooth = spl(x_smooth)
+                        
+                        ax.plot(x_smooth_dt, y_smooth, label='Saldo Acumulado', color='#3498db', linewidth=3)
+                        ax.fill_between(x_smooth_dt, y_smooth, alpha=0.15, color='#3498db')
+                    except Exception as e:
+                        logger.warning(f"Erro na suavização, usando linha simples: {e}")
+                        ax.plot(df['data'], df['Saldo Acumulado'], label='Saldo Acumulado', color='#3498db', linewidth=3, marker='o')
+                        ax.fill_between(df['data'], df['Saldo Acumulado'], alpha=0.15, color='#3498db')
+                else:
+                    # Linha simples para poucos pontos
+                    ax.plot(df['data'], df['Saldo Acumulado'], label='Saldo Acumulado', color='#3498db', linewidth=3, marker='o', markersize=8)
+                    ax.fill_between(df['data'], df['Saldo Acumulado'], alpha=0.15, color='#3498db')
                 
                 # Destaque do pico máximo e mínimo
                 pico_max = df.loc[df['Saldo Acumulado'].idxmax()]
                 pico_min = df.loc[df['Saldo Acumulado'].idxmin()]
                 
-                ax.scatter(pico_max['data'], pico_max['Saldo Acumulado'], color='#2ecc71', s=150, zorder=5, label='Pico Máximo', edgecolor='white')
-                ax.scatter(pico_min['data'], pico_min['Saldo Acumulado'], color='#e74c3c', s=150, zorder=5, label='Pico Mínimo', edgecolor='white')
+                ax.scatter(pico_max['data'], pico_max['Saldo Acumulado'], color='#2ecc71', s=180, zorder=5, label='Maior Saldo', edgecolor='white', linewidth=2)
+                ax.scatter(pico_min['data'], pico_min['Saldo Acumulado'], color='#e74c3c', s=180, zorder=5, label='Menor Saldo', edgecolor='white', linewidth=2)
                 
-                # Anotações nos picos
-                ax.text(pico_max['data'], pico_max['Saldo Acumulado'] + 500, f'{pico_max["Saldo Acumulado"]:.0f}', ha='center', fontsize=12, weight='bold', color='black', backgroundcolor=(1,1,1,0.6))
-                ax.text(pico_min['data'], pico_min['Saldo Acumulado'] - 1000, f'{pico_min["Saldo Acumulado"]:.0f}', ha='center', fontsize=12, weight='bold', color='black', backgroundcolor=(1,1,1,0.6))
+                # Anotações nos picos (com posicionamento dinâmico)
+                offset_max = abs(pico_max['Saldo Acumulado']) * 0.05
+                offset_min = abs(pico_min['Saldo Acumulado']) * 0.05
+                ax.text(pico_max['data'], pico_max['Saldo Acumulado'] + offset_max, 
+                       f'R$ {pico_max["Saldo Acumulado"]:.2f}', 
+                       ha='center', fontsize=11, weight='bold', color='#2ecc71', 
+                       bbox=dict(boxstyle='round,pad=0.4', fc='white', alpha=0.8, edgecolor='#2ecc71'))
+                ax.text(pico_min['data'], pico_min['Saldo Acumulado'] - offset_min, 
+                       f'R$ {pico_min["Saldo Acumulado"]:.2f}', 
+                       ha='center', fontsize=11, weight='bold', color='#e74c3c',
+                       bbox=dict(boxstyle='round,pad=0.4', fc='white', alpha=0.8, edgecolor='#e74c3c'))
 
-                ax.legend(fontsize=12)
+                ax.legend(fontsize=11, loc='best')
+                ax.axhline(0, color='gray', linewidth=0.8, linestyle='--', alpha=0.5)
 
             # GRÁFICO DE PROJEÇÃO (BARRAS HORIZONTAIS)
             elif agrupar_por == 'projecao':
                 today = datetime.now()
-                start_of_month = today.replace(day=1, hour=0, minute=0, second=0).date()
+                start_of_month = today.replace(day=1, hour=0, minute=0, second=0)
                 
-                # Recalcular dados do mês atual baseado nos dados originais
-                df_temp = pd.DataFrame([{
-                    'data': l.data_transacao,
-                    'valor': float(l.valor)
-                } for l in lancamentos])
-                df_temp['data'] = pd.to_datetime(df_temp['data'])
+                # Filtrar apenas despesas do mês atual
+                despesas_mes_atual = [
+                    l for l in lancamentos 
+                    if l.data_transacao >= start_of_month 
+                    and l.data_transacao <= today
+                    and l.tipo == 'Saída'
+                ]
                 
-                df_mes_atual = df_temp[(df_temp['data'].dt.date >= start_of_month) & (df_temp['data'].dt.date <= today.date())]
-                if df_mes_atual.empty: return None
+                if not despesas_mes_atual:
+                    logger.info("Nenhuma despesa encontrada no mês atual para projeção")
+                    return None
                 
-                saidas = df_mes_atual[df_mes_atual['valor'] < 0]['valor'].abs().sum()
-                if saidas == 0: return None
+                # Calcular total de gastos até hoje
+                total_gasto = sum(abs(float(l.valor)) for l in despesas_mes_atual)
                 
-                dias_no_mes = (today.replace(month=today.month % 12 + 1 if today.month != 12 else 1, day=1) - timedelta(days=1)).day
+                if total_gasto == 0:
+                    logger.info("Total de gastos é zero, sem projeção possível")
+                    return None
+                
+                # Calcular projeção
+                dias_no_mes = (today.replace(month=today.month % 12 + 1 if today.month != 12 else 1, day=1, year=today.year if today.month != 12 else today.year + 1) - timedelta(days=1)).day
                 dias_passados = today.day
-                gasto_medio_diario = saidas / dias_passados
+                gasto_medio_diario = total_gasto / dias_passados
                 gasto_projetado = gasto_medio_diario * dias_no_mes
                 
-                ax.set_title(f'Projeção de Gastos para {today.strftime("%B")}', pad=20)
+                # Nome do mês em português
+                meses_pt = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+                mes_nome = meses_pt[today.month - 1]
                 
-                data_proj = {'Label': ['Gasto Atual', 'Projeção para o Mês'], 'Valor': [saidas, gasto_projetado]}
-                df_proj = pd.DataFrame(data_proj)
+                ax.set_title(f'Projeção de Gastos para {mes_nome}/{today.year}', pad=20, fontsize=16)
+                
+                # Dados para o gráfico
+                labels = ['💰 Gasto até Hoje', '📊 Projeção Mensal']
+                valores = [total_gasto, gasto_projetado]
+                cores = ['#3498db', '#e74c3c']
 
-                bars = ax.barh(df_proj['Label'], df_proj['Valor'], color=['#1f77b4', '#ff7f0e'], edgecolor='black', linewidth=0.8)
+                bars = ax.barh(labels, valores, color=cores, edgecolor='white', linewidth=2, height=0.6)
                 ax.invert_yaxis() # Gasto atual em cima
                 
-                ax.set_xlabel('Valor (R$)', fontsize=12)
-                ax.bar_label(bars, fmt='R$ %.2f', padding=5, fontsize=12, weight='bold')
-
-                # Caixa de anotação para o gasto médio
-                ax.text(gasto_projetado * 0.95, 1, f'Gasto médio diário: R$ {gasto_medio_diario:.2f}',
-                        va='center', ha='right', fontsize=11, style='italic',
-                        bbox=dict(boxstyle='round,pad=0.5', fc='khaki', alpha=0.7))
+                ax.set_xlabel('Valor (R$)', fontsize=13, weight='bold')
+                ax.grid(axis='x', alpha=0.3, linestyle='--')
+                
+                # Rótulos de valor
+                for i, (bar, valor) in enumerate(zip(bars, valores)):
+                    width = bar.get_width()
+                    ax.text(width + (gasto_projetado * 0.02), bar.get_y() + bar.get_height()/2,
+                           f'R$ {valor:,.2f}'.replace(',', '.'),
+                           va='center', ha='left', fontsize=12, weight='bold', color=cores[i])
+                
+                # Informações adicionais
+                dias_restantes = dias_no_mes - dias_passados
+                gasto_restante = gasto_projetado - total_gasto
+                
+                info_text = (
+                    f"📅 Dia {dias_passados}/{dias_no_mes} ({dias_restantes} dias restantes)\n"
+                    f"📈 Média diária: R$ {gasto_medio_diario:.2f}\n"
+                    f"💸 Estimativa restante: R$ {gasto_restante:.2f}"
+                )
+                
+                ax.text(0.02, 0.98, info_text,
+                       transform=ax.transAxes, fontsize=10,
+                       verticalalignment='top',
+                       bbox=dict(boxstyle='round,pad=0.6', fc='lightyellow', alpha=0.8, edgecolor='gray'))
 
             # GRÁFICO DE FLUXO DE CAIXA
             elif agrupar_por == 'fluxo_caixa':
-                # Recalcular dados para fluxo de caixa
-                df_temp = pd.DataFrame([{
-                    'data': l.data_transacao,
-                    'valor': float(l.valor)
-                } for l in lancamentos])
-                df_temp['data'] = pd.to_datetime(df_temp['data'])
+                # Preparar dados para fluxo de caixa
+                dados_fluxo = []
+                for l in lancamentos:
+                    entrada = float(l.valor) if l.tipo == 'Entrada' else 0
+                    saida = abs(float(l.valor)) if l.tipo == 'Saída' else 0
+                    dados_fluxo.append({
+                        'data': l.data_transacao,
+                        'entrada': entrada,
+                        'saida': saida
+                    })
                 
-                df_temp['Entrada'] = df_temp['valor'].where(df_temp['valor'] > 0, 0)
-                df_temp['Saída'] = df_temp['valor'].where(df_temp['valor'] < 0, 0).abs()
-                
-                # Agrupar por data
-                df_fluxo = df_temp.groupby(df_temp['data'].dt.date).agg({
-                    'Entrada': 'sum',
-                    'Saída': 'sum'
-                }).reset_index()
+                df_fluxo = pd.DataFrame(dados_fluxo)
                 df_fluxo['data'] = pd.to_datetime(df_fluxo['data'])
                 
-                if df_fluxo['Entrada'].sum() == 0 and df_fluxo['Saída'].sum() == 0: return None
+                # Agrupar por data
+                df_agrupado = df_fluxo.groupby(df_fluxo['data'].dt.date).agg({
+                    'entrada': 'sum',
+                    'saida': 'sum'
+                }).reset_index()
+                df_agrupado['data'] = pd.to_datetime(df_agrupado['data'])
+                df_agrupado = df_agrupado.sort_values('data')
                 
-                ax.bar(df_fluxo['data'], df_fluxo['Entrada'], color='#2ecc71', label='Receitas', width=timedelta(days=0.8))
-                ax.bar(df_fluxo['data'], -df_fluxo['Saída'], color='#e74c3c', label='Despesas', width=timedelta(days=0.8))
-                ax.axhline(0, color='black', linewidth=0.8)
-                ax.set_title('Fluxo de Caixa (Receitas vs. Despesas)', pad=20)
-                ax.legend()
+                if df_agrupado['entrada'].sum() == 0 and df_agrupado['saida'].sum() == 0:
+                    logger.info("Sem dados de fluxo de caixa para exibir")
+                    return None
+                
+                ax.set_title('Fluxo de Caixa (Receitas vs. Despesas)', pad=20, fontsize=16, weight='bold')
+                
+                # Barras com cores modernas e bordas
+                width_days = (df_agrupado['data'].max() - df_agrupado['data'].min()).days
+                bar_width = max(0.8, min(3, width_days / len(df_agrupado) * 0.7))
+                
+                ax.bar(df_agrupado['data'], df_agrupado['entrada'], 
+                      color='#27ae60', label='💰 Receitas', 
+                      width=bar_width, edgecolor='white', linewidth=1.5, alpha=0.9)
+                ax.bar(df_agrupado['data'], -df_agrupado['saida'], 
+                      color='#e74c3c', label='💸 Despesas', 
+                      width=bar_width, edgecolor='white', linewidth=1.5, alpha=0.9)
+                
+                # Linha zero de referência
+                ax.axhline(0, color='#2c3e50', linewidth=1.5, linestyle='-', alpha=0.7, zorder=0)
+                
+                # Estatísticas no gráfico
+                total_receitas = df_agrupado['entrada'].sum()
+                total_despesas = df_agrupado['saida'].sum()
+                saldo_liquido = total_receitas - total_despesas
+                
+                stats_text = (
+                    f"💰 Total Receitas: R$ {total_receitas:,.2f}\n"
+                    f"💸 Total Despesas: R$ {total_despesas:,.2f}\n"
+                    f"{'📈' if saldo_liquido >= 0 else '📉'} Saldo Líquido: R$ {saldo_liquido:,.2f}"
+                ).replace(',', '.')
+                
+                ax.text(0.02, 0.98, stats_text,
+                       transform=ax.transAxes, fontsize=10,
+                       verticalalignment='top',
+                       bbox=dict(boxstyle='round,pad=0.6', fc='lightyellow', alpha=0.85, edgecolor='gray'))
+                
+                ax.legend(fontsize=11, loc='lower right', frameon=True, fancybox=True, shadow=True)
+                ax.grid(axis='y', linestyle='--', alpha=0.3)
             
             ax.set_ylabel('Valor (R$)', fontsize=12)
             fig.autofmt_xdate(rotation=30)
