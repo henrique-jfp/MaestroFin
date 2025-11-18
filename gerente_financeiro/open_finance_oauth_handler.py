@@ -1610,42 +1610,85 @@ class OpenFinanceOAuthHandler:
                     message += f"💰 Saldo: {balance_str}\n"
                 
                 
-                # Cartões de crédito
+                # Cartões de crédito com limite disponível
                 if credit_cards:
                     for card in credit_cards:
-                        # Limite restante
-                        if card.balance is not None:
-                            limite_restante = float(card.balance)
-                            limite_str = f"R$ {limite_restante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            # Escapar caracteres especiais para MarkdownV2
-                            limite_str = escape_markdown_v2(limite_str)
-                            message += f"📉 Limite restante: {limite_str}\n"
+                        card_name = escape_markdown_v2(card.name or "Cartão")
+                        message += f"💳 _{card_name}_\n"
                         
-                        # Fatura atual
+                        # Pluggy retorna:
+                        # - balance: limite DISPONÍVEL (quanto ainda pode gastar)
+                        # - credit_limit: limite TOTAL do cartão
+                        
+                        if card.credit_limit is not None:
+                            limite_total = float(card.credit_limit)
+                            limite_total_str = f"R$ {limite_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            limite_total_str = escape_markdown_v2(limite_total_str)
+                            message += f"   💰 Limite Total: {limite_total_str}\n"
+                        
+                        if card.balance is not None:
+                            limite_disponivel = float(card.balance)
+                            limite_disp_str = f"R$ {limite_disponivel:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            limite_disp_str = escape_markdown_v2(limite_disp_str)
+                            message += f"   ✅ Disponível: {limite_disp_str}\n"
+                        
+                        # Calcular fatura atual (Limite Total - Disponível)
                         if card.balance is not None and card.credit_limit is not None:
                             fatura_atual = float(card.credit_limit) - float(card.balance)
                             fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            # Escapar caracteres especiais para MarkdownV2
                             fatura_str = escape_markdown_v2(fatura_str)
-                            message += f"🧾 Fatura atual: {fatura_str}\n"
+                            
+                            # Emoji baseado no percentual usado
+                            percentual_usado = (fatura_atual / float(card.credit_limit) * 100) if card.credit_limit else 0
+                            if percentual_usado < 30:
+                                emoji = "🟢"
+                            elif percentual_usado < 70:
+                                emoji = "🟡"
+                            else:
+                                emoji = "🔴"
+                            
+                            message += f"   {emoji} Fatura Atual: {fatura_str} \\({percentual_usado:.0f}%\\)\n"
                 
-                # Investimentos (se houver)
+                # Investimentos (se houver) - MELHORADO
                 if investments:
                     total_inv = sum(float(i.balance) for i in investments if i.balance is not None)
                     if total_inv > 0:
                         inv_str = f"R$ {total_inv:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        # Escapar caracteres especiais para MarkdownV2
                         inv_str = escape_markdown_v2(inv_str)
-                        message += f"📈 Investimentos: {inv_str}\n"
+                        message += f"📈 *Investimentos:* {inv_str}\n"
+                        
+                        # Mostrar quantos investimentos
+                        qtd_inv = len(investments)
+                        message += f"   _{qtd_inv} produto\\(s\\) de investimento_\n"
                 
                 message += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            # 💎 RESUMO TOTAL (opcional - se tiver investimentos)
+            from models import Investment
+            total_investimentos_db = db.query(Investment).filter(
+                Investment.id_usuario == usuario.id,
+                Investment.ativo == True
+            ).all()
+            
+            if total_investimentos_db:
+                valor_total_inv = sum(float(inv.valor_atual) for inv in total_investimentos_db)
+                inv_total_str = f"R$ {valor_total_inv:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                inv_total_str = escape_markdown_v2(inv_total_str)
+                message += f"\n💎 *Total Investido:* {inv_total_str}\n"
+                message += f"_{len(total_investimentos_db)} investimento\\(s\\) ativo\\(s\\)_\n\n"
             
             # Botões de ação
             keyboard = [
                 [InlineKeyboardButton("🔄 Sincronizar", callback_data="action_sync")],
                 [InlineKeyboardButton("➕ Conectar Banco", callback_data="action_connect")],
-                [InlineKeyboardButton("🗑️ Desconectar Banco", callback_data="action_disconnect")]
             ]
+            
+            # Adicionar botão de investimentos se houver
+            if total_investimentos_db:
+                keyboard.insert(1, [InlineKeyboardButton("� Ver Investimentos", url="https://t.me/your_bot?start=investimentos")])
+            
+            keyboard.append([InlineKeyboardButton("�🗑️ Desconectar Banco", callback_data="action_disconnect")])
+            
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             message += "\n_Use os botões abaixo:_"
