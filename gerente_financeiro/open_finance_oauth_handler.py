@@ -848,6 +848,10 @@ class OpenFinanceOAuthHandler:
         )
         
         try:
+            # Log do connector completo para debug
+            import json
+            logger.info(f"🔍 Connector selecionado: {json.dumps(connector, indent=2, default=str)}")
+            
             # Criar item com CPF
             # Para OAuth: API retornará link de autenticação
             # Para legado: API tentará autenticar direto
@@ -857,7 +861,8 @@ class OpenFinanceOAuthHandler:
             }
             
             is_oauth = connector.get("oauth", False)
-            logger.info(f"🔐 Criando item {'OAuth' if is_oauth else 'legado'} com CPF para {connector['name']}")
+            logger.info(f"🔐 Criando item {'OAuth' if is_oauth else 'legado'} (oauth={is_oauth}) com CPF para {connector['name']}")
+            logger.info(f"📦 Payload enviado: {json.dumps(item_data, indent=2)}")
             
             item = pluggy_request("POST", "/items", data=item_data)
             item_id = item["id"]
