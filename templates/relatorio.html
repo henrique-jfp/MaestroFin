@@ -675,8 +675,12 @@
                             <span class="valor positivo">R$ {{ "%.2f"|format(receita_media) }}</span>
                             <small
                                 class="variacao {% if receita_total > receita_media %}positiva{% else %}negativa{% endif %}">
-                                {% set var_receita = ((receita_total|float / receita_media) - 1) * 100 %}
-                                {% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs média
+                                {% if receita_media > 0 %}
+                                    {% set var_receita = ((receita_total|float / receita_media) - 1) * 100 %}
+                                    {% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs média
+                                {% else %}
+                                    -
+                                {% endif %}
                             </small>
                         </div>
                         <div class="valor-item">
@@ -684,8 +688,12 @@
                             <span class="valor negativo">R$ {{ "%.2f"|format(despesa_media) }}</span>
                             <small
                                 class="variacao {% if despesa_total < despesa_media %}positiva{% else %}negativa{% endif %}">
-                                {% set var_despesa = ((despesa_total|float / despesa_media) - 1) * 100 %}
-                                {% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs média
+                                {% if despesa_media > 0 %}
+                                    {% set var_despesa = ((despesa_total|float / despesa_media) - 1) * 100 %}
+                                    {% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs média
+                                {% else %}
+                                    -
+                                {% endif %}
                             </small>
                         </div>
                         <div class="valor-item">
