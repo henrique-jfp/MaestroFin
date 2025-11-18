@@ -474,6 +474,25 @@ HELP_TEXTS = {
         "   • 📊 Estatísticas ultra detalhadas\n"
         "   • � Loja de XP (em desenvolvimento)\n\n"
         "💪  <b>Dica Pro:</b> Mantenha seu streak diário para acelerar sua evolução!"
+    ),
+    "openbanking": (
+        "<b>🏦 Open Banking / Open Finance</b>\n\n"
+        "Conecte suas contas bancárias de forma <b>segura e automática</b>!\n\n"
+        "🔗  <code>/conectar_banco</code>\n"
+        "   • Vincule suas contas bancárias (Nubank, Inter, Bradesco, Itaú, etc.) via OAuth seguro. Seus dados são protegidos!\n\n"
+        "💳  <code>/minhas_contas</code>\n"
+        "   • Visualize todas as suas contas conectadas com saldo atualizado em tempo real.\n\n"
+        "🔄  <code>/sincronizar</code>\n"
+        "   • Sincronize manualmente suas transações dos últimos 30 dias de todas as contas conectadas.\n\n"
+        "📥  <code>/importar_transacoes</code>\n"
+        "   • Veja as transações pendentes e importe com <b>1 clique</b>. A categorização é feita automaticamente de forma inteligente!\n\n"
+        "✨  <b>Benefícios:</b>\n"
+        "   • 🤖 Sincronização automática a cada 1 hora\n"
+        "   • 🧠 Categorização inteligente (Alimentação, Transporte, etc.)\n"
+        "   • 🔔 Notificações de novas transações\n"
+        "   • 🔒 Segurança total com OAuth oficial dos bancos\n"
+        "   • ⚡ Importação em massa ou individual\n\n"
+        "💡  <b>Dica Pro:</b> Após conectar, o bot sincroniza automaticamente suas transações!"
     )
 }
 
@@ -492,6 +511,7 @@ def get_help_keyboard(current_section: str = "main") -> InlineKeyboardMarkup:
             InlineKeyboardButton("🎮 Gamificação", callback_data="help_gamificacao"),
         ],
         [
+            InlineKeyboardButton("🏦 Open Banking", callback_data="help_openbanking"),
             InlineKeyboardButton("⚙️ Ferramentas", callback_data="help_config"),
         ]
     ]
