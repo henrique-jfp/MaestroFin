@@ -571,41 +571,60 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
         date_from = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         date_to = datetime.now().strftime("%Y-%m-%d")
         
-        # Buscar transações na API Pluggy
+        # Buscar transações na API Pluggy com PAGINAÇÃO COMPLETA
         logger.info(f"🔄 Buscando transações da account {pluggy_account_id} (de {date_from} até {date_to})...")
         
-        # Fazer request com logging detalhado
-        try:
-            transactions_data = pluggy_request(
-                "GET", 
-                "/transactions", 
-                params={
-                    "accountId": pluggy_account_id,
-                    "from": date_from,
-                    "to": date_to
-                }
-            )
-            
-            # Log da resposta completa
-            logger.info(f"📡 Response da API Pluggy: {json.dumps(transactions_data, indent=2, default=str)}")
-            
-        except Exception as api_error:
-            logger.error(f"❌ Erro na API Pluggy ao buscar transações: {api_error}")
-            return {"new": 0, "updated": 0, "total": 0, "error": str(api_error)}
+        all_transactions = []
+        page = 1
+        total_pages = 1
         
-        transactions = transactions_data.get("results", [])
-        total_count = transactions_data.get("total", len(transactions))
+        # Loop de paginação - buscar TODAS as páginas
+        while page <= total_pages:
+            try:
+                logger.info(f"📄 Buscando página {page} de transações...")
+                
+                transactions_data = pluggy_request(
+                    "GET", 
+                    "/transactions", 
+                    params={
+                        "accountId": pluggy_account_id,
+                        "from": date_from,
+                        "to": date_to,
+                        "page": page
+                    }
+                )
+                
+                # Log da resposta na primeira página
+                if page == 1:
+                    logger.info(f"📡 Response da API Pluggy (página {page}): {json.dumps(transactions_data, indent=2, default=str)}")
+                
+                page_transactions = transactions_data.get("results", [])
+                total_pages = transactions_data.get("totalPages", 1)
+                total_count = transactions_data.get("total", 0)
+                
+                logger.info(f"📊 Página {page}/{total_pages}: {len(page_transactions)} transações (total geral: {total_count})")
+                
+                all_transactions.extend(page_transactions)
+                page += 1
+                
+            except Exception as api_error:
+                logger.error(f"❌ Erro na API Pluggy ao buscar página {page}: {api_error}")
+                # Se falhou na primeira página, retornar erro
+                if page == 1:
+                    return {"new": 0, "updated": 0, "total": 0, "error": str(api_error)}
+                # Se falhou em páginas posteriores, continuar com o que já temos
+                break
         
-        logger.info(f"📊 {len(transactions)} transações retornadas na página (total: {total_count})")
+        logger.info(f"✅ Total de {len(all_transactions)} transações recuperadas de {page-1} página(s)")
         
-        if len(transactions) > 0:
+        if len(all_transactions) > 0:
             # Log da primeira transação para debug
-            logger.info(f"🔍 Exemplo de transação: {json.dumps(transactions[0], indent=2, default=str)}")
+            logger.info(f"🔍 Exemplo de transação: {json.dumps(all_transactions[0], indent=2, default=str)}")
         
         new_count = 0
         updated_count = 0
         
-        for txn in transactions:
+        for txn in all_transactions:
             # Verificar se transação já existe
             existing = db.query(PluggyTransaction).filter(
                 PluggyTransaction.pluggy_transaction_id == txn["id"]
@@ -643,7 +662,7 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
         return {
             "new": new_count,
             "updated": updated_count,
-            "total": len(transactions)
+            "total": len(all_transactions)
         }
         
     except Exception as e:
@@ -1307,9 +1326,9 @@ class OpenFinanceOAuthHandler:
                     "PARTIAL_SUCCESS": "⚠️"
                 }.get(item.status, "❓")
                 
-                # Escapar caracteres especiais
-                safe_bank = item.connector_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace(".", "\\.")
-                safe_status = item.status.replace("_", "\\_")
+                # Escapar caracteres especiais para MarkdownV2
+                safe_bank = item.connector_name.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("]", "\\]")
+                safe_status = item.status.replace("_", "\\_").replace("-", "\\-")
                 
                 message += f"{status_emoji} *{safe_bank}*\n"
                 message += f"    Status: `{safe_status}`\n"
@@ -1338,8 +1357,8 @@ class OpenFinanceOAuthHandler:
                             type_emoji = "💰"
                             type_name = "Conta"
                         
-                        # Nome da conta escapado
-                        safe_acc_name = acc.name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace(".", "\\.")
+                        # Nome da conta escapado para MarkdownV2
+                        safe_acc_name = acc.name.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("]", "\\]")
                         
                         message += f"    {type_emoji} *{safe_acc_name}*\n"
                         message += f"    `{type_name}`\n\n"
