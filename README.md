@@ -12,7 +12,9 @@
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)[![🚀 Demo ao Vivo](https://img.shields.io/badge/🚀%20Demo%20ao%20Vivo-maestrofin--unified.onrender.com-00D4AA?style=for-the-badge&logoColor=white)](https://maestrofin-unified.onrender.com)
 
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)[![💬 Teste no Telegram](https://img.shields.io/badge/💬%20Teste%20no%20Telegram-@MaestroFinBot-0088CC?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/MaestroFinBot)
+[![License](https://img.shields.io/badge/License-Dual%20(Commercial)-orange.svg)](LICENSE)
+
+[![💬 Teste no Telegram](https://img.shields.io/badge/💬%20Teste%20no%20Telegram-@MaestroFinBot-0088CC?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/MaestroFinBot)
 
 
 
@@ -45,6 +47,19 @@ Um bot do Telegram completo para controle financeiro pessoal que combina:
 </div>
 
 ---
+
+---
+
+## ⚖️ **Licenciamento**
+
+> **⚠️ ATENÇÃO:** Este projeto usa **Licença Dupla (Dual License)**
+
+| Tipo de Uso | Status | Detalhes |
+|------------|--------|----------|
+| 🎓 **Portfolio/Educação** | ✅ **GRATUITO** | Visualizar código, estudar, demonstrar em entrevistas |
+| 💼 **Empresas/Comercial** | 💰 **PAGO** | Produção, monetização, integração comercial |
+
+📧 **Licenciamento Comercial:** henriquejfp.dev@gmail.com
 
 ---
 
@@ -786,7 +801,23 @@ Use [GitHub Issues](https://github.com/henrique-jfp/MaestroFin/issues) com:
 
 ## 📄 **Licença**
 
-Este projeto está sob a licença MIT. Veja [LICENSE](LICENSE) para detalhes.
+Este projeto utiliza **Licenciamento Duplo**:
+
+### 🆓 **Uso Não Comercial (Portfolio/Educacional)**
+✅ Visualizar, estudar e usar em portfolio  
+✅ Fazer fork para aprendizado pessoal  
+✅ Executar localmente para testes  
+✅ Contribuir com melhorias via Pull Request
+
+### 💼 **Uso Comercial (Empresas/Startups)**
+⚠️ **Requer licença comercial paga**  
+❌ Produção empresarial  
+❌ Monetização/venda  
+❌ Integração em produtos comerciais
+
+📧 **Licenciamento Comercial:** henriquejfp.dev@gmail.com
+
+Veja [LICENSE](LICENSE) para detalhes completos.
 
 ---
 
