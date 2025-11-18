@@ -82,28 +82,53 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if action == "delete_confirm_yes":
         user_id = query.from_user.id
-        await query.edit_message_text("Processando sua solicitação... ⏳")
+        username = query.from_user.username or query.from_user.first_name or "Usuário"
         
-        # Chama a função do banco de dados para fazer a exclusão
-        sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
+        logger.info(f"🗑️ Usuário {username} (ID: {user_id}) confirmou deleção total de dados")
+        await query.edit_message_text("🔄 Processando deleção... ⏳\n\nIsso pode levar alguns segundos...")
         
-        if sucesso:
+        try:
+            # Chama a função do banco de dados para fazer a exclusão
+            sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
+            
+            if sucesso:
+                await query.edit_message_text(
+                    "✅ <b>Dados apagados com sucesso!</b>\n\n"
+                    "Tudo foi permanentemente removido:\n"
+                    "  ✓ Lançamentos\n"
+                    "  ✓ Metas\n"
+                    "  ✓ Agendamentos\n"
+                    "  ✓ Conexões bancárias (Open Finance)\n"
+                    "  ✓ Configurações\n"
+                    "  ✓ Histórico de gamificação\n\n"
+                    "Obrigado por usar o Maestro Financeiro! 💜\n\n"
+                    "Para começar de novo, use /start",
+                    parse_mode="HTML"
+                )
+                logger.info(f"✅ Usuário {username} (ID: {user_id}) teve todos os dados deletados com sucesso")
+            else:
+                await query.edit_message_text(
+                    "❌ <b>Erro ao apagar dados</b>\n\n"
+                    "Não foi possível completar a operação. "
+                    "Por favor, tente novamente em alguns instantes ou entre em contato com /contato",
+                    parse_mode="HTML"
+                )
+                logger.error(f"❌ Falha ao deletar dados do usuário {username} (ID: {user_id})")
+        
+        except Exception as e:
+            logger.error(f"❌ ERRO CRÍTICO ao deletar dados do usuário {user_id}: {e}", exc_info=True)
             await query.edit_message_text(
-                "✅ Seus dados foram permanentemente apagados.\n\n"
-                "Obrigado por usar o Maestro Financeiro. Se mudar de ideia, "
-                "basta usar o comando /start para começar de novo."
-            )
-            logger.info(f"Usuário {user_id} apagou todos os seus dados.")
-        else:
-            await query.edit_message_text(
-                "❌ Ocorreu um erro ao tentar apagar seus dados. "
-                "Nossa equipe foi notificada."
+                "❌ <b>Erro crítico</b>\n\n"
+                "Ocorreu um erro inesperado. Nossa equipe foi notificada.\n"
+                "Use /contato para relatar o problema.",
+                parse_mode="HTML"
             )
             
         return ConversationHandler.END
         
     else: # delete_confirm_no
         await query.edit_message_text("✅ Ufa! Seus dados estão seguros. Operação cancelada.")
+        logger.info(f"ℹ️ Usuário {query.from_user.id} cancelou deleção de dados")
         return ConversationHandler.END
 
 # Cria o ConversationHandler para ser importado no bot.py

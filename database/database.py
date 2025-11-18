@@ -94,8 +94,10 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
         usuario_a_deletar = db.query(Usuario).filter(Usuario.telegram_id == telegram_id).first()
         
         if not usuario_a_deletar:
-            logging.warning(f"Tentativa de deletar dados de um usuário inexistente: {telegram_id}")
+            logging.warning(f"⚠️ Tentativa de deletar dados de um usuário inexistente: {telegram_id}")
             return False
+        
+        logging.info(f"🗑️ Iniciando deleção COMPLETA do usuário {telegram_id} (DB ID: {usuario_a_deletar.id})...")
         
         # ==================== DELETAR CONEXÕES OPEN FINANCE ====================
         try:
@@ -132,9 +134,27 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
         # A mágica acontece aqui! Cascade deleta:
         # - lancamentos, contas, objetivos, agendamentos, conquistas_usuario
         # - pluggy_items → pluggy_accounts → pluggy_transactions (cascade)
+        
+        logging.info(f"🔥 Deletando usuário {telegram_id} do banco...")
         db.delete(usuario_a_deletar)
         db.commit()
-        logging.info(f"✅ Todos os dados do usuário com telegram_id {telegram_id} foram deletados com sucesso.")
+        db.flush()  # Garante que a deleção foi persistida
+        
+        # Verificar se realmente foi deletado
+        verificacao = db.query(Usuario).filter(Usuario.telegram_id == telegram_id).first()
+        if verificacao:
+            logging.error(f"❌ ERRO: Usuário {telegram_id} ainda existe após deleção!")
+            db.rollback()
+            return False
+        
+        logging.info(f"✅ SUCESSO: Todos os dados do usuário {telegram_id} foram deletados permanentemente!")
+        logging.info(f"   📊 Lançamentos: deletados (cascade)")
+        logging.info(f"   🎯 Metas: deletadas (cascade)")
+        logging.info(f"   📅 Agendamentos: deletados (cascade)")
+        logging.info(f"   🏦 Conexões Open Finance: deletadas na API + banco")
+        logging.info(f"   🎮 Gamificação: deletada (cascade)")
+        logging.info(f"   ⚙️ Configurações: deletadas (cascade)")
+        
         return True
             
     except Exception as e:
