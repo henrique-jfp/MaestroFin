@@ -124,14 +124,14 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
             # 2.1. Primeiro: pluggy_transactions (referencia pluggy_accounts via id_account)
             deleted_txns = db.query(PluggyTransaction).filter(
                 PluggyTransaction.id_account.in_(
-                    db.query(PluggyAccount.id).filter(PluggyAccount.item_id.in_(item_ids))
+                    db.query(PluggyAccount.id).filter(PluggyAccount.id_item.in_(item_ids))
                 )
             ).delete(synchronize_session=False)
             logging.info(f"✅ {deleted_txns} transações Open Finance deletadas")
             
-            # 2.2. Segundo: pluggy_accounts (referencia pluggy_items via item_id)
+            # 2.2. Segundo: pluggy_accounts (referencia pluggy_items via id_item)
             deleted_accounts = db.query(PluggyAccount).filter(
-                PluggyAccount.item_id.in_(item_ids)
+                PluggyAccount.id_item.in_(item_ids)
             ).delete(synchronize_session=False)
             logging.info(f"✅ {deleted_accounts} contas Open Finance deletadas")
             
