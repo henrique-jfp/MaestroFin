@@ -2053,34 +2053,97 @@ class OpenFinanceOAuthHandler:
             db.close()
     
     def _suggest_category(self, description: str, merchant_name: str, db):
-        """Sugere categoria baseado na descrição e merchant"""
+        """Sugere categoria baseado na descrição e merchant usando IA"""
         from models import Categoria
+        import google.generativeai as genai
+        from config import GEMINI_API_KEY
         
+        # Buscar todas as categorias disponíveis
+        categorias = db.query(Categoria).all()
+        if not categorias:
+            logger.warning("⚠️ Nenhuma categoria encontrada no banco")
+            return None
+        
+        categorias_lista = [cat.nome for cat in categorias]
+        
+        # Preparar texto para análise
+        texto_analise = f"{merchant_name} - {description}" if merchant_name else description
+        
+        # 🤖 USAR IA PARA CATEGORIZAÇÃO ASSERTIVA
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            prompt = f"""Você é um especialista em categorização de transações financeiras.
+
+Analise esta transação e escolha a categoria MAIS APROPRIADA:
+
+Transação: "{texto_analise}"
+
+Categorias disponíveis:
+{', '.join(categorias_lista)}
+
+REGRAS IMPORTANTES:
+- Responda APENAS o nome exato da categoria (sem explicações)
+- Se não tiver certeza, escolha a categoria mais próxima
+- Exemplos:
+  * "IFOOD" → Alimentação
+  * "UBER" → Transporte  
+  * "NETFLIX" → Lazer
+  * "FARMACIA" → Saúde
+  * "PIX ENVIADO" → Transferências
+  * "TED" → Transferências
+  * "SAQUE" → Outros
+
+Categoria escolhida:"""
+
+            response = model.generate_content(prompt)
+            categoria_sugerida = response.text.strip()
+            
+            # Buscar categoria no banco (case-insensitive)
+            categoria = db.query(Categoria).filter(
+                Categoria.nome.ilike(f"%{categoria_sugerida}%")
+            ).first()
+            
+            if categoria:
+                logger.info(f"🤖 IA categorizou '{texto_analise}' como: {categoria.nome}")
+                return categoria
+            else:
+                logger.warning(f"⚠️ IA retornou '{categoria_sugerida}' mas não existe no banco")
+                
+        except Exception as e:
+            logger.error(f"❌ Erro ao usar IA para categorização: {e}")
+        
+        # 🔄 FALLBACK: Sistema de keywords básico
         desc_lower = description.lower() if description else ""
         merchant_lower = merchant_name.lower() if merchant_name else ""
         
-        # Palavras-chave para cada categoria
         category_keywords = {
-            "Alimentação": ["mercado", "supermercado", "padaria", "açougue", "hortifruti", "ifood", "uber eats", "rappi", "restaurante", "lanchonete"],
-            "Transporte": ["uber", "99", "cabify", "posto", "combustível", "gasolina", "etanol", "ipva", "estacionamento"],
-            "Lazer": ["netflix", "spotify", "disney", "amazon prime", "cinema", "teatro", "show"],
-            "Saúde": ["farmácia", "drogaria", "hospital", "clínica", "médico", "dentista"],
-            "Moradia": ["aluguel", "condomínio", "água", "luz", "energia", "gas", "internet"],
-            "Compras": ["magazine", "americanas", "mercado livre", "amazon", "shein", "shopee"],
-            "Serviços": ["telefone", "celular", "internet", "tv", "streaming"]
+            "Alimentação": ["mercado", "supermercado", "padaria", "açougue", "hortifruti", "ifood", "uber eats", "rappi", "restaurante", "lanchonete", "burger", "pizza"],
+            "Transporte": ["uber", "99", "cabify", "posto", "combustível", "gasolina", "etanol", "ipva", "estacionamento", "pedágio"],
+            "Lazer": ["netflix", "spotify", "disney", "amazon prime", "cinema", "teatro", "show", "ingresso"],
+            "Saúde": ["farmácia", "drogaria", "hospital", "clínica", "médico", "dentista", "laboratorio"],
+            "Moradia": ["aluguel", "condomínio", "água", "luz", "energia", "gas", "internet", "iptu"],
+            "Compras": ["magazine", "americanas", "mercado livre", "amazon", "shein", "shopee", "loja"],
+            "Serviços": ["telefone", "celular", "internet", "tv", "streaming", "assinatura"],
+            "Transferências": ["pix", "ted", "doc", "transferencia", "transf"],
+            "Outros": ["saque", "tarifa", "taxa"]
         }
         
-        # Procurar por palavras-chave
         for cat_name, keywords in category_keywords.items():
             for keyword in keywords:
                 if keyword in desc_lower or keyword in merchant_lower:
-                    # Buscar categoria no banco
                     categoria = db.query(Categoria).filter(Categoria.nome == cat_name).first()
                     if categoria:
-                        logger.info(f"💡 Categoria sugerida para '{description}': {cat_name}")
+                        logger.info(f"💡 Categoria (fallback) para '{description}': {cat_name}")
                         return categoria
         
-        # Sem sugestão
+        # Sem sugestão - retornar "Outros"
+        categoria_outros = db.query(Categoria).filter(Categoria.nome == "Outros").first()
+        if categoria_outros:
+            logger.info(f"📁 Usando categoria padrão 'Outros' para '{description}'")
+            return categoria_outros
+        
         return None
     
     # ==================== CONVERSATION HANDLER ====================
