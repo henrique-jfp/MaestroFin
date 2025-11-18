@@ -795,23 +795,45 @@ class OpenFinanceHandler:
             context.user_data['pending_connector_id'] = int(connector['id']) if connector else None
             context.user_data['retry_count'] = context.user_data.get('retry_count', 0) + 1
             
-            keyboard = [
-                [InlineKeyboardButton("✅ Já autorizei! Tentar novamente", callback_data="retry_connection")],
-                [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
-            ]
+            # 🔴 Extrair URL de autorização
+            redirect_url = action_err.redirect_url
+            
+            if redirect_url:
+                # Ter um link de autorização!
+                logger.info(f"✅ URL de autorização: {redirect_url}")
+                
+                message = (
+                    "⚠️ <b>Autorização Bancária Necessária</b>\n\n"
+                    f"{action_err.args[0] if action_err.args else 'Confirme a autorização no app do seu banco.'}\n\n"
+                    "<b>Clique no botão abaixo para autorizar no seu banco:</b>"
+                )
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔐 Autorizar no Banco", url=redirect_url)],
+                    [InlineKeyboardButton("✅ Já autorizei!", callback_data="retry_connection")],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+                ]
+            else:
+                # Sem link, apenas instruções
+                logger.warning(f"⚠️ Sem URL de autorização. Item: {action_err.item}")
+                
+                message = (
+                    "⚠️ <b>Confirmação Bancária Necessária</b>\n\n"
+                    f"{action_err.args[0] if action_err.args else 'Confirme a autorização no app do seu banco.'}\n\n"
+                    "<b>O que fazer:</b>\n"
+                    "1️⃣ Abra o app do seu banco ou internet banking\n"
+                    "2️⃣ Verifique notificações de segurança ou confirmação\n"
+                    "3️⃣ Autorize o acesso (OTP, token, fingerprint ou pergunta secreta)\n"
+                    "4️⃣ Volte aqui e clique em 'Já autorizei!'\n\n"
+                    "<i>⏱️ Geralmente leva poucos minutos.</i>"
+                )
+                
+                keyboard = [
+                    [InlineKeyboardButton("✅ Já autorizei! Tentar novamente", callback_data="retry_connection")],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+                ]
+            
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            message = (
-                "⚠️ <b>Confirmação Bancária Necessária</b>\n\n"
-                f"{action_err.args[0] if action_err.args else 'Confirme a autorização no app do seu banco.'}\n\n"
-                "<b>O que fazer:</b>\n"
-                "1️⃣ Abra o app do seu banco ou internet banking\n"
-                "2️⃣ Verifique notificações de segurança ou confirmação\n"
-                "3️⃣ Autorize o acesso (OTP, token, fingerprint ou pergunta secreta)\n"
-                "4️⃣ Volte aqui e clique em 'Já autorizei!'\n\n"
-                "<i>⏱️ Geralmente leva poucos minutos.</i>"
-            )
-            
             await processing_msg.edit_text(message, reply_markup=reply_markup, parse_mode='HTML')
             
             # Não limpar context.user_data - guardar para retry
@@ -952,12 +974,50 @@ class OpenFinanceHandler:
 
         except BankConnectorUserActionRequired as action_err:
             logger.warning("Banco ainda requer ação manual do usuário")
-            await processing_msg.edit_text(
-                "⚠️ O banco pediu uma confirmação adicional.\n"
-                f"{action_err.args[0]}"
-            )
-            context.user_data.clear()
-            return ConversationHandler.END
+            
+            # 🔴 Extrair URL de autorização
+            redirect_url = action_err.redirect_url
+            
+            if redirect_url:
+                # Ter um link de autorização!
+                logger.info(f"✅ URL de autorização: {redirect_url}")
+                
+                message = (
+                    "⚠️ <b>Autorização Bancária Necessária</b>\n\n"
+                    f"{action_err.args[0] if action_err.args else 'Confirme a autorização no app do seu banco.'}\n\n"
+                    "<b>Clique no botão abaixo para autorizar no seu banco:</b>"
+                )
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔐 Autorizar no Banco", url=redirect_url)],
+                    [InlineKeyboardButton("✅ Já autorizei!", callback_data="retry_connection")],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+                ]
+            else:
+                # Sem link, apenas instruções
+                logger.warning(f"⚠️ Sem URL de autorização. Item: {action_err.item}")
+                
+                message = (
+                    "⚠️ <b>Confirmação Bancária Necessária</b>\n\n"
+                    f"{action_err.args[0] if action_err.args else 'Confirme a autorização no app do seu banco.'}\n\n"
+                    "<b>O que fazer:</b>\n"
+                    "1️⃣ Abra o app do seu banco ou internet banking\n"
+                    "2️⃣ Verifique notificações de segurança ou confirmação\n"
+                    "3️⃣ Autorize o acesso (OTP, token, fingerprint ou pergunta secreta)\n"
+                    "4️⃣ Volte aqui e clique em 'Já autorizei!'\n\n"
+                    "<i>⏱️ Geralmente leva poucos minutos.</i>"
+                )
+                
+                keyboard = [
+                    [InlineKeyboardButton("✅ Já autorizei! Tentar novamente", callback_data="retry_connection")],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="cancel")]
+                ]
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await processing_msg.edit_text(message, reply_markup=reply_markup, parse_mode='HTML')
+            
+            # Não limpar context.user_data - guardar para retry
+            return SELECTING_BANK
 
         except BankConnectorTimeout as timeout_err:
             logger.warning("Tempo esgotado aguardando retorno do banco (etapa adicional)")
