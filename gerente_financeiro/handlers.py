@@ -914,7 +914,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 resposta_ia = _limpar_resposta_ia(response.text)
             except Exception as model_error:
                 logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
-                logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
+                logger.info("🔄 Tentando fallback para 'gemini-1.5-flash-latest'...")
                 
                 # Atualizar mensagem de progresso
                 await context.bot.edit_message_text(
@@ -925,7 +925,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 )
                 
                 # Fallback para modelo mais estável
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
                 response = await model.generate_content_async(prompt_final)
                 resposta_ia = _limpar_resposta_ia(response.text)
             
@@ -1268,8 +1268,8 @@ async def gerar_resposta_ia(update, context, prompt, user_question, usuario_db, 
             response = await model.generate_content_async(prompt)
         except Exception as model_error:
             logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
-            logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            logger.info("🔄 Tentando fallback para 'gemini-1.5-flash-latest'...")
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
             response = await model.generate_content_async(prompt)
         
         # --- NOVA LÓGICA DE PROCESSAMENTO JSON (MAIS SEGURA) ---
@@ -1396,8 +1396,8 @@ async def handle_analise_impacto_callback(update: Update, context: ContextTypes.
             resposta_bruta = response.text
         except Exception as model_error:
             logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
-            logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            logger.info("🔄 Tentando fallback para 'gemini-1.5-flash-latest'...")
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
             response = await model.generate_content_async(prompt_impacto)
             resposta_bruta = response.text
         resposta_limpa = _limpar_resposta_ia(resposta_bruta)
