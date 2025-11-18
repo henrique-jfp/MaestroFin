@@ -226,23 +226,48 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
         
         # Filtrar contas que são investimentos
         # Aceitar: type=INVESTMENT OU nome contém "cofrinho" OU subtype indica investimento
+        # OU possui transações de rendimento de aplicação financeira
         investment_accounts = []
         for acc in all_accounts:
             nome_lower = (acc.name or "").lower()
             subtype_lower = (acc.subtype or "").lower()
             
+            # Verificar se tem transações de rendimento (indica investimento)
+            has_rendimentos = False
+            try:
+                from models import PluggyTransaction
+                rendimentos_count = db.query(PluggyTransaction).filter(
+                    PluggyTransaction.id_account == acc.id,
+                    PluggyTransaction.type == "CREDIT"
+                ).filter(
+                    (PluggyTransaction.category.ilike("%interest%")) |
+                    (PluggyTransaction.category.ilike("%dividend%")) |
+                    (PluggyTransaction.description.ilike("%rendimento%"))
+                ).count()
+                has_rendimentos = rendimentos_count > 0
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao verificar rendimentos: {e}")
+            
             is_investment = (
                 acc.type == "INVESTMENT" or
                 "cofrinho" in nome_lower or
                 "cofre" in nome_lower or
+                "caixinha" in nome_lower or
                 "investimento" in nome_lower or
                 "investment" in subtype_lower or
-                "savings" in subtype_lower
+                "savings" in subtype_lower or
+                "poupança" in nome_lower or
+                "poupanca" in nome_lower or
+                has_rendimentos
             )
             
             if is_investment:
                 investment_accounts.append(acc)
-                logger.info(f"💰 Detectado investimento: {acc.name} (tipo: {acc.type}, subtipo: {acc.subtype})")
+                motivo = []
+                if acc.type == "INVESTMENT": motivo.append("tipo=INVESTMENT")
+                if "cofrinho" in nome_lower or "cofre" in nome_lower: motivo.append("nome contém cofrinho/cofre")
+                if has_rendimentos: motivo.append("possui transações de rendimento")
+                logger.info(f"💰 Detectado investimento: {acc.name} (tipo: {acc.type}, razão: {', '.join(motivo)})")
         
         if not investment_accounts:
             logger.info(f"ℹ️  Nenhuma conta de investimento encontrada para item {pluggy_item_id}")
@@ -346,7 +371,7 @@ def _guess_investment_type(nome: str, subtype: Optional[str]) -> str:
         return "ACAO"
     elif any(word in combinado for word in ["fundo", "fund"]):
         return "FUNDO"
-    elif any(word in combinado for word in ["cofrinho", "cofre", "piggy"]):
+    elif any(word in combinado for word in ["cofrinho", "cofre", "caixinha", "piggy"]):
         return "COFRINHO"
     else:
         return "OUTRO"
@@ -1633,6 +1658,11 @@ class OpenFinanceOAuthHandler:
                 credit_cards = [a for a in accounts if a.type == "CREDIT"]
                 investments = [a for a in accounts if a.type == "INVESTMENT"]
                 
+                # DEBUG: Logar tipos encontrados
+                logger.info(f"🏦 {item.connector_name}: {len(bank_accounts)} BANK, {len(credit_cards)} CREDIT, {len(investments)} INVESTMENT")
+                for acc in accounts:
+                    logger.info(f"   📋 {acc.name}: tipo={acc.type}, balance={acc.balance}, credit_limit={acc.credit_limit}")
+                
                 # Saldo (contas bancárias)
                 if bank_accounts:
                     total_balance = sum(float(a.balance) for a in bank_accounts if a.balance is not None)
@@ -1652,34 +1682,40 @@ class OpenFinanceOAuthHandler:
                         # - balance: limite DISPONÍVEL (quanto ainda pode gastar)
                         # - credit_limit: limite TOTAL do cartão
                         
-                        if card.credit_limit is not None:
-                            limite_total = float(card.credit_limit)
+                        # Valores padrão
+                        limite_total = float(card.credit_limit) if card.credit_limit is not None else 0
+                        limite_disponivel = float(card.balance) if card.balance is not None else 0
+                        
+                        # Calcular fatura atual (Limite Total - Disponível)
+                        fatura_atual = max(0, limite_total - limite_disponivel)
+                        
+                        # Emoji baseado no percentual usado
+                        percentual_usado = (fatura_atual / limite_total * 100) if limite_total > 0 else 0
+                        if percentual_usado < 30:
+                            emoji = "🟢"
+                        elif percentual_usado < 70:
+                            emoji = "🟡"
+                        else:
+                            emoji = "🔴"
+                        
+                        # Exibir apenas se há dados válidos
+                        if limite_total > 0:
+                            # Limite Total
                             limite_total_str = f"R$ {limite_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             limite_total_str = escape_markdown_v2(limite_total_str)
-                            message += f"   💰 Limite Total: {limite_total_str}\n"
-                        
-                        if card.balance is not None:
-                            limite_disponivel = float(card.balance)
+                            message += f"   💰 Limite: {limite_total_str}\n"
+                            
+                            # Fatura Atual
+                            fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            fatura_str = escape_markdown_v2(fatura_str)
+                            message += f"   {emoji} Fatura: {fatura_str} \\({percentual_usado:.0f}%\\)\n"
+                            
+                            # Disponível
                             limite_disp_str = f"R$ {limite_disponivel:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             limite_disp_str = escape_markdown_v2(limite_disp_str)
                             message += f"   ✅ Disponível: {limite_disp_str}\n"
-                        
-                        # Calcular fatura atual (Limite Total - Disponível)
-                        if card.balance is not None and card.credit_limit is not None:
-                            fatura_atual = float(card.credit_limit) - float(card.balance)
-                            fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            fatura_str = escape_markdown_v2(fatura_str)
-                            
-                            # Emoji baseado no percentual usado
-                            percentual_usado = (fatura_atual / float(card.credit_limit) * 100) if card.credit_limit else 0
-                            if percentual_usado < 30:
-                                emoji = "🟢"
-                            elif percentual_usado < 70:
-                                emoji = "🟡"
-                            else:
-                                emoji = "🔴"
-                            
-                            message += f"   {emoji} Fatura Atual: {fatura_str} \\({percentual_usado:.0f}%\\)\n"
+                        else:
+                            message += f"   ⚠️ _Aguardando sincronização\\.\\.\\._\n"
                 
                 # Investimentos (se houver) - MELHORADO
                 if investments:
@@ -1786,7 +1822,9 @@ class OpenFinanceOAuthHandler:
                     "✅ *Sincronização concluída\\!*\n\n"
                     f"📊 {accounts} conta\\(s\\) verificada\\(s\\)\n"
                     f"ℹ️  Nenhuma transação nova encontrada\\.\n\n"
-                    f"Todas as suas transações já estão sincronizadas\\!"
+                    f"_Todas as suas transações já estão sincronizadas\\!_\n\n"
+                    f"⚠️ *Nota:* Alguns bancos não disponibilizam transações detalhadas de cartão de crédito via Open Finance\\. "
+                    f"O saldo e limite são atualizados\\, mas as compras individuais podem não aparecer\\."
                 )
             else:
                 message = (
