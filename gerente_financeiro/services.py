@@ -12,7 +12,7 @@ import seaborn as sns
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, extract
+from sqlalchemy import func, and_, extract, text
 import asyncio
 import hashlib  # <-- Para gerar chaves de cache
 import json  # <-- Para serialização de dados
@@ -1508,7 +1508,7 @@ def _buscar_transacoes_open_finance(db: Session, user_id: int) -> List[Dict]:
     """
     try:
         # Query com JOIN triplo: transactions -> accounts -> connections
-        query = """
+        query = text("""
             SELECT 
                 bt.transaction_id,
                 bt.description,
@@ -1523,13 +1523,13 @@ def _buscar_transacoes_open_finance(db: Session, user_id: int) -> List[Dict]:
             FROM bank_transactions bt
             INNER JOIN bank_accounts ba ON bt.account_id = ba.id
             INNER JOIN bank_connections bc ON ba.connection_id = bc.id
-            WHERE bc.user_id = %s
+            WHERE bc.user_id = :user_id
                 AND bc.status = 'UPDATED'
                 AND bt.date >= CURRENT_DATE - INTERVAL '90 days'
             ORDER BY bt.date DESC
-        """
+        """)
         
-        resultado = db.execute(query, (user_id,))
+        resultado = db.execute(query, {"user_id": user_id})
         transacoes = []
         
         for row in resultado:

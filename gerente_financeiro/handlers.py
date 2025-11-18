@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 from typing import List, Tuple, Dict, Any
@@ -77,6 +78,59 @@ from .services import (
     obter_dados_externos,
     preparar_contexto_json
 )
+
+# ============================================================================
+# 🛡️ SISTEMA DE RATE LIMITING (Anti-Spam)
+# ============================================================================
+
+# Armazena timestamp da última requisição por usuário
+_user_last_request_time = {}
+
+# Configurações de rate limiting
+RATE_LIMIT_SECONDS = 3  # Cooldown entre requisições
+RATE_LIMIT_WARNING_EMOJI = "⏱️"
+
+def check_rate_limit(user_id: int) -> Tuple[bool, float]:
+    """
+    Verifica se o usuário está respeitando o rate limit.
+    
+    Args:
+        user_id: ID do usuário no Telegram
+        
+    Returns:
+        Tupla (pode_prosseguir, tempo_restante)
+        - pode_prosseguir: True se pode fazer a requisição
+        - tempo_restante: Segundos que ainda faltam para poder fazer nova requisição
+    """
+    agora = time.time()
+    ultima_requisicao = _user_last_request_time.get(user_id, 0)
+    tempo_decorrido = agora - ultima_requisicao
+    
+    if tempo_decorrido < RATE_LIMIT_SECONDS:
+        tempo_restante = RATE_LIMIT_SECONDS - tempo_decorrido
+        return False, tempo_restante
+    
+    # Atualiza timestamp da última requisição
+    _user_last_request_time[user_id] = agora
+    return True, 0.0
+
+def limpar_rate_limit_antigo():
+    """
+    Remove entradas antigas do rate limit (> 5 minutos).
+    Chamado periodicamente para evitar memory leak.
+    """
+    agora = time.time()
+    usuarios_para_remover = [
+        user_id for user_id, timestamp in _user_last_request_time.items()
+        if agora - timestamp > 300  # 5 minutos
+    ]
+    for user_id in usuarios_para_remover:
+        del _user_last_request_time[user_id]
+    
+    if usuarios_para_remover:
+        logging.info(f"🧹 Rate limit: Removidas {len(usuarios_para_remover)} entradas antigas")
+
+# ============================================================================
 from . import services
 
 
@@ -416,11 +470,20 @@ HELP_TEXTS = {
         "<b>🧠 Análise e Inteligência</b>\n\n"
         "Transforme seus dados em decisões inteligentes.\n\n"
         "💬  <code>/gerente</code>\n"
-        "   • Converse comigo em linguagem natural! Sou uma IA avançada que entende suas perguntas sobre finanças, tem memória e te ajuda com insights práticos.\n"
-        "     - <i>\"Quanto gastei com iFood este mês?\"</i>\n"
-        "     - <i>\"Qual foi minha maior despesa em Lazer?\"</i>\n"
-        "     - <i>\"Como está minha situação financeira?\"</i>\n"
-        "     - <i>\"Cotação do dólar hoje\"</i>\n\n"
+        "   • Converse comigo em linguagem natural! Sou uma IA avançada que entende suas perguntas sobre finanças, tem memória e te ajuda com insights práticos.\n\n"
+        "   <b>📝 Exemplos de perguntas:</b>\n"
+        "   • <i>\"Qual meu saldo total?\"</i>\n"
+        "   • <i>\"Quanto gastei com alimentação este mês?\"</i>\n"
+        "   • <i>\"Comparar gastos de outubro e novembro\"</i>\n"
+        "   • <i>\"Mostre meus últimos 5 lançamentos\"</i>\n"
+        "   • <i>\"Como está minha meta de viagem?\"</i>\n"
+        "   • <i>\"Cotação do dólar hoje\"</i>\n"
+        "   • <i>\"Quanto gastei com lazer na última semana?\"</i>\n\n"
+        "   <b>💡 Dicas de uso:</b>\n"
+        "   • Seja específico e natural\n"
+        "   • Posso comparar períodos, categorias e contas\n"
+        "   • Aguarde 3 segundos entre perguntas (evita spam)\n"
+        "   • Se eu não entender, reformule de forma mais simples\n\n"
         "📈  <code>/grafico</code>\n"
         "   • Gere gráficos visuais e interativos de despesas, fluxo de caixa e projeções.\n\n"
         "📄  <code>/relatorio</code>\n"
@@ -687,6 +750,25 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
         effective_user = update.effective_user
 
     chat_id = effective_message.chat_id
+    user_id = effective_user.id
+    
+    # --- 🛡️ RATE LIMITING: Verificar cooldown ---
+    pode_prosseguir, tempo_restante = check_rate_limit(user_id)
+    if not pode_prosseguir:
+        mensagem_rate_limit = (
+            f"{RATE_LIMIT_WARNING_EMOJI} <b>Calma aí!</b>\n\n"
+            f"Você está fazendo perguntas muito rápido. "
+            f"Aguarde <b>{int(tempo_restante) + 1} segundos</b> e tente novamente.\n\n"
+            f"<i>Isso ajuda a manter o sistema rápido para todos! 🚀</i>"
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=mensagem_rate_limit,
+            parse_mode='HTML'
+        )
+        logger.warning(f"⏱️ Rate limit ativado para user {user_id} (faltam {tempo_restante:.1f}s)")
+        return AWAIT_GERENTE_QUESTION
+    
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
 
     # --- Despachante: Verifica primeiro se é uma cotação ---
@@ -767,10 +849,13 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             contexto_conversa.adicionar_interacao(user_question, resposta_texto, tipo="gerente_vdm_analise")
 
     except Exception as e:
-        logger.error(f"Erro CRÍTICO em handle_natural_language (V4) para user {chat_id}: {e}", exc_info=True)
-        await enviar_resposta_erro(context.bot, chat_id)
+        erro_detalhado = f"Erro CRÍTICO em handle_natural_language (V4): {str(e)}"
+        logger.error(f"{erro_detalhado} para user {chat_id}", exc_info=True)
+        await enviar_resposta_erro(context.bot, chat_id, erro_tecnico=erro_detalhado)
     finally:
         db.close()
+        # Limpar rate limit antigo periodicamente
+        limpar_rate_limit_antigo()
     
     return AWAIT_GERENTE_QUESTION
 
@@ -880,17 +965,46 @@ def _limpar_resposta_ia(texto: str) -> str:
     
     return texto_limpo.strip()
 
-async def enviar_resposta_erro(bot, user_id):
-    """Envia uma mensagem de erro amigável e aleatória para o usuário."""
+async def enviar_resposta_erro(bot, user_id, erro_tecnico: str = None):
+    """
+    Envia uma mensagem de erro amigável e profissional para o usuário.
+    
+    Args:
+        bot: Instância do bot do Telegram
+        user_id: ID do usuário
+        erro_tecnico: Detalhes técnicos do erro (opcional, para logs)
+    """
+    # Mensagens de erro contextualizadas e profissionais
     mensagens_erro = [
-        "Ops! Meu cérebro deu uma pane. Tenta de novo? 🤖",
-        "Eita! Algo deu errado aqui. Pode repetir a pergunta? 😅",
-        "Hmm, parece que travei. Fala de novo aí! 🔄"
+        "🔧 <b>Ops! Algo inesperado aconteceu.</b>\n\n"
+        "Minha IA está temporariamente indisponível. Tente novamente em alguns instantes.\n\n"
+        "<i>💡 Dica: Enquanto isso, você pode usar os comandos diretos como /saldo ou /lancamentos</i>",
+        
+        "⚠️ <b>Desculpe pelo transtorno!</b>\n\n"
+        "Não consegui processar sua pergunta no momento. "
+        "Por favor, aguarde alguns segundos e tente novamente.\n\n"
+        "<i>Se o problema persistir, tente reformular sua pergunta de forma mais simples.</i>",
+        
+        "🤖 <b>Houston, temos um problema!</b>\n\n"
+        "Meu sistema de análise deu uma pausa inesperada. "
+        "Mas não se preocupe, já estou me recuperando!\n\n"
+        "<i>Tente novamente em 5 segundos. �</i>"
     ]
+    
     try:
-        await bot.send_message(chat_id=user_id, text=random.choice(mensagens_erro))
+        mensagem_escolhida = random.choice(mensagens_erro)
+        await bot.send_message(
+            chat_id=user_id,
+            text=mensagem_escolhida,
+            parse_mode='HTML'
+        )
+        
+        # Log detalhado para debug (sem expor ao usuário)
+        if erro_tecnico:
+            logger.error(f"❌ Erro detalhado para user {user_id}: {erro_tecnico}")
+            
     except Exception as e:
-        logger.error(f"Falha ao enviar mensagem de erro para o usuário {user_id}: {e}")
+        logger.error(f"❌ ERRO CRÍTICO: Falha ao enviar mensagem de erro para user {user_id}: {e}")
 
 
 async def handle_action_button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
