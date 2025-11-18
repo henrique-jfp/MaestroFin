@@ -795,12 +795,14 @@ class OpenFinanceHandler:
             context.user_data['pending_connector_id'] = int(connector['id']) if connector else None
             context.user_data['retry_count'] = context.user_data.get('retry_count', 0) + 1
             
-            # 🔴 Extrair URL de autorização
+            # 🔴 Extrair URL de autorização (original ou construída)
             redirect_url = action_err.redirect_url
             
             if redirect_url:
                 # Ter um link de autorização!
-                logger.info(f"✅ URL de autorização: {redirect_url}")
+                is_constructed = redirect_url.startswith('https://dashboard.pluggy.ai')
+                url_source = "construída automaticamente" if is_constructed else "retornada pelo Pluggy"
+                logger.info(f"✅ URL de autorização ({url_source}): {redirect_url}")
                 
                 message = (
                     "⚠️ <b>Autorização Bancária Necessária</b>\n\n"
@@ -815,7 +817,7 @@ class OpenFinanceHandler:
                 ]
             else:
                 # Sem link, apenas instruções
-                logger.warning(f"⚠️ Sem URL de autorização. Item: {action_err.item}")
+                logger.warning(f"⚠️ Sem URL de autorização. Item ID: {action_err.item.get('id') if action_err.item else 'N/A'}")
                 
                 message = (
                     "⚠️ <b>Confirmação Bancária Necessária</b>\n\n"
@@ -975,12 +977,14 @@ class OpenFinanceHandler:
         except BankConnectorUserActionRequired as action_err:
             logger.warning("Banco ainda requer ação manual do usuário")
             
-            # 🔴 Extrair URL de autorização
+            # 🔴 Extrair URL de autorização (original ou construída)
             redirect_url = action_err.redirect_url
             
             if redirect_url:
                 # Ter um link de autorização!
-                logger.info(f"✅ URL de autorização: {redirect_url}")
+                is_constructed = redirect_url.startswith('https://dashboard.pluggy.ai')
+                url_source = "construída automaticamente" if is_constructed else "retornada pelo Pluggy"
+                logger.info(f"✅ URL de autorização ({url_source}): {redirect_url}")
                 
                 message = (
                     "⚠️ <b>Autorização Bancária Necessária</b>\n\n"
@@ -995,7 +999,7 @@ class OpenFinanceHandler:
                 ]
             else:
                 # Sem link, apenas instruções
-                logger.warning(f"⚠️ Sem URL de autorização. Item: {action_err.item}")
+                logger.warning(f"⚠️ Sem URL de autorização. Item ID: {action_err.item.get('id') if action_err.item else 'N/A'}")
                 
                 message = (
                     "⚠️ <b>Confirmação Bancária Necessária</b>\n\n"

@@ -25,8 +25,20 @@ class BankConnectorUserActionRequired(BankConnectorError):
         super().__init__(message)
         self.detail = detail
         self.item = item or {}
-        # 🔴 Extrair URL de autorização se presente
-        self.redirect_url = (item or {}).get('redirectUrl') or (item or {}).get('url') if item else None
+        
+        # 🔴 EXTRAIR OU CONSTRUIR URL DE AUTORIZAÇÃO
+        # Pluggy pode retornar redirectUrl ou não
+        # Se não retornar, construir manualmente
+        redirect_url = (item or {}).get('redirectUrl') or (item or {}).get('url')
+        
+        if redirect_url:
+            self.redirect_url = redirect_url
+        elif item and item.get('id'):
+            # Construir URL manualmente se Pluggy não retornar
+            # Formato: https://dashboard.pluggy.ai/items/{item_id}/authentication
+            self.redirect_url = f"https://dashboard.pluggy.ai/items/{item['id']}/authentication"
+        else:
+            self.redirect_url = None
 
 
 class BankConnectorAdditionalAuthRequired(BankConnectorUserActionRequired):
@@ -401,9 +413,11 @@ class BankConnector:
                         insights=connector_insights,
                     )
 
-                # 🔴 CRÍTICO: Extrair URL de redirecionamento para Open Finance
-                redirect_url = item.get('redirectUrl') or item.get('url')
-                logger.info(f"🔗 URL de autorização encontrada: {redirect_url}")
+                # 🔴 CRÍTICO: Passar item completo para BankConnectorUserActionRequired
+                # A classe irá extrair redirectUrl ou construir manualmente
+                logger.info(f"⏳ Aguardando confirmação do usuário... Item ID: {item.get('id')}")
+                logger.info(f"   Item status: {item.get('status')}")
+                logger.info(f"   NextStep: {next_step}")
                 
                 raise BankConnectorUserActionRequired(
                     message, 
