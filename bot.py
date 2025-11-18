@@ -442,12 +442,13 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
     ]
     
-    # Adicionar callback handler Open Finance
+    # Adicionar callback handlers Open Finance
     if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
-        callback_builders.append(
-            ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_"))
-        )
-        logger.info("✅ Callback handler Open Finance adicionado (pattern: ^import_)")
+        callback_builders.extend([
+            ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_")),
+            ("action_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_action_callback, pattern="^action_"))
+        ])
+        logger.info("✅ Callback handlers Open Finance adicionados (import, action)")
 
     for name, builder in callback_builders:
         build_and_add(name, builder)

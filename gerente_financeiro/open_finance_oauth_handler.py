@@ -1313,89 +1313,90 @@ class OpenFinanceOAuthHandler:
                 )
                 return
             
-            # Montar mensagem com todas as contas
+            # ✨ NOVO LAYOUT: Agrupado por banco com informações consolidadas
             message = "🏦 *Suas Contas Open Finance*\n\n"
             
+            # Cores dos bancos
+            bank_colors = {
+                "Nubank": "🟣",
+                "Inter": "🟠", 
+                "Bradesco": "🔴",
+                "Itaú": "�",
+                "Itau": "🔵",
+                "Santander": "🔴",
+                "Mercado Pago": "🔵",
+                "XP": "⚫",
+                "Banco do Brasil": "🟡",
+                "Caixa": "🔵",
+            }
+            
             for item in items:
-                # Status do item
-                status_emoji = {
-                    "UPDATED": "✅",
-                    "UPDATING": "🔄",
-                    "LOGIN_ERROR": "❌",
-                    "ERROR": "❌",
-                    "PARTIAL_SUCCESS": "⚠️"
-                }.get(item.status, "❓")
+                # Buscar cor do banco
+                bank_emoji = "⚪"
+                for bank_name, color in bank_colors.items():
+                    if bank_name.lower() in item.connector_name.lower():
+                        bank_emoji = color
+                        break
                 
-                # Escapar caracteres especiais para MarkdownV2
+                # Nome do banco escapado
                 safe_bank = item.connector_name.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("]", "\\]")
-                safe_status = item.status.replace("_", "\\_").replace("-", "\\-")
                 
-                message += f"{status_emoji} *{safe_bank}*\n"
-                message += f"    Status: `{safe_status}`\n"
+                message += f"{bank_emoji} *{safe_bank}*\n"
                 
-                # Buscar accounts deste item
+                # Buscar todas as accounts deste banco (cartão + conta)
                 accounts = db.query(PluggyAccount).filter(
                     PluggyAccount.id_item == item.id
                 ).all()
                 
-                if accounts:
-                    for acc in accounts:
-                        # Separador visual
-                        message += f"    ━━━━━━━━━━━━━━━━━━━━\n"
-                        
-                        # Tipo de conta com emoji
-                        if acc.type == "CREDIT":
-                            type_emoji = "💳"
-                            type_name = "Cartão de Crédito"
-                        elif acc.type == "BANK":
-                            type_emoji = "🏦"
-                            type_name = "Conta Bancária"
-                        elif acc.type == "INVESTMENT":
-                            type_emoji = "📈"
-                            type_name = "Investimento"
-                        else:
-                            type_emoji = "💰"
-                            type_name = "Conta"
-                        
-                        # Nome da conta escapado para MarkdownV2
-                        safe_acc_name = acc.name.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("]", "\\]")
-                        
-                        message += f"    {type_emoji} *{safe_acc_name}*\n"
-                        message += f"    `{type_name}`\n\n"
-                        
-                        # Para conta bancária ou investimento: mostrar saldo
-                        if acc.type in ("BANK", "INVESTMENT") and acc.balance is not None:
-                            balance_str = f"R$ {float(acc.balance):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            message += f"    💵 *Saldo:* `{balance_str}`\n"
-                        
-                        # Para cartão de crédito: mostrar limite e fatura
-                        if acc.type == "CREDIT":
-                            if acc.balance is not None:
-                                balance_str = f"R$ {float(acc.balance):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                                message += f"    💵 *Saldo:* `{balance_str}`\n"
-                            
-                            if acc.credit_limit is not None:
-                                limit_str = f"R$ {float(acc.credit_limit):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                                message += f"    💎 *Limite:* `{limit_str}`\n"
-                            
-                            # Calcular fatura atual (saldo disponível - limite)
-                            if acc.balance is not None and acc.credit_limit is not None:
-                                fatura_atual = float(acc.credit_limit) - float(acc.balance)
-                                if fatura_atual > 0:
-                                    fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                                    message += f"    🧾 *Fatura Atual:* `{fatura_str}`\n"
-                        
-                        message += "\n"
-                else:
-                    message += "    ℹ️  _Nenhuma conta encontrada_\n\n"
+                if not accounts:
+                    message += "   ℹ️ _Nenhuma conta encontrada_\n\n"
+                    continue
+                
+                # Separar por tipo
+                bank_accounts = [a for a in accounts if a.type == "BANK"]
+                credit_cards = [a for a in accounts if a.type == "CREDIT"]
+                investments = [a for a in accounts if a.type == "INVESTMENT"]
+                
+                # Saldo total das contas bancárias
+                total_balance = sum(float(a.balance) for a in bank_accounts if a.balance is not None)
+                if total_balance != 0 or bank_accounts:
+                    balance_str = f"R$ {total_balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    message += f"   � *Saldo:* `{balance_str}`\n"
+                
+                # Informações dos cartões de crédito
+                for card in credit_cards:
+                    # Limite do cartão
+                    if card.credit_limit is not None:
+                        limit_str = f"R$ {float(card.credit_limit):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        message += f"   � *Limite Cartão:* `{limit_str}`\n"
+                    
+                    # Fatura atual (limite - saldo disponível)
+                    if card.balance is not None and card.credit_limit is not None:
+                        fatura_atual = float(card.credit_limit) - float(card.balance)
+                        fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        message += f"   🧾 *Fatura Atual:* `{fatura_str}`\n"
+                
+                # Investimentos (se houver)
+                if investments:
+                    total_inv = sum(float(i.balance) for i in investments if i.balance is not None)
+                    if total_inv > 0:
+                        inv_str = f"R$ {total_inv:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        message += f"   📈 *Investimentos:* `{inv_str}`\n"
                 
                 message += "\n"
             
-            message += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            message += "➕ /conectar\\_banco \\- Adicionar banco\n"
-            message += "🗑️ /desconectar\\_banco \\- Remover conexão"
+            # Botões de ação
+            keyboard = [
+                [InlineKeyboardButton("🔄 Sincronizar", callback_data="action_sync")],
+                [InlineKeyboardButton("➕ Conectar Banco", callback_data="action_connect")],
+                [InlineKeyboardButton("🗑️ Desconectar Banco", callback_data="action_disconnect")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.message.reply_text(message, parse_mode="MarkdownV2")
+            message += "━━━━━━━━━━━━━━━━━━━━\n"
+            message += "_Use os botões abaixo:_"
+            
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="MarkdownV2")
             
         except Exception as e:
             logger.error(f"❌ Erro ao listar contas: {e}", exc_info=True)
@@ -1523,8 +1524,7 @@ class OpenFinanceOAuthHandler:
                     )
                 )
                 .order_by(PluggyTransaction.date.desc())
-                .limit(20)  # Limitar a 20 transações por vez
-                .all()
+                .all()  # ✅ Buscar TODAS as transações pendentes (removido limite)
             )
             
             if not pending_txns:
@@ -1542,9 +1542,19 @@ class OpenFinanceOAuthHandler:
             
             keyboard = []
             for idx, txn in enumerate(pending_txns[:10], 1):  # Mostrar apenas 10 por vez
+                # ✅ CORREÇÃO: Determinar cor baseado no tipo de conta
+                account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
+                is_credit_card = account and account.type == "CREDIT"
+                
+                # Para cartão: amount > 0 = GASTO (vermelho), amount < 0 = pagamento (verde)
+                # Para conta normal: amount < 0 = GASTO (vermelho), amount > 0 = receita (verde)
+                if is_credit_card:
+                    emoji = "🔴" if float(txn.amount) > 0 else "🟢"  # Invertido para CC
+                else:
+                    emoji = "🔴" if float(txn.amount) < 0 else "🟢"  # Normal para contas
+                
                 # Formatar valor
                 amount_str = f"R$ {abs(float(txn.amount)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                emoji = "🔴" if float(txn.amount) < 0 else "🟢"
                 
                 # Truncar descrição
                 desc = txn.description[:30] + "..." if len(txn.description) > 30 else txn.description
@@ -1772,6 +1782,34 @@ class OpenFinanceOAuthHandler:
                 )
             except Exception as e:
                 logger.error(f"❌ Erro ao enviar mensagem de timeout: {e}")
+    
+    # ==================== ACTION CALLBACKS (MINHAS_CONTAS) ====================
+    
+    async def handle_action_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Processa callbacks dos botões de ação do /minhas_contas"""
+        query = update.callback_query
+        await query.answer()
+        
+        data = query.data
+        
+        if data == "action_sync":
+            # Redirecionar para sincronização
+            await query.message.reply_text("🔄 Iniciando sincronização...")
+            # Simular comando /sincronizar
+            await self.sincronizar(query, context)
+            return
+        
+        elif data == "action_connect":
+            await query.message.reply_text(
+                "➕ Para conectar um novo banco, use:\n/conectar_banco"
+            )
+            return
+        
+        elif data == "action_disconnect":
+            await query.message.reply_text(
+                "🗑️ Para desconectar um banco, use:\n/desconectar_banco"
+            )
+            return
     
     # ==================== IMPORT CALLBACKS ====================
     
