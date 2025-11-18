@@ -753,6 +753,24 @@ class OpenFinanceOAuthHandler:
         
         logger.info(f"👤 Usuário {user_id} iniciando conexão Open Finance")
         
+        # 🔐 VERIFICAR WHITELIST
+        from config import PLUGGY_WHITELIST_IDS
+        if PLUGGY_WHITELIST_IDS and user_id not in PLUGGY_WHITELIST_IDS:
+            logger.warning(f"🚫 Usuário {user_id} NÃO autorizado a usar Open Finance")
+            await update.message.reply_text(
+                "🔒 *Open Finance Restrito*\n\n"
+                "Esta funcionalidade está temporariamente restrita durante o período de licença acadêmica.\n\n"
+                "✅ Você ainda pode usar:\n"
+                "• 📝 /adicionar - Lançamentos manuais\n"
+                "• 📊 /resumo - Visualizar relatórios\n"
+                "• 🎯 /metas - Gerenciar metas\n"
+                "• 🤖 /gerente - Assistente financeiro IA\n"
+                "• 💰 /investimentos - Cadastro manual\n\n"
+                "💡 _Todas as outras funcionalidades do bot continuam disponíveis!_",
+                parse_mode="Markdown"
+            )
+            return ConversationHandler.END
+        
         # ⚠️ PROTEÇÃO: Verificar se já há conexão pendente
         now = datetime.now()
         if user_id in _pending_connections:
@@ -1236,6 +1254,17 @@ class OpenFinanceOAuthHandler:
         
         logger.info(f"👤 Usuário {user_id} consultando contas Open Finance")
         
+        # 🔐 VERIFICAR WHITELIST
+        from config import PLUGGY_WHITELIST_IDS
+        if PLUGGY_WHITELIST_IDS and user_id not in PLUGGY_WHITELIST_IDS:
+            logger.warning(f"🚫 Usuário {user_id} NÃO autorizado a usar Open Finance")
+            await update.message.reply_text(
+                "🔒 *Open Finance Restrito*\n\n"
+                "Esta funcionalidade está temporariamente restrita durante o período de licença acadêmica.",
+                parse_mode="Markdown"
+            )
+            return
+        
         try:
             from database.database import get_db
             from models import Usuario, PluggyItem, PluggyAccount
@@ -1337,6 +1366,17 @@ class OpenFinanceOAuthHandler:
         
         logger.info(f"👤 Usuário {user_id} solicitou sincronização manual")
         
+        # 🔐 VERIFICAR WHITELIST
+        from config import PLUGGY_WHITELIST_IDS
+        if PLUGGY_WHITELIST_IDS and user_id not in PLUGGY_WHITELIST_IDS:
+            logger.warning(f"🚫 Usuário {user_id} NÃO autorizado a usar Open Finance")
+            await update.message.reply_text(
+                "🔒 *Open Finance Restrito*\n\n"
+                "Esta funcionalidade está temporariamente restrita durante o período de licença acadêmica.",
+                parse_mode="Markdown"
+            )
+            return
+        
         status_msg = await update.message.reply_text(
             "🔄 Sincronizando transações bancárias...\n"
             "Isso pode levar alguns segundos."
@@ -1397,6 +1437,17 @@ class OpenFinanceOAuthHandler:
         user_id = update.effective_user.id
         
         logger.info(f"👤 Usuário {user_id} acessando importação de transações")
+        
+        # 🔐 VERIFICAR WHITELIST
+        from config import PLUGGY_WHITELIST_IDS
+        if PLUGGY_WHITELIST_IDS and user_id not in PLUGGY_WHITELIST_IDS:
+            logger.warning(f"🚫 Usuário {user_id} NÃO autorizado a usar Open Finance")
+            await update.message.reply_text(
+                "🔒 *Open Finance Restrito*\n\n"
+                "Esta funcionalidade está temporariamente restrita durante o período de licença acadêmica.",
+                parse_mode="Markdown"
+            )
+            return
         
         try:
             from database.database import get_db

@@ -53,6 +53,17 @@ PIX_KEY = os.getenv("PIX_KEY")
 PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID")
 PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET")
 
+# Whitelist de usuários autorizados a usar Open Finance
+# Formato: lista de IDs do Telegram separados por vírgula
+# Exemplo: "6157591255,123456789,987654321"
+PLUGGY_WHITELIST = os.getenv("PLUGGY_WHITELIST", "")
+PLUGGY_WHITELIST_IDS = [int(uid.strip()) for uid in PLUGGY_WHITELIST.split(",") if uid.strip().isdigit()]
+
+if PLUGGY_WHITELIST_IDS:
+    logging.info(f"🔐 Open Finance restrito a {len(PLUGGY_WHITELIST_IDS)} usuário(s) autorizado(s)")
+else:
+    logging.info("🌐 Open Finance disponível para TODOS os usuários (Trial Mode)")
+
 
 # --- VALIDAÇÃO E CONFIGURAÇÃO ADICIONAL ---
 
