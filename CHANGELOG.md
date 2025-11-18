@@ -1,5 +1,59 @@
 # Changelog - Maestro Financeiro
 
+## [3.3.0] - 2025-11-18
+
+### 🎯 Wishlist Inteligente - Substituição do Sistema de Metas
+
+#### ✨ Novos Recursos
+- **Análise de Viabilidade Financeira**: Sistema que analisa se seus objetivos são atingíveis com seu padrão atual
+- **Sugestões Personalizadas de Economia**: IA identifica categorias cortáveis e calcula economia potencial
+- **Múltiplas Opções de Plano**:
+  - 📉 **Cortar Gastos Moderado**: Redução de 30% em categorias não essenciais
+  - 📉 **Cortar Gastos Agressivo**: Redução de 50% para metas urgentes
+  - 📅 **Estender Prazo**: Calcula prazo alternativo viável
+  - 💼 **Aumentar Receita**: Sugere quanto de renda extra é necessário
+- **Cálculo de Poupança Real**: Analisa seus últimos 3 meses para determinar capacidade de economizar
+- **Priorização Automática**: Ordena categorias por potencial de economia
+
+#### 🔄 Substituições
+- ❌ **Removido**: `gerente_financeiro/metas_handler.py` (sistema de metas simples)
+- ✅ **Adicionado**: `gerente_financeiro/wishlist_handler.py` (sistema inteligente com IA)
+
+#### 📦 Comandos
+- `/wishlist` - Criar novo desejo com análise de viabilidade completa
+- `/metas` - Listar desejos com indicadores de progresso inteligentes (mantido por compatibilidade)
+
+#### 🧠 Funcionalidades Inteligentes
+- **Análise de Categorias Cortáveis**: Identifica automaticamente onde você pode economizar
+- **Cálculo de Economia Potencial**: Mostra quanto pode economizar reduzindo gastos em cada categoria
+- **Planos de Ação Personalizados**: Gera plano específico baseado na opção escolhida
+- **Alertas de Viabilidade**: Indica se a meta é atingível antes mesmo de criar
+
+#### 🔧 Modificações
+- `bot.py` - Substituídos imports e handlers de metas por wishlist
+- `VERSION` - Atualizado para 3.3.0
+
+---
+
+## [3.2.0] - 2025-11-18
+
+### 🎊 Wrapped Financeiro Anual - Retrospectiva Épica
+
+#### ✨ Novos Recursos
+- **Retrospectiva Anual Completa**: Resumo financeiro do ano com estatísticas e curiosidades
+- **Execução Automática**: Job configurado para 31/dezembro às 13h
+- **Comando Manual**: `/meu_wrapped` para gerar o wrapped a qualquer momento
+
+#### 📦 Arquivos Adicionados
+- `gerente_financeiro/wrapped_anual.py` - Sistema de geração do wrapped
+- `gerente_financeiro/wrapped_anual_handler.py` - Handler do comando
+
+#### 🔧 Modificações
+- `jobs.py` - Adicionado job anual do wrapped (31/dez 13h)
+- `bot.py` - Registrado handler `/meu_wrapped`
+
+---
+
 ## [3.1.0] - 2025-11-18
 
 ### 🤖 Assistente Proativo - Alertas Inteligentes

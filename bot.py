@@ -161,8 +161,8 @@ from gerente_financeiro.handlers import (
 from gerente_financeiro.agendamentos_handler import (
     agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
 )
-from gerente_financeiro.metas_handler import (
-    objetivo_conv, listar_metas_command, deletar_meta_callback, edit_meta_conv
+from gerente_financeiro.wishlist_handler import (
+    wishlist_conv, listar_wishlist_command, deletar_meta_callback
 )
 from gerente_financeiro.onboarding_handler import configurar_conv
 from gerente_financeiro.editing_handler import edit_conv
@@ -378,8 +378,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("delete_user_conv", lambda: delete_user_conv),
         ("contact_conv", lambda: contact_conv),
         ("grafico_conv", lambda: grafico_conv),
-        ("objetivo_conv", lambda: objetivo_conv),
-        ("edit_meta_conv", lambda: edit_meta_conv),
+        ("wishlist_conv", lambda: wishlist_conv),
         ("agendamento_conv", lambda: agendamento_conv),
         ("edit_conv", lambda: edit_conv),
     ]
@@ -405,7 +404,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("relatorio_handler", lambda: relatorio_handler),
         ("/help", lambda: CommandHandler("help", help_command)),
         ("/alerta", lambda: CommandHandler("alerta", schedule_alerts)),
-        ("/metas", lambda: CommandHandler("metas", listar_metas_command)),
+        ("/metas", lambda: CommandHandler("metas", listar_wishlist_command)),
         ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
         ("/notificacoes", lambda: CommandHandler("notificacoes", painel_notificacoes)),
         ("/perfil", lambda: CommandHandler("perfil", show_profile)),

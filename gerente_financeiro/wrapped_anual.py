@@ -21,7 +21,7 @@ from decimal import Decimal
 import calendar
 
 from database.database import get_db
-from models import Usuario, Lancamento, Objetivo, Categoria, ConquistasUsuario
+from models import Usuario, Lancamento, Objetivo, Categoria, ConquistaUsuario
 
 logger = logging.getLogger(__name__)
 
@@ -262,10 +262,10 @@ def calcular_estatisticas_uso(usuario_id: int, ano: int) -> Dict:
         ).scalar() or 0
         
         # Conquistas desbloqueadas no ano
-        conquistas = db.query(func.count(ConquistasUsuario.id)).filter(
+        conquistas = db.query(func.count(ConquistaUsuario.id)).filter(
             and_(
-                ConquistasUsuario.id_usuario == usuario_id,
-                extract('year', ConquistasUsuario.data_conquista) == ano
+                ConquistaUsuario.id_usuario == usuario_id,
+                extract('year', ConquistaUsuario.data_conquista) == ano
             )
         ).scalar() or 0
         
