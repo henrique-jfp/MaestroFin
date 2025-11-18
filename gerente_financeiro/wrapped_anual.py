@@ -35,20 +35,22 @@ def calcular_resumo_financeiro(usuario_id: int, ano: int) -> Dict:
     db = next(get_db())
     try:
         # Receitas totais
-        receitas = db.query(func.sum(Lancamento.valor)).filter(
+        receitas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
                 Lancamento.tipo == 'Entrada',
-                extract('year', Lancamento.data_transacao) == ano
+                extract('year', Lancamento.data_transacao) == ano,
+                Categoria.nome != 'Transferência'
             )
         ).scalar() or 0
-        
+
         # Despesas totais
-        despesas = db.query(func.sum(Lancamento.valor)).filter(
+        despesas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
                 Lancamento.tipo == 'Saída',
-                extract('year', Lancamento.data_transacao) == ano
+                extract('year', Lancamento.data_transacao) == ano,
+                Categoria.nome != 'Transferência'
             )
         ).scalar() or 0
         
@@ -108,21 +110,23 @@ def calcular_evolucao_mensal(usuario_id: int, ano: int) -> Dict:
         meses_dados = {}
         
         for mes in range(1, 13):
-            receitas = db.query(func.sum(Lancamento.valor)).filter(
+            receitas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
                     Lancamento.tipo == 'Entrada',
                     extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes
+                    extract('month', Lancamento.data_transacao) == mes,
+                    Categoria.nome != 'Transferência'
                 )
             ).scalar() or 0
-            
-            despesas = db.query(func.sum(Lancamento.valor)).filter(
+
+            despesas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
                     Lancamento.tipo == 'Saída',
                     extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes
+                    extract('month', Lancamento.data_transacao) == mes,
+                    Categoria.nome != 'Transferência'
                 )
             ).scalar() or 0
             
@@ -146,21 +150,23 @@ def encontrar_melhor_mes(usuario_id: int, ano: int) -> Dict:
         maior_economia = float('-inf')
         
         for mes in range(1, 13):
-            receitas = db.query(func.sum(Lancamento.valor)).filter(
+            receitas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
                     Lancamento.tipo == 'Entrada',
                     extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes
+                    extract('month', Lancamento.data_transacao) == mes,
+                    Categoria.nome != 'Transferência'
                 )
             ).scalar() or 0
-            
-            despesas = db.query(func.sum(Lancamento.valor)).filter(
+
+            despesas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
                     Lancamento.tipo == 'Saída',
                     extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes
+                    extract('month', Lancamento.data_transacao) == mes,
+                    Categoria.nome != 'Transferência'
                 )
             ).scalar() or 0
             
@@ -182,11 +188,12 @@ def encontrar_maior_gasto(usuario_id: int, ano: int) -> Dict:
     """Encontra a transação de maior valor do ano"""
     db = next(get_db())
     try:
-        maior = db.query(Lancamento).filter(
+        maior = db.query(Lancamento).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
                 Lancamento.tipo == 'Saída',
-                extract('year', Lancamento.data_transacao) == ano
+                extract('year', Lancamento.data_transacao) == ano,
+                Categoria.nome != 'Transferência'
             )
         ).order_by(desc(Lancamento.valor)).first()
         
