@@ -1,5 +1,28 @@
 # Changelog - Maestro Financeiro
 
+## [3.1.0] - 2025-11-18
+
+### 🤖 Assistente Proativo - Alertas Inteligentes
+
+#### ✨ Novos Recursos
+- **Análise Proativa de Gastos**: Sistema que monitora automaticamente padrões financeiros
+- **3 Tipos de Alertas Inteligentes**:
+  - 🔴 **Gastos Elevados**: Alerta quando gastos estão 30%+ acima da média histórica
+  - 💰 **Assinaturas Duplicadas**: Detecta serviços similares e calcula economia potencial  
+  - 🎯 **Metas em Risco**: Notifica quando metas estão 15%+ atrasadas
+- **Job Automático**: Roda diariamente às 20h analisando todos os usuários ativos
+- **Comando de Teste**: `/teste_assistente` para análise manual imediata
+
+#### 📦 Arquivos Adicionados
+- `gerente_financeiro/assistente_proativo.py` - Core do sistema de análise
+- `gerente_financeiro/assistente_proativo_handler.py` - Handler do comando de teste
+
+#### 🔧 Modificações
+- `jobs.py` - Adicionado job diário do assistente proativo (20h)
+- `bot.py` - Registrado handler `/teste_assistente`
+
+---
+
 ## [2.0.0] - 2025-11-18
 
 ### 🚀 Major Features
