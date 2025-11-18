@@ -67,9 +67,12 @@
                 <div class="kpi-content">
                     <h4>Receita Total</h4>
                     <p class="valor verde">R$ {{ "%.2f"|format(receita_total|float) }}</p>
-                    {% set var_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
-                    <small class="kpi-meta">{% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs
-                        mês anterior</small>
+                    {% if receita_total|float > 0 %}
+                        {% set var_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
+                        <small class="kpi-meta">{% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs mês anterior</small>
+                    {% else %}
+                        <small class="kpi-meta">Sem dados do mês anterior</small>
+                    {% endif %}
                 </div>
             </div>
             <div class="kpi-box despesa">
@@ -77,9 +80,12 @@
                 <div class="kpi-content">
                     <h4>Despesa Total</h4>
                     <p class="valor vermelho">R$ {{ "%.2f"|format(despesa_total|float) }}</p>
-                    {% set var_despesa = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}
-                    <small class="kpi-meta">{% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs
-                        mês anterior</small>
+                    {% if despesa_total|float > 0 %}
+                        {% set var_despesa = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}
+                        <small class="kpi-meta">{% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs mês anterior</small>
+                    {% else %}
+                        <small class="kpi-meta">Sem dados do mês anterior</small>
+                    {% endif %}
                 </div>
             </div>
             <div class="kpi-box saldo">

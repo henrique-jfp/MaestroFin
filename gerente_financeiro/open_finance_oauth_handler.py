@@ -428,11 +428,19 @@ def save_pluggy_investments_to_db(item_id: str, pluggy_item_id: int, db) -> bool
         from datetime import date
         from decimal import Decimal
         
+        logger.info("=" * 80)
+        logger.info("🚀 INICIANDO BUSCA DE INVESTIMENTOS VIA ENDPOINT /investments")
+        logger.info(f"📋 Item ID: {item_id}")
+        logger.info(f"📋 Pluggy Item ID: {pluggy_item_id}")
+        logger.info("=" * 80)
+        
         logger.info(f"📈 Buscando investimentos via /investments para item {item_id}...")
         
         # Buscar investimentos na API Pluggy
+        logger.info(f"🔄 Fazendo requisição GET /investments?itemId={item_id}")
         try:
             investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id})
+            logger.info(f"✅ Response da API Pluggy /investments: {investments_data}")
         except Exception as api_error:
             logger.warning(f"⚠️  Endpoint /investments não retornou dados para item {item_id}: {api_error}")
             return True  # Não é erro crítico - alguns bancos não têm investimentos
@@ -440,10 +448,12 @@ def save_pluggy_investments_to_db(item_id: str, pluggy_item_id: int, db) -> bool
         investments = investments_data.get("results", [])
         
         if not investments:
-            logger.info(f"ℹ️  Nenhum investimento encontrado via /investments para item {item_id}")
+            logger.warning(f"⚠️  Nenhum investimento encontrado via /investments para item {item_id}")
+            logger.warning(f"📊 Response completo: {investments_data}")
             return True
         
-        logger.info(f"💰 {len(investments)} investimento(s) encontrado(s) via API Pluggy")
+        logger.info(f"💰 {len(investments)} investimento(s) encontrado(s) via API Pluggy!")
+        logger.info(f"📋 Primeiro investimento: {investments[0] if investments else 'N/A'}")
         
         # Buscar item para pegar id_usuario e banco
         pluggy_item = db.query(PluggyItem).filter(PluggyItem.id == pluggy_item_id).first()
@@ -1069,7 +1079,7 @@ class OpenFinanceOAuthHandler:
                 
                 # Iniciar polling em background
                 asyncio.create_task(
-                    self._poll_item_status(user_id, item_id, connector["name"], context)
+                    self._poll_item_status(user_id, item_id, connector["name"], context, connector)
                 )
                 
                 return WAITING_AUTH
