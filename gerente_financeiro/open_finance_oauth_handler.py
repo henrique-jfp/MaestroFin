@@ -1545,6 +1545,14 @@ class OpenFinanceOAuthHandler:
             
             is_credit_card = account and account.type == "CREDIT"
             
+            # 🔍 LOG DETALHADO PARA DEBUG
+            logger.info(f"🔍 Analisando transação {txn.id}:")
+            logger.info(f"   📝 Descrição: {txn.description}")
+            logger.info(f"   💰 Amount: {float(txn.amount)}")
+            logger.info(f"   💳 Tipo conta: {account.type if account else 'UNKNOWN'}")
+            logger.info(f"   🏦 Nome conta: {account.name if account else 'UNKNOWN'}")
+            logger.info(f"   ❓ É cartão crédito? {is_credit_card}")
+            
             if is_credit_card:
                 # Para cartão de crédito: inverter a lógica
                 # amount > 0 = gasto (DESPESA)
@@ -1560,10 +1568,12 @@ class OpenFinanceOAuthHandler:
                     )
                     return
                 else:
-                    tipo = "Despesa"  # Gasto no cartão
+                    tipo = "Despesa"  # Gasto no cartão - SEMPRE DESPESA
+                    logger.info(f"✅ Cartão de crédito: categorizando como DESPESA")
             else:
                 # Para conta corrente/poupança: lógica normal
                 tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
+                logger.info(f"✅ Conta normal: amount={'positivo' if float(txn.amount) > 0 else 'negativo'} → {tipo.upper()}")
             
             # Criar lançamento
             lancamento = Lancamento(
@@ -1648,6 +1658,9 @@ class OpenFinanceOAuthHandler:
                     account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
                     is_credit_card = account and account.type == "CREDIT"
                     
+                    # 🔍 LOG DETALHADO PARA DEBUG
+                    logger.info(f"🔍 [MASSA] Transação {txn.id}: {txn.description} | Amount: {float(txn.amount)} | Tipo conta: {account.type if account else 'UNKNOWN'} | É CC? {is_credit_card}")
+                    
                     # Para cartão de crédito, pular pagamentos de fatura
                     if is_credit_card and float(txn.amount) < 0:
                         logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando")
@@ -1660,9 +1673,11 @@ class OpenFinanceOAuthHandler:
                     
                     # Determinar tipo
                     if is_credit_card:
-                        tipo = "Despesa"  # Gastos no cartão são sempre despesa
+                        tipo = "Despesa"  # Gastos no cartão são SEMPRE despesa
+                        logger.info(f"✅ [MASSA] Cartão de crédito: {txn.id} → DESPESA")
                     else:
                         tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
+                        logger.info(f"✅ [MASSA] Conta normal: {txn.id} → {tipo.upper()} (amount={'positivo' if float(txn.amount) > 0 else 'negativo'})")
                     
                     # Criar lançamento
                     lancamento = Lancamento(
