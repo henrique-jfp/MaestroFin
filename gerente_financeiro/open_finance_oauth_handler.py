@@ -396,6 +396,12 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         except Exception as e:
             logger.error(f"⚠️  Erro ao sincronizar investimentos: {e}", exc_info=True)
         
+        # 📈 BUSCAR INVESTIMENTOS via endpoint /investments da Pluggy
+        try:
+            save_pluggy_investments_to_db(item_id, pluggy_item.id, db)
+        except Exception as e:
+            logger.error(f"⚠️  Erro ao buscar investimentos do endpoint /investments: {e}", exc_info=True)
+        
         return True
         
     except Exception as e:
@@ -403,6 +409,127 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         return False
     finally:
         db.close()
+
+
+def save_pluggy_investments_to_db(item_id: str, pluggy_item_id: int, db) -> bool:
+    """
+    Busca investimentos do endpoint /investments da Pluggy e salva no banco.
+    
+    Args:
+        item_id: ID do item na Pluggy (string UUID)
+        pluggy_item_id: ID local do PluggyItem no banco
+        db: Sessão do banco de dados (já aberta)
+    
+    Returns:
+        True se salvou com sucesso, False caso contrário
+    """
+    try:
+        from models import PluggyItem, Investment, InvestmentSnapshot, Usuario
+        from datetime import date
+        from decimal import Decimal
+        
+        logger.info(f"📈 Buscando investimentos via /investments para item {item_id}...")
+        
+        # Buscar investimentos na API Pluggy
+        try:
+            investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id})
+        except Exception as api_error:
+            logger.warning(f"⚠️  Endpoint /investments não retornou dados para item {item_id}: {api_error}")
+            return True  # Não é erro crítico - alguns bancos não têm investimentos
+        
+        investments = investments_data.get("results", [])
+        
+        if not investments:
+            logger.info(f"ℹ️  Nenhum investimento encontrado via /investments para item {item_id}")
+            return True
+        
+        logger.info(f"💰 {len(investments)} investimento(s) encontrado(s) via API Pluggy")
+        
+        # Buscar item para pegar id_usuario e banco
+        pluggy_item = db.query(PluggyItem).filter(PluggyItem.id == pluggy_item_id).first()
+        if not pluggy_item:
+            logger.error(f"❌ PluggyItem {pluggy_item_id} não encontrado")
+            return False
+        
+        id_usuario = pluggy_item.id_usuario
+        banco_nome = pluggy_item.connector_name
+        
+        saved_count = 0
+        for inv_data in investments:
+            try:
+                # Verificar se investimento já existe (por código único)
+                codigo = inv_data.get("code") or inv_data.get("name") or inv_data.get("id")
+                
+                existing_inv = db.query(Investment).filter(
+                    Investment.id_usuario == id_usuario,
+                    Investment.banco == banco_nome,
+                    Investment.codigo == codigo
+                ).first()
+                
+                # Extrair dados
+                tipo = inv_data.get("type", "Desconhecido")
+                nome = inv_data.get("name", codigo)
+                quantidade = Decimal(str(inv_data.get("quantity", 0)))
+                valor_atual = Decimal(str(inv_data.get("balance", 0)))
+                valor_investido = Decimal(str(inv_data.get("investedAmount", valor_atual)))
+                
+                if existing_inv:
+                    # Atualizar investimento existente
+                    existing_inv.quantidade = quantidade
+                    existing_inv.valor_atual = valor_atual
+                    existing_inv.valor_investido = valor_investido
+                    existing_inv.tipo = tipo
+                    
+                    # Criar snapshot
+                    snapshot = InvestmentSnapshot(
+                        id_investimento=existing_inv.id,
+                        data=date.today(),
+                        valor=valor_atual,
+                        quantidade=quantidade
+                    )
+                    db.add(snapshot)
+                    
+                    logger.info(f"🔄 Investimento atualizado: {nome} = R$ {valor_atual}")
+                else:
+                    # Criar novo investimento
+                    new_inv = Investment(
+                        id_usuario=id_usuario,
+                        tipo=tipo,
+                        banco=banco_nome,
+                        nome=nome,
+                        codigo=codigo,
+                        quantidade=quantidade,
+                        valor_investido=valor_investido,
+                        valor_atual=valor_atual,
+                        data_aplicacao=date.today()
+                    )
+                    db.add(new_inv)
+                    db.flush()  # Para obter o ID
+                    
+                    # Criar snapshot inicial
+                    snapshot = InvestmentSnapshot(
+                        id_investimento=new_inv.id,
+                        data=date.today(),
+                        valor=valor_atual,
+                        quantidade=quantidade
+                    )
+                    db.add(snapshot)
+                    
+                    saved_count += 1
+                    logger.info(f"✅ Novo investimento: {nome} ({tipo}) = R$ {valor_atual}")
+                
+            except Exception as inv_error:
+                logger.error(f"❌ Erro ao processar investimento {inv_data.get('id')}: {inv_error}")
+                continue
+        
+        db.commit()
+        logger.info(f"💾 {saved_count} investimento(s) novo(s) salvo(s) via API Pluggy")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao salvar investimentos da API Pluggy: {e}", exc_info=True)
+        return False
 
 
 def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days: int = 30) -> Dict:
