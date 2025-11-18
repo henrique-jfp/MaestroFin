@@ -33,6 +33,9 @@ PLUGGY_BASE_URL = "https://api.pluggy.ai"
 # Cache de API Key
 _api_key_cache = {"key": None, "expires_at": None}
 
+# Cache de conexões pendentes por usuário (evitar múltiplas conexões simultâneas)
+_pending_connections = {}  # {user_id: {"item_id": str, "timestamp": datetime, "connector_name": str}}
+
 
 def get_pluggy_api_key() -> str:
     """Obtém API Key da Pluggy (com cache de 23h)"""
@@ -437,6 +440,28 @@ class OpenFinanceOAuthHandler:
         
         logger.info(f"👤 Usuário {user_id} iniciando conexão Open Finance")
         
+        # ⚠️ PROTEÇÃO: Verificar se já há conexão pendente
+        now = datetime.now()
+        if user_id in _pending_connections:
+            pending = _pending_connections[user_id]
+            elapsed = (now - pending["timestamp"]).total_seconds()
+            
+            # Se passou menos de 5 minutos, bloquear nova tentativa
+            if elapsed < 300:  # 5 minutos
+                await update.message.reply_text(
+                    f"⏳ *Você já tem uma conexão em andamento!*\n\n"
+                    f"🏦 Banco: {pending['connector_name']}\n"
+                    f"⏱ Iniciada há {int(elapsed/60)} minuto(s)\n\n"
+                    f"⚠️ Aguarde 5 minutos ou complete a conexão anterior antes de iniciar uma nova.\n\n"
+                    f"💡 _Use /minhas_contas para ver suas conexões ativas._",
+                    parse_mode="Markdown"
+                )
+                return ConversationHandler.END
+            else:
+                # Se passou mais de 5 minutos, limpar automaticamente
+                logger.warning(f"🧹 Limpando conexão pendente expirada para usuário {user_id}")
+                del _pending_connections[user_id]
+        
         await update.message.reply_text(
             "🏦 *Conectar Banco via Open Finance*\n\n"
             "Vou listar os bancos disponíveis...",
@@ -559,6 +584,11 @@ class OpenFinanceOAuthHandler:
         await query.answer()
         
         if query.data == "of_cancel":
+            user_id = update.effective_user.id
+            # ❌ LIMPAR conexão pendente (cancelada)
+            if user_id in _pending_connections:
+                del _pending_connections[user_id]
+                logger.info(f"🧹 Conexão pendente removida para usuário {user_id} (cancelada)")
             await query.edit_message_text("❌ Conexão cancelada.")
             return ConversationHandler.END
         
@@ -656,6 +686,14 @@ class OpenFinanceOAuthHandler:
                 "connector": connector,
                 "created_at": datetime.now()
             }
+            
+            # ⚠️ PROTEÇÃO: Registrar conexão pendente
+            _pending_connections[user_id] = {
+                "item_id": item_id,
+                "timestamp": datetime.now(),
+                "connector_name": connector['name']
+            }
+            logger.info(f"🔒 Conexão pendente registrada para usuário {user_id}")
             
             # Aguardar alguns segundos para API processar
             await asyncio.sleep(3)
@@ -802,6 +840,11 @@ class OpenFinanceOAuthHandler:
         await query.answer("🔄 Verificando autorização...")
         
         if query.data == "of_cancel_auth":
+            user_id = update.effective_user.id
+            # ❌ LIMPAR conexão pendente (autorização cancelada)
+            if user_id in _pending_connections:
+                del _pending_connections[user_id]
+                logger.info(f"🧹 Conexão pendente removida para usuário {user_id} (auth cancelada)")
             await query.edit_message_text("❌ Autorização cancelada.")
             return ConversationHandler.END
         
@@ -814,6 +857,12 @@ class OpenFinanceOAuthHandler:
             
             if status in ("UPDATED", "PARTIAL_SUCCESS"):
                 connector_name = item.get("connector", {}).get("name", "Banco")
+                user_id = update.effective_user.id
+                
+                # ✅ LIMPAR conexão pendente (concluída com sucesso)
+                if user_id in _pending_connections:
+                    del _pending_connections[user_id]
+                    logger.info(f"✅ Conexão pendente removida para usuário {user_id} (sucesso)")
                 
                 await query.edit_message_text(
                     f"✅ *Banco conectado com sucesso!*\n\n"
@@ -1198,6 +1247,11 @@ class OpenFinanceOAuthHandler:
                 
                 # Status de sucesso
                 if status in ("UPDATED", "PARTIAL_SUCCESS"):
+                    # ✅ LIMPAR conexão pendente (sucesso)
+                    if user_id in _pending_connections:
+                        del _pending_connections[user_id]
+                        logger.info(f"✅ Conexão pendente removida para usuário {user_id} (polling success)")
+                    
                     # 💾 Salvar item e accounts no banco de dados
                     try:
                         # Buscar dados do conector (precisa estar salvo no contexto)
