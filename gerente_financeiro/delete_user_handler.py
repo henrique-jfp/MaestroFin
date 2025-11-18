@@ -32,6 +32,7 @@ def track_analytics(command_name):
         return wrapper
     return decorator
 
+import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -44,6 +45,20 @@ from .handlers import cancel # Reutilizamos a função de cancelamento
 from .states import CONFIRM_DELETION
 
 logger = logging.getLogger(__name__)
+
+
+async def delete_message_after_delay(bot, chat_id: int, message_id: int, delay_seconds: int = 10) -> None:
+    """Remove uma mensagem do bot após um pequeno atraso."""
+    await asyncio.sleep(delay_seconds)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as exc:  # noqa: BLE001 - logamos para debug, não é crítico
+        logging.debug(
+            "⚠️ Não foi possível apagar mensagem %s do chat %s: %s",
+            message_id,
+            chat_id,
+            exc,
+        )
 
 async def start_delete_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia o fluxo de exclusão de dados do usuário."""
@@ -69,7 +84,11 @@ async def start_delete_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_html(text, reply_markup=reply_markup)
+    prompt_message = await update.message.reply_html(text, reply_markup=reply_markup)
+
+    # Guardamos o ID da mensagem enviada pelo bot para poder apagá-la depois
+    cleanup_messages = context.user_data.setdefault("delete_user_cleanup", [])
+    cleanup_messages.append(prompt_message.message_id)
     
     return CONFIRM_DELETION
 
@@ -92,6 +111,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
             
             if sucesso:
+                cleanup_messages = context.user_data.get("delete_user_cleanup", [])
+
                 await query.edit_message_text(
                     "✅ <b>Dados apagados com sucesso!</b>\n\n"
                     "Tudo foi permanentemente removido:\n"
@@ -102,10 +123,27 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     "  ✓ Configurações\n"
                     "  ✓ Histórico de gamificação\n\n"
                     "Obrigado por usar o Maestro Financeiro! 💜\n\n"
-                    "Para começar de novo, use /start",
+                    "Para começar de novo, use /start\n\n"
+                    "<i>Esta conversa será limpa automaticamente em instantes.</i>",
                     parse_mode="HTML"
                 )
                 logger.info(f"✅ Usuário {username} (ID: {user_id}) teve todos os dados deletados com sucesso")
+
+                cleanup_messages.append(query.message.message_id)
+
+                # Agenda remoção das mensagens do bot para que a conversa fique vazia
+                chat_id = query.message.chat_id
+                for message_id in set(cleanup_messages):
+                    context.application.create_task(
+                        delete_message_after_delay(
+                            bot=context.bot,
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            delay_seconds=12,
+                        )
+                    )
+
+                context.user_data["delete_user_cleanup"] = []
             else:
                 await query.edit_message_text(
                     "❌ <b>Erro ao apagar dados</b>\n\n"
@@ -114,6 +152,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     parse_mode="HTML"
                 )
                 logger.error(f"❌ Falha ao deletar dados do usuário {username} (ID: {user_id})")
+                context.user_data["delete_user_cleanup"] = []
         
         except Exception as e:
             logger.error(f"❌ ERRO CRÍTICO ao deletar dados do usuário {user_id}: {e}", exc_info=True)
@@ -123,12 +162,14 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "Use /contato para relatar o problema.",
                 parse_mode="HTML"
             )
+            context.user_data["delete_user_cleanup"] = []
             
         return ConversationHandler.END
         
     else: # delete_confirm_no
         await query.edit_message_text("✅ Ufa! Seus dados estão seguros. Operação cancelada.")
         logger.info(f"ℹ️ Usuário {query.from_user.id} cancelou deleção de dados")
+        context.user_data["delete_user_cleanup"] = []
         return ConversationHandler.END
 
 # Cria o ConversationHandler para ser importado no bot.py
