@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 from open_finance.bank_connector import BankConnector
 from telegram.ext import ContextTypes
+from database.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class DataSynchronizer:
     
     def __init__(self):
         self.connector = BankConnector()
+        self.db = Database()
     
     async def sync_all_connections(self, context: ContextTypes.DEFAULT_TYPE | None = None):
         """
@@ -34,7 +36,7 @@ class DataSynchronizer:
                 LIMIT 100
             """
             
-            connections = self.connector.db.execute_query(query, fetch=True)
+            connections = self.db.execute_query(query, fetch=True)
             
             if not connections:
                 logger.info("ℹ️ Nenhuma conexão para sincronizar")
@@ -60,7 +62,7 @@ class DataSynchronizer:
                     
                 except Exception as e:
                     error_count += 1
-                    logger.error(f"❌ Erro ao sincronizar {bank_name}: {e}")
+                    logger.error(f"❌ Erro ao sincronizar {bank_name}: {e}", exc_info=True)
             
             logger.info(
                 f"✅ Sincronização concluída: "
@@ -68,7 +70,8 @@ class DataSynchronizer:
             )
             
         except Exception as e:
-            logger.error(f"❌ Erro na sincronização automática: {e}")
+            logger.error(f"❌ Erro na sincronização automática: {e}", exc_info=True)
+            # NÃO fazer raise - isso quebraria o job scheduler
     
     async def sync_user_connections(self, user_id: int):
         """
