@@ -1426,13 +1426,22 @@ class OpenFinanceOAuthHandler:
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
-                await status_msg.edit_text(
+                # Mensagem principal
+                msg_text = (
                     f"🔐 *Autorização Necessária*\n\n"
                     f"🏦 Banco: *{connector['name']}*\n"
                     f"🆔 Conexão: `{item_id}`\n\n"
                     f"👉 Clique no botão abaixo para autorizar o acesso:\n\n"
                     f"⚠️ Você será redirecionado para o site oficial do banco.\n"
-                    f"✅ Após autorizar, clique em *'Já Autorizei'*.",
+                    f"✅ Após autorizar, clique em *'Já Autorizei'*."
+                )
+                
+                # Adicionar link bruto para casos de erro (ex: Bradesco no mobile)
+                # Isso ajuda quando o deep link falha e abre a loja de apps
+                msg_text += f"\n\n💡 *Problemas?* Copie e cole no navegador:\n`{oauth_url}`"
+
+                await status_msg.edit_text(
+                    msg_text,
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
@@ -2098,6 +2107,10 @@ class OpenFinanceOAuthHandler:
                         
                         safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
                         
+                        # Escape URL for MarkdownV2 code block
+                        # In MarkdownV2 code blocks, only ` and \ need escaping
+                        safe_url = oauth_url.replace("\\", "\\\\").replace("`", "\\`")
+                        
                         await context.bot.send_message(
                             chat_id=user_id,
                             text=f"🔐 *Autorização Necessária*\n\n"
@@ -2105,7 +2118,9 @@ class OpenFinanceOAuthHandler:
                                  f"🆔 Conexão: `{item_id}`\n\n"
                                  f"👉 Clique no botão abaixo para autorizar o acesso:\n\n"
                                  f"⚠️ Você será redirecionado para o site oficial do banco\\.\n"
-                                 f"✅ Após autorizar, clique em *'Já Autorizei'*\\.",
+                                 f"✅ Após autorizar, clique em *'Já Autorizei'*\\.\n\n"
+                                 f"💡 *Problemas?* Copie e cole no navegador:\n"
+                                 f"`{safe_url}`",
                             reply_markup=reply_markup,
                             parse_mode="MarkdownV2"
                         )
