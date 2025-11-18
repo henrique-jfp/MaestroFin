@@ -182,6 +182,9 @@ from gerente_financeiro.investment_handler import get_investment_handlers
 # 🤖 ASSISTENTE PROATIVO
 from gerente_financeiro.assistente_proativo_handler import teste_assistente_handler
 
+# 🎊 WRAPPED ANUAL
+from gerente_financeiro.wrapped_anual_handler import meu_wrapped_handler
+
 # 🏦 OPEN FINANCE OAUTH (substitui handler antigo)
 try:
     from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
@@ -413,6 +416,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),
         ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
         ("/teste_assistente", lambda: teste_assistente_handler),
+        ("/meu_wrapped", lambda: meu_wrapped_handler),
     ]
     
     # Adicionar comandos Open Finance se habilitado
