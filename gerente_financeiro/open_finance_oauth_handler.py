@@ -121,26 +121,35 @@ class OpenFinanceOAuthHandler:
             # Ordenar por nome
             oauth_connectors.sort(key=lambda x: x["name"])
             
-            # Mostrar primeiros 20 bancos mais populares
-            popular_banks = [
-                "Banco do Brasil", "Bradesco", "Caixa", "Itaú", "Nubank",
-                "Santander", "Banco Inter", "C6 Bank", "PagBank", "Banco Original",
-                "Banco BMG", "Neon", "Next", "Mercado Pago", "PicPay"
+            # Bancos obrigatórios (principais do Brasil)
+            priority_banks = [
+                "Nubank", "Inter", "Bradesco", "Itaú", "Itau", "Santander", 
+                "Mercado Pago", "XP", "Banco do Brasil", "Caixa"
             ]
             
-            # Separar populares dos outros
-            popular = []
+            # Separar bancos principais dos outros
+            priority = []
             others = []
             
             for conn in oauth_connectors:
                 name = conn["name"]
-                if any(bank.lower() in name.lower() for bank in popular_banks):
-                    popular.append(conn)
+                if any(bank.lower() in name.lower() for bank in priority_banks):
+                    priority.append(conn)
                 else:
                     others.append(conn)
             
-            # Limitar a 15 populares + 5 outros
-            display_connectors = popular[:15] + others[:5]
+            # Ordenar prioridade por ordem da lista priority_banks
+            def get_priority_index(conn):
+                name_lower = conn["name"].lower()
+                for idx, bank in enumerate(priority_banks):
+                    if bank.lower() in name_lower:
+                        return idx
+                return 999
+            
+            priority.sort(key=get_priority_index)
+            
+            # Mostrar APENAS bancos prioritários (sem "outros")
+            display_connectors = priority[:20]  # Máximo 20 bancos principais
             
             # Criar teclado inline
             keyboard = []
@@ -427,13 +436,15 @@ class OpenFinanceOAuthHandler:
                 
                 # Status de sucesso
                 if status in ("UPDATED", "PARTIAL_SUCCESS"):
+                    # Escapar caracteres especiais do Markdown
+                    safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
                     await context.bot.send_message(
                         chat_id=user_id,
-                        text=f"✅ *Banco conectado!*\n\n"
-                             f"🏦 {bank_name}\n"
+                        text=f"✅ *Banco conectado\\!*\n\n"
+                             f"🏦 {safe_bank_name}\n"
                              f"✅ Sincronização concluída\n\n"
-                             f"Use /minhas_contas para ver suas contas.",
-                        parse_mode="Markdown"
+                             f"Use /minhas\\_contas para ver suas contas\\.",
+                        parse_mode="MarkdownV2"
                     )
                     logger.info(f"✅ Item {item_id} conectado com sucesso")
                     break
@@ -441,14 +452,18 @@ class OpenFinanceOAuthHandler:
                 # Status de erro
                 if status in ("LOGIN_ERROR", "INVALID_CREDENTIALS", "ERROR", "SUSPENDED"):
                     status_detail = item.get("statusDetail", "Erro desconhecido")
+                    # Escapar caracteres especiais
+                    safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
+                    safe_status = status.replace("_", "\\_")
+                    safe_detail = status_detail.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[")
                     await context.bot.send_message(
                         chat_id=user_id,
                         text=f"❌ *Falha na conexão*\n\n"
-                             f"🏦 {bank_name}\n"
-                             f"❌ Status: {status}\n"
-                             f"📝 Detalhes: {status_detail}\n\n"
-                             f"Tente novamente com /conectar_banco",
-                        parse_mode="Markdown"
+                             f"🏦 {safe_bank_name}\n"
+                             f"❌ Status: {safe_status}\n"
+                             f"📝 Detalhes: {safe_detail}\n\n"
+                             f"Tente novamente com /conectar\\_banco",
+                        parse_mode="MarkdownV2"
                     )
                     logger.warning(f"❌ Item {item_id} falhou: {status}")
                     break
@@ -462,13 +477,14 @@ class OpenFinanceOAuthHandler:
         if attempt >= max_attempts:
             logger.warning(f"⏰ Timeout no polling do item {item_id}")
             try:
+                safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
                 await context.bot.send_message(
                     chat_id=user_id,
                     text=f"⏰ *Timeout na conexão*\n\n"
-                         f"🏦 {bank_name}\n"
-                         f"⏳ A sincronização está demorando mais que o esperado.\n\n"
-                         f"Verifique /minhas_contas em alguns minutos.",
-                    parse_mode="Markdown"
+                         f"🏦 {safe_bank_name}\n"
+                         f"⏳ A sincronização está demorando mais que o esperado\\.\n\n"
+                         f"Verifique /minhas\\_contas em alguns minutos\\.",
+                    parse_mode="MarkdownV2"
                 )
             except Exception as e:
                 logger.error(f"❌ Erro ao enviar mensagem de timeout: {e}")
