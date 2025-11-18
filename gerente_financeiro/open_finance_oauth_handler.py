@@ -1394,7 +1394,33 @@ class OpenFinanceOAuthHandler:
             suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
             
             # Determinar tipo (receita ou despesa)
-            tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
+            # IMPORTANTE: Para cartões de crédito, a lógica é INVERTIDA!
+            # - Gastos no cartão: amount > 0 (mas é DESPESA)
+            # - Pagamento de fatura: amount < 0 (mas é CRÉDITO/redução da dívida)
+            from models import PluggyAccount
+            account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
+            
+            is_credit_card = account and account.type == "CREDIT"
+            
+            if is_credit_card:
+                # Para cartão de crédito: inverter a lógica
+                # amount > 0 = gasto (DESPESA)
+                # amount < 0 = pagamento da fatura (não registrar como lançamento)
+                if float(txn.amount) < 0:
+                    # Pagamento de fatura - não importar
+                    logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando importação")
+                    await query.edit_message_text(
+                        "ℹ️ *Pagamento de fatura detectado*\n\n"
+                        "Esta transação é um pagamento de fatura do cartão\\.\n"
+                        "Não será importada para evitar duplicação\\.",
+                        parse_mode="MarkdownV2"
+                    )
+                    return
+                else:
+                    tipo = "Despesa"  # Gasto no cartão
+            else:
+                # Para conta corrente/poupança: lógica normal
+                tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
             
             # Criar lançamento
             lancamento = Lancamento(
@@ -1402,7 +1428,7 @@ class OpenFinanceOAuthHandler:
                 valor=abs(float(txn.amount)),
                 tipo=tipo,
                 data_transacao=datetime.combine(txn.date, datetime.min.time()),
-                forma_pagamento="Open Finance",
+                forma_pagamento="Cartão de Crédito" if is_credit_card else "Open Finance",
                 id_usuario=usuario.id,
                 id_categoria=suggested_category.id if suggested_category else None
             )
@@ -1471,13 +1497,29 @@ class OpenFinanceOAuthHandler:
                 return
             
             imported_count = 0
+            skipped_count = 0
+            
             for txn in pending_txns:
                 try:
+                    # Buscar conta para verificar tipo
+                    account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
+                    is_credit_card = account and account.type == "CREDIT"
+                    
+                    # Para cartão de crédito, pular pagamentos de fatura
+                    if is_credit_card and float(txn.amount) < 0:
+                        logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando")
+                        txn.imported_to_lancamento = True  # Marcar como "importada" para não aparecer de novo
+                        skipped_count += 1
+                        continue
+                    
                     # Sugerir categoria
                     suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
                     
                     # Determinar tipo
-                    tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
+                    if is_credit_card:
+                        tipo = "Despesa"  # Gastos no cartão são sempre despesa
+                    else:
+                        tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
                     
                     # Criar lançamento
                     lancamento = Lancamento(
@@ -1485,7 +1527,7 @@ class OpenFinanceOAuthHandler:
                         valor=abs(float(txn.amount)),
                         tipo=tipo,
                         data_transacao=datetime.combine(txn.date, datetime.min.time()),
-                        forma_pagamento="Open Finance",
+                        forma_pagamento="Cartão de Crédito" if is_credit_card else "Open Finance",
                         id_usuario=usuario.id,
                         id_categoria=suggested_category.id if suggested_category else None
                     )
@@ -1504,12 +1546,13 @@ class OpenFinanceOAuthHandler:
             
             db.commit()
             
-            await query.edit_message_text(
-                f"✅ *Importação concluída\\!*\n\n"
-                f"📊 {imported_count} transação\\(ões\\) importada\\(s\\)\\.\n\n"
-                f"Use /relatorio para ver seus gastos\\.",
-                parse_mode="MarkdownV2"
-            )
+            message = f"✅ *Importação concluída\\!*\n\n"
+            message += f"📊 {imported_count} transação\\(ões\\) importada\\(s\\)\n"
+            if skipped_count > 0:
+                message += f"⏭️ {skipped_count} pagamento\\(s\\) de fatura ignorado\\(s\\)\n"
+            message += f"\nUse /relatorio para ver seus gastos\\."
+            
+            await query.edit_message_text(message, parse_mode="MarkdownV2")
             
             logger.info(f"✅ {imported_count} transações importadas para usuário {user_id}")
             
