@@ -417,8 +417,9 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
             ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas)),
             ("/sincronizar", lambda: CommandHandler("sincronizar", of_oauth_handler.sincronizar)),
             ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
+            ("/categorizar", lambda: CommandHandler("categorizar", of_oauth_handler.categorizar_lancamentos)),
         ])
-        logger.info("✅ Comandos Open Finance adicionados: /minhas_contas, /sincronizar, /importar_transacoes")
+        logger.info("✅ Comandos Open Finance adicionados: /minhas_contas, /sincronizar, /importar_transacoes, /categorizar")
     
     # Adicionar handlers de investimentos
     try:
