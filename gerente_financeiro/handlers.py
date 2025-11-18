@@ -407,8 +407,6 @@ HELP_TEXTS = {
         "A forma mais fácil de manter suas finanças em dia.\n\n"
         "📸  <b>Leitura Automática (OCR)</b>\n"
         "   • Dentro do comando <code>/lancamento</code>, envie uma <b>foto ou PDF</b> de um cupom fiscal e eu extraio os dados para você.\n\n"
-        "📄  <code>/fatura</code>\n"  # <-- LINHA ADICIONADA
-        "   • Envie o <b>PDF da fatura do seu cartão</b> e eu lanço todas as despesas de uma vez, de forma inteligente!\n\n" # <-- LINHA ADICIONADA
         "⌨️  <code>/lancamento</code>\n"
         "   • Use para registrar uma <b>Entrada</b> ou <b>Saída</b> manualmente através de um guia passo a passo.\n\n"
         "✏️  <code>/editar</code>\n"

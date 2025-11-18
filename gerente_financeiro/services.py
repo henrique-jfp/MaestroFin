@@ -746,9 +746,8 @@ def _gerar_mensagem_resultado_salvamento(stats: dict, tipo_origem: str) -> str:
     valor_total = stats['valor_total']
     
     emoji_origem = {
-        'fatura': '💳',
-        'extrato': '🏦', 
-        'manual': '✏️'
+        'manual': '✏️',
+        'openfinance': '🏦'
     }.get(tipo_origem, '📝')
     
     msg = f"{emoji_origem} <b>Processamento concluído!</b>\n\n"

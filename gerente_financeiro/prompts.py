@@ -276,41 +276,6 @@ PROMPT_ANALISE_RELATORIO = """
 **ESCREVA SUA ANÁLISE AGORA:**
 """
 
-PROMPT_ANALISE_EXTRATO = """
-**TAREFA:** Sua única tarefa é analisar o texto de um extrato bancário e converter as transações em um objeto JSON. Seja extremamente rigoroso.
-
-**REGRAS INQUEBRÁVEIS:**
-- **SUA RESPOSTA DEVE SER APENAS O CÓDIGO JSON.** Não inclua explicações, saudações ou qualquer texto fora do bloco JSON.
-- Comece sua resposta com ```json e termine com ```.
-- **IGNORE** linhas de saldo, limites e informações do cabeçalho. Foque apenas na lista de transações.
-- **IDENTIFIQUE O TIPO:** Use a descrição para definir o `tipo_transacao`.
-  - `Entrada`: PIX recebido, TED recebida, Depósito, Salário, Rendimento, Estorno recebido.
-  - `Saída`: PIX enviado, TED enviada, Pagamento de Boleto, Compra no Débito, Saque, Tarifa.
-- Se o ano não for explícito na data, use o ano atual: {ano_atual}.
-
-**CONTEXTO DE CATEGORIAS DISPONÍVEIS:**
-{categorias_disponiveis}
-
-**FORMATO DA SAÍDA JSON (OBRIGATÓRIO):**
-```json
-{{
-  "nome_banco_sugerido": "Nome do Banco",
-  "periodo_extrato_sugerido": "DD/MM/AAAA a DD/MM/AAAA",
-  "transacoes": [
-    {{
-      "data": "DD/MM/AAAA",
-      "descricao": "DESCRIÇÃO COMPLETA DA TRANSAÇÃO",
-      "valor": VALOR_NUMERICO_FLOAT,
-      "tipo_transacao": "Entrada ou Saída",
-      "categoria_sugerida": "Nome da Categoria",
-      "subcategoria_sugerida": "Nome da Subcategoria"
-    }}
-  ]
-}}
-TEXTO EXTRAÍDO DO EXTRATO PARA ANÁLISE:
-{texto_extrato}
-"""
-
 # Template de resposta estruturada disponível para o prompt PROMPT_GERENTE_VDM
 TEMPLATE_RESPOSTA_ESTRUTURADA = """
 Formato sugerido para respostas de análise:

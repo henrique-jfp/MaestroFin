@@ -569,11 +569,3 @@ async def verificar_transacao_duplicada(user_id: int, descricao: str, valor: flo
         return False  # Em caso de erro, permitir o processamento
     finally:
         db.close()  # 🔧 CORREÇÃO: Sempre fechar a conexão
-
-
-async def verificar_fatura_recente(user_id: int, file_name: str, file_size: int) -> bool:
-    """
-    🗑️ FUNÇÃO DEPRECADA - Mantida apenas para compatibilidade.
-    Agora usamos verificação por transação individual.
-    """
-    return False  # Sempre permite processamento

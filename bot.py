@@ -135,7 +135,6 @@ def home():
         "version": "3.1.0"
     })
 
-from gerente_financeiro.extrato_handler import criar_conversation_handler_extrato
 from sqlalchemy.orm import Session, joinedload
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
@@ -172,9 +171,6 @@ from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.manual_entry_handler import manual_entry_conv
 from gerente_financeiro.contact_handler import contact_conv
 from gerente_financeiro.delete_user_handler import delete_user_conv
-from gerente_financeiro.fatura_handler import (
-    fatura_conv, callback_agendar_parcelas_sim, callback_agendar_parcelas_nao
-)  # <-- Importar também os callbacks
 from gerente_financeiro.dashboard_handler import (
     cmd_dashboard, cmd_dashstatus, dashboard_callback_handler
 )
@@ -373,7 +369,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("gerente_conv", create_gerente_conversation_handler),
         ("cadastro_email_conv", create_cadastro_email_conversation_handler),
         ("manual_entry_conv", lambda: manual_entry_conv),
-        ("fatura_conv", lambda: fatura_conv),
         ("delete_user_conv", lambda: delete_user_conv),
         ("contact_conv", lambda: contact_conv),
         ("grafico_conv", lambda: grafico_conv),
@@ -381,7 +376,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("edit_meta_conv", lambda: edit_meta_conv),
         ("agendamento_conv", lambda: agendamento_conv),
         ("edit_conv", lambda: edit_conv),
-        ("extrato_conv", criar_conversation_handler_extrato),
     ]
     
     # 🔐 Open Finance OAuth - Substitui handler antigo
@@ -446,8 +440,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
-        ("fatura_agendar_sim", lambda: CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$")),
-        ("fatura_agendar_nao", lambda: CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$")),
     ]
     
     # Adicionar callback handler Open Finance
