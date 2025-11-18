@@ -1464,19 +1464,39 @@ def _gerar_chave_resposta_ia(user_id: int, pergunta: str, hash_dados: str) -> st
     return hashlib.md5(chave_base.encode()).hexdigest()
 
 def _obter_resposta_ia_cache(chave: str) -> Optional[str]:
-    """Obtém resposta da IA do cache se válida"""
+    """
+    Obtém resposta da IA do cache se válida.
+    Limpeza automática de entradas antigas.
+    """
+    # Limpeza preventiva (1% de chance a cada chamada)
+    import random
+    if random.random() < 0.01:
+        _limpar_cache_ia_expirado()
+    
     if chave in _cache_respostas_tempo:
         tempo_cache = _cache_respostas_tempo[chave]
         tempo_atual = time.time()
         if (tempo_atual - tempo_cache) < CACHE_TTL:
+            logger.info(f"✨ Cache HIT: {chave[:16]}...")
             return _cache_respostas_ia.get(chave)
+        else:
+            logger.info(f"⏰ Cache EXPIRED: {chave[:16]}...")
     return None
 
 def _salvar_resposta_ia_cache(chave: str, resposta: str) -> None:
-    """Salva resposta da IA no cache"""
+    """Salva resposta da IA no cache com controle de tamanho"""
+    # Limita o tamanho do cache (máximo 100 entradas)
+    if len(_cache_respostas_ia) >= 100:
+        # Remove as 20 entradas mais antigas
+        chaves_ordenadas = sorted(_cache_respostas_tempo.items(), key=lambda x: x[1])
+        for chave_antiga, _ in chaves_ordenadas[:20]:
+            _cache_respostas_ia.pop(chave_antiga, None)
+            _cache_respostas_tempo.pop(chave_antiga, None)
+        logger.info(f"🧹 Cache: Removidas 20 entradas antigas (limite atingido)")
+    
     _cache_respostas_ia[chave] = resposta
     _cache_respostas_tempo[chave] = time.time()
-    logger.info(f"Resposta da IA salva no cache: {chave[:16]}...")
+    logger.info(f"💾 Cache SAVE: {chave[:16]}... (total: {len(_cache_respostas_ia)} entradas)")
 
 def _gerar_hash_dados_financeiros(contexto_financeiro: str) -> str:
     """Gera hash dos dados financeiros para detectar mudanças"""
@@ -1489,6 +1509,20 @@ def _limpar_cache_expirado():
     for chave in expirados:
         _cache_financeiro.pop(chave, None)
         _cache_tempo.pop(chave, None)
+
+def _limpar_cache_ia_expirado():
+    """Remove entradas de cache de IA expiradas."""
+    tempo_atual = time.time()
+    expirados = [
+        chave for chave, t in _cache_respostas_tempo.items() 
+        if (tempo_atual - t) >= CACHE_TTL
+    ]
+    for chave in expirados:
+        _cache_respostas_ia.pop(chave, None)
+        _cache_respostas_tempo.pop(chave, None)
+    
+    if expirados:
+        logger.info(f"🧹 Cache IA: Removidas {len(expirados)} entradas expiradas")
 
 # ==================== 🏦 INTEGRAÇÃO OPEN FINANCE ====================
 

@@ -131,6 +131,87 @@ def limpar_rate_limit_antigo():
         logging.info(f"🧹 Rate limit: Removidas {len(usuarios_para_remover)} entradas antigas")
 
 # ============================================================================
+
+# ============================================================================
+# 🚀 SISTEMA DE ATALHOS INTELIGENTES
+# ============================================================================
+
+# Mapeamento de atalhos para perguntas completas
+ATALHOS_INTELIGENTES = {
+    # Saldos e valores
+    'saldo': 'Qual é meu saldo total atual?',
+    'saldo total': 'Qual é meu saldo total atual?',
+    'quanto tenho': 'Qual é meu saldo total atual?',
+    'meu saldo': 'Qual é meu saldo total atual?',
+    
+    # Gastos
+    'gastos': 'Quanto gastei este mês?',
+    'gastos mes': 'Quanto gastei este mês?',
+    'gastos mês': 'Quanto gastei este mês?',
+    'despesas': 'Quanto gastei este mês?',
+    'despesas mes': 'Quanto gastei este mês?',
+    'gastei': 'Quanto gastei este mês?',
+    
+    # Receitas
+    'receitas': 'Quanto recebi este mês?',
+    'receitas mes': 'Quanto recebi este mês?',
+    'receitas mês': 'Quanto recebi este mês?',
+    'entradas': 'Quanto recebi este mês?',
+    'recebi': 'Quanto recebi este mês?',
+    'ganhei': 'Quanto recebi este mês?',
+    
+    # Lançamentos
+    'lancamentos': 'Mostre meus últimos 5 lançamentos',
+    'lançamentos': 'Mostre meus últimos 5 lançamentos',
+    'ultimos lancamentos': 'Mostre meus últimos 10 lançamentos',
+    'últimos lançamentos': 'Mostre meus últimos 10 lançamentos',
+    'extrato': 'Mostre meus últimos 10 lançamentos',
+    
+    # Resumos
+    'resumo': 'Como está minha situação financeira este mês?',
+    'situacao': 'Como está minha situação financeira este mês?',
+    'situação': 'Como está minha situação financeira este mês?',
+    'panorama': 'Como está minha situação financeira este mês?',
+    
+    # Comparações rápidas
+    'comparar': 'Compare meus gastos deste mês com o mês passado',
+    'comparacao': 'Compare meus gastos deste mês com o mês passado',
+    'comparação': 'Compare meus gastos deste mês com o mês passado',
+    
+    # Metas
+    'metas': 'Como estão minhas metas?',
+    'objetivos': 'Como estão minhas metas?',
+    'economia': 'Quanto consegui economizar este mês?',
+}
+
+def processar_atalho(texto: str) -> Tuple[bool, str]:
+    """
+    Verifica se o texto é um atalho e retorna a pergunta expandida.
+    
+    Args:
+        texto: Texto do usuário
+        
+    Returns:
+        Tupla (é_atalho, pergunta_expandida)
+    """
+    texto_limpo = texto.lower().strip()
+    
+    # Busca exata primeiro
+    if texto_limpo in ATALHOS_INTELIGENTES:
+        pergunta_expandida = ATALHOS_INTELIGENTES[texto_limpo]
+        logger.info(f"🚀 Atalho detectado: '{texto_limpo}' → '{pergunta_expandida}'")
+        return True, pergunta_expandida
+    
+    # Busca parcial (começa com)
+    for atalho, pergunta in ATALHOS_INTELIGENTES.items():
+        if texto_limpo.startswith(atalho):
+            logger.info(f"🚀 Atalho parcial detectado: '{texto_limpo}' → '{pergunta}'")
+            return True, pergunta
+    
+    return False, texto
+
+# ============================================================================
+
 from . import services
 
 
@@ -752,7 +833,18 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
     chat_id = effective_message.chat_id
     user_id = effective_user.id
     
-    # --- 🛡️ RATE LIMITING: Verificar cooldown ---
+    # --- � ATALHOS INTELIGENTES: Verificar se é atalho ---
+    eh_atalho, pergunta_processada = processar_atalho(user_question)
+    if eh_atalho:
+        # Mostra feedback visual ao usuário
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"💡 <i>Interpretei como:</i> \"{pergunta_processada}\"",
+            parse_mode='HTML'
+        )
+        user_question = pergunta_processada
+    
+    # --- �🛡️ RATE LIMITING: Verificar cooldown ---
     pode_prosseguir, tempo_restante = check_rate_limit(user_id)
     if not pode_prosseguir:
         mensagem_rate_limit = (
@@ -797,9 +889,16 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
         
         resposta_cache = _obter_resposta_ia_cache(chave_cache_ia)
         if resposta_cache:
-            logger.info(f"Resposta da IA obtida do cache para usuário {usuario_db.id}")
+            logger.info(f"✨ Resposta da IA obtida do cache para usuário {usuario_db.id}")
             resposta_ia = resposta_cache
         else:
+            # --- 🔄 INDICADOR DE PROGRESSO: Envia mensagem inicial ---
+            mensagem_progresso = await context.bot.send_message(
+                chat_id=chat_id,
+                text="🔍 <b>Analisando seus dados financeiros...</b>\n<i>Isso pode levar alguns segundos.</i>",
+                parse_mode='HTML'
+            )
+            
             # Gera nova resposta
             prompt_final = PROMPT_GERENTE_VDM.format(
                 user_name=usuario_db.nome_completo.split(' ')[0] if usuario_db.nome_completo else "você",
@@ -817,10 +916,27 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
                 logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
                 
+                # Atualizar mensagem de progresso
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=mensagem_progresso.message_id,
+                    text="🔄 <b>Tentando método alternativo...</b>",
+                    parse_mode='HTML'
+                )
+                
                 # Fallback para modelo mais estável
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 response = await model.generate_content_async(prompt_final)
                 resposta_ia = _limpar_resposta_ia(response.text)
+            
+            # --- 🔄 INDICADOR DE PROGRESSO: Remove mensagem inicial ---
+            try:
+                await context.bot.delete_message(
+                    chat_id=chat_id,
+                    message_id=mensagem_progresso.message_id
+                )
+            except Exception:
+                pass  # Se falhar ao deletar, não é crítico
             
             # Salva no cache
             _salvar_resposta_ia_cache(chave_cache_ia, resposta_ia)
