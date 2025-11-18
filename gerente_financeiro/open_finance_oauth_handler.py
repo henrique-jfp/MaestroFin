@@ -104,6 +104,15 @@ def pluggy_request(method: str, endpoint: str, data: Optional[Dict] = None, para
         headers=headers,
         timeout=30
     )
+    
+    # Log detalhado em caso de erro
+    if not response.ok:
+        try:
+            error_detail = response.json()
+            logger.error(f"❌ Pluggy API Error {response.status_code}: {error_detail}")
+        except:
+            logger.error(f"❌ Pluggy API Error {response.status_code}: {response.text}")
+    
     response.raise_for_status()
     return response.json()
 
@@ -770,150 +779,36 @@ class OpenFinanceOAuthHandler:
         # Salvar banco escolhido
         context.user_data["of_selected_bank"] = connector
         
-        # Verificar se é banco OAuth (Open Finance)
+        # Verificar credenciais necessárias
+        credentials = connector.get("credentials", [])
+        cpf_field = next((c for c in credentials if c["name"] == "cpf"), None)
+        
+        if not cpf_field:
+            await query.edit_message_text(
+                f"❌ {connector['name']} não requer CPF.\n"
+                "Este fluxo suporta apenas bancos que usam CPF."
+            )
+            return ConversationHandler.END
+        
+        # Identificar se é OAuth para mostrar mensagem diferente
         is_oauth = connector.get("oauth", False)
         
         if is_oauth:
-            # Banco OAuth - pular CPF e criar item direto
-            logger.info(f"🔐 Banco OAuth detectado: {connector['name']} - pulando etapa CPF")
-            
             await query.edit_message_text(
                 f"🏦 *{connector['name']}*\n\n"
-                f"🔐 Usando Open Finance (OAuth)\n"
-                f"🔄 Criando conexão segura...",
+                f"🔐 Este banco usa *Open Finance* (OAuth)\n"
+                f"📝 Digite seu CPF para iniciar:\n\n"
+                f"_Após informar o CPF, você será redirecionado para o site oficial do banco._",
                 parse_mode="Markdown"
             )
-            
-            # Criar item direto sem CPF
-            user_id = update.effective_user.id
-            return await self._create_oauth_item(update, context, user_id, connector, query.message)
-        
         else:
-            # Banco legado - pedir CPF
-            credentials = connector.get("credentials", [])
-            cpf_field = next((c for c in credentials if c["name"] == "cpf"), None)
-            
-            if not cpf_field:
-                await query.edit_message_text(
-                    f"❌ {connector['name']} não possui credenciais suportadas."
-                )
-                return ConversationHandler.END
-            
             await query.edit_message_text(
                 f"🏦 *{connector['name']}*\n\n"
                 f"📝 Digite seu CPF (apenas números):",
                 parse_mode="Markdown"
             )
-            
-            return ENTERING_CPF
-    
-    async def _create_oauth_item(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, connector: dict, status_msg):
-        """Cria item OAuth (sem CPF) e gerencia fluxo de autenticação"""
-        try:
-            # Criar item OAuth sem parameters
-            item_data = {
-                "connectorId": connector["id"]
-            }
-            
-            logger.info(f"🔐 Criando item OAuth PURO (sem parameters) para {connector['name']}")
-            
-            item = pluggy_request("POST", "/items", data=item_data)
-            item_id = item["id"]
-            
-            logger.info(f"✅ Item OAuth criado: {item_id} para usuário {user_id}")
-            logger.info(f"📋 Response inicial: status={item.get('status')}")
-            
-            # Log completo do item para debug
-            import json
-            logger.info(f"🔍 Item completo: {json.dumps(item, indent=2, default=str)}")
-            
-            # Salvar item no contexto
-            context.user_data["of_item_id"] = item_id
-            context.user_data["of_item_status"] = item.get("status")
-            
-            # Salvar connector data para persistência futura
-            self.active_connections[user_id] = {
-                "item_id": item_id,
-                "connector": connector,
-                "created_at": datetime.now()
-            }
-            
-            # ⚠️ PROTEÇÃO: Registrar conexão pendente
-            _pending_connections[user_id] = {
-                "item_id": item_id,
-                "timestamp": datetime.now(),
-                "connector_name": connector['name']
-            }
-            logger.info(f"🔒 Conexão pendente registrada para usuário {user_id}")
-            
-            # Aguardar API processar
-            await asyncio.sleep(3)
-            
-            # Consultar item para pegar URL OAuth
-            item_updated = pluggy_request("GET", f"/items/{item_id}")
-            
-            logger.info(f"📋 Item atualizado: status={item_updated.get('status')}")
-            logger.info(f"🔍 Item atualizado completo: {json.dumps(item_updated, indent=2, default=str)}")
-            
-            # Procurar URL OAuth
-            oauth_url = None
-            parameter = item_updated.get("parameter", {})
-            
-            if parameter and parameter.get("type") == "oauth" and parameter.get("data"):
-                oauth_url = parameter["data"]
-                logger.info(f"🔗 OAuth URL encontrado em parameter.data: {oauth_url}")
-            
-            if not oauth_url:
-                # Tentar em userAction
-                user_action = item_updated.get("userAction")
-                if user_action and user_action.get("url"):
-                    oauth_url = user_action["url"]
-                    logger.info(f"🔗 OAuth URL encontrado em userAction.url: {oauth_url}")
-            
-            if not oauth_url:
-                logger.error(f"❌ OAuth URL não encontrado após 3s. parameter={parameter}, userAction={item_updated.get('userAction')}")
-                
-                await status_msg.edit_text(
-                    f"❌ Erro ao gerar link de autenticação.\n\n"
-                    f"🏦 Banco: {connector['name']}\n"
-                    f"⚠️ Status: {item_updated.get('status')}\n\n"
-                    f"Tente novamente em alguns instantes.",
-                    parse_mode="Markdown"
-                )
-                
-                # Limpar conexão pendente
-                if user_id in _pending_connections:
-                    del _pending_connections[user_id]
-                
-                return ConversationHandler.END
-            
-            # Sucesso! Enviar URL OAuth
-            await status_msg.edit_text(
-                f"✅ *Link de Autenticação Gerado!*\n\n"
-                f"🏦 Banco: {connector['name']}\n\n"
-                f"🔐 Clique no link abaixo para autorizar o acesso:\n"
-                f"👉 {oauth_url}\n\n"
-                f"⚠️ *Aguarde...* Vou monitorar sua autenticação!",
-                parse_mode="Markdown"
-            )
-            
-            # Iniciar polling para monitorar conclusão
-            await self._poll_item_status(update, context, item_id, connector, status_msg)
-            
-            return ConversationHandler.END
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao criar item OAuth: {e}", exc_info=True)
-            
-            await status_msg.edit_text(
-                f"❌ Erro ao processar conexão:\n{str(e)}\n\nTente novamente."
-            )
-            
-            # Limpar conexão pendente
-            if user_id in _pending_connections:
-                del _pending_connections[user_id]
-            
-            return ConversationHandler.END
+        
+        return ENTERING_CPF
     
     async def conectar_banco_cpf(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """CPF informado - criar item e gerar OAuth URL"""
@@ -953,13 +848,16 @@ class OpenFinanceOAuthHandler:
         )
         
         try:
-            # Bancos legados (não-OAuth) - enviar CPF
-            # NOTA: Bancos OAuth puros não chegam aqui (são tratados em _create_oauth_item)
+            # Criar item com CPF
+            # Para OAuth: API retornará link de autenticação
+            # Para legado: API tentará autenticar direto
             item_data = {
                 "connectorId": connector["id"],
                 "parameters": {"cpf": cpf}
             }
-            logger.info(f"🔐 Criando item com CPF para {connector['name']}")
+            
+            is_oauth = connector.get("oauth", False)
+            logger.info(f"🔐 Criando item {'OAuth' if is_oauth else 'legado'} com CPF para {connector['name']}")
             
             item = pluggy_request("POST", "/items", data=item_data)
             item_id = item["id"]
