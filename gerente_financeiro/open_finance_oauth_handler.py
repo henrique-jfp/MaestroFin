@@ -1786,14 +1786,17 @@ class OpenFinanceOAuthHandler:
             logger.info(f"🔍 Analisando transação {txn.id}:")
             logger.info(f"   📝 Descrição: {txn.description}")
             logger.info(f"   💰 Amount: {float(txn.amount)}")
+            logger.info(f"   🏷️ Type API: {txn.type}")  # CREDIT ou DEBIT vindo da Pluggy
             logger.info(f"   💳 Tipo conta: {account.type if account else 'UNKNOWN'}")
             logger.info(f"   🏦 Nome conta: {account.name if account else 'UNKNOWN'}")
             logger.info(f"   ❓ É cartão crédito? {is_credit_card}")
             
             if is_credit_card:
-                # Para cartão de crédito: inverter a lógica
-                # amount > 0 = gasto (DESPESA)
-                # amount < 0 = pagamento da fatura (não registrar como lançamento)
+                # ⚠️ LÓGICA CORRIGIDA: Para cartão de crédito a API Pluggy INVERTE os types!
+                # - Compras (gastos): vêm como type="CREDIT" + amount positivo (mas é DESPESA)
+                # - Pagamentos fatura: vêm como type="CREDIT" + amount negativo (é pagamento)
+                # 
+                # Nossa lógica: amount > 0 no CC = DESPESA, amount < 0 = pagamento (ignorar)
                 if float(txn.amount) < 0:
                     # Pagamento de fatura - não importar
                     logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando importação")
@@ -1805,8 +1808,10 @@ class OpenFinanceOAuthHandler:
                     )
                     return
                 else:
+                    # ✅ CORREÇÃO: IGNORAMOS o "type" da API para cartões
+                    # Amount positivo em CC = GASTO (DESPESA), independente do "type" ser "CREDIT"
                     tipo = "Despesa"  # Gasto no cartão - SEMPRE DESPESA
-                    logger.info(f"✅ Cartão de crédito: categorizando como DESPESA")
+                    logger.info(f"✅ Cartão de crédito: categorizando como DESPESA (amount positivo, ignorando type='{txn.type}')")
             else:
                 # Para conta corrente/poupança: lógica normal
                 tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
@@ -1896,7 +1901,7 @@ class OpenFinanceOAuthHandler:
                     is_credit_card = account and account.type == "CREDIT"
                     
                     # 🔍 LOG DETALHADO PARA DEBUG
-                    logger.info(f"🔍 [MASSA] Transação {txn.id}: {txn.description} | Amount: {float(txn.amount)} | Tipo conta: {account.type if account else 'UNKNOWN'} | É CC? {is_credit_card}")
+                    logger.info(f"🔍 [MASSA] Transação {txn.id}: {txn.description} | Amount: {float(txn.amount)} | Type API: {txn.type} | Tipo conta: {account.type if account else 'UNKNOWN'} | É CC? {is_credit_card}")
                     
                     # Para cartão de crédito, pular pagamentos de fatura
                     if is_credit_card and float(txn.amount) < 0:
@@ -1908,10 +1913,11 @@ class OpenFinanceOAuthHandler:
                     # Sugerir categoria
                     suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
                     
-                    # Determinar tipo
+                    # ⚠️ CORREÇÃO: Determinar tipo ignorando "type" da API para cartões
+                    # A Pluggy inverte: compras em CC vêm como type="CREDIT" mas são DESPESAS
                     if is_credit_card:
-                        tipo = "Despesa"  # Gastos no cartão são SEMPRE despesa
-                        logger.info(f"✅ [MASSA] Cartão de crédito: {txn.id} → DESPESA")
+                        tipo = "Despesa"  # Gastos no cartão são SEMPRE despesa (ignorando type da API)
+                        logger.info(f"✅ [MASSA] Cartão de crédito: {txn.id} → DESPESA (ignorando type='{txn.type}')")
                     else:
                         tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
                         logger.info(f"✅ [MASSA] Conta normal: {txn.id} → {tipo.upper()} (amount={'positivo' if float(txn.amount) > 0 else 'negativo'})")
