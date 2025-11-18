@@ -38,24 +38,22 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # GEMINI MODEL NAME com validação e fallback automático
-_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
-# Lista de modelos válidos (atualizada em Nov 2024)
-# IMPORTANTE: API v1beta requer sufixo "-latest" ou versão específica (-001, -002)
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+# Lista de modelos válidos (atualizada em Nov 2024 - API v1beta)
+# ⚠️ IMPORTANTE: Gemini 1.5 foi descontinuado! Agora é 2.5 ou 2.0
 VALID_GEMINI_MODELS = [
-    "gemini-1.5-flash-latest",    # ⭐ Modelo rápido e eficiente (RECOMENDADO)
-    "gemini-1.5-pro-latest",      # Modelo avançado para tarefas complexas
-    "gemini-1.5-flash-001",       # Versão stable do Flash
-    "gemini-1.5-flash-002",       # Versão específica do Flash
-    "gemini-1.5-pro-001",         # Versão stable do Pro
-    "gemini-1.5-pro-002",         # Versão específica do Pro
-    "gemini-pro",                 # Modelo legado (ainda funciona)
+    "gemini-flash-latest",        # ⭐ Alias oficial para versão mais recente (RECOMENDADO)
+    "gemini-2.5-flash",           # Modelo 2.5 estável (rápido e eficiente)
+    "gemini-2.5-pro",             # Modelo 2.5 avançado (pensamento complexo)
+    "gemini-2.0-flash",           # Modelo 2.0 (janela de 1M tokens)
+    "gemini-pro-latest",          # Alias para Pro mais recente
 ]
 
 # Validar e corrigir modelo automaticamente
 if _model_env not in VALID_GEMINI_MODELS:
     logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
-    logging.warning(f"⚠️ Usando fallback: 'gemini-1.5-flash-latest'")
-    GEMINI_MODEL_NAME = "gemini-1.5-flash-latest"
+    logging.warning(f"⚠️ Usando fallback: 'gemini-flash-latest' (alias oficial)")
+    GEMINI_MODEL_NAME = "gemini-flash-latest"
 else:
     GEMINI_MODEL_NAME = _model_env
     

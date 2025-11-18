@@ -2098,7 +2098,7 @@ class OpenFinanceOAuthHandler:
         # 🤖 USAR IA PARA CATEGORIZAÇÃO ASSERTIVA
         try:
             genai.configure(api_key=GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
             
             prompt = f"""Você é um especialista em categorização de transações financeiras.
 
@@ -2225,7 +2225,7 @@ Categoria escolhida:"""
             
             # Configurar Gemini
             genai.configure(api_key=GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')  # ✅ API v1beta
+            model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
             
             # Buscar categorias disponíveis
             categorias = db.query(Categoria).all()

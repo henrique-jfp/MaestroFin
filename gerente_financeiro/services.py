@@ -407,7 +407,7 @@ async def obter_contexto_macroeconomico() -> str:
 
 async def gerar_analise_personalizada(info: str, perfil: str) -> str:
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")  # ✅ Modelo 2.5 (v1beta)
         prompt = f"Em uma frase, explique o impacto desta notícia/dado para um investidor de perfil {perfil}: {info}"
         resposta = await model.generate_content_async(prompt)
         return resposta.text.strip()

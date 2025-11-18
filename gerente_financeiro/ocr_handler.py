@@ -540,7 +540,7 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                 
                 logger.info("🤖 Configurando Gemini...")
                 genai.configure(api_key=config.GEMINI_API_KEY)
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
                 
                 # Converter para PIL Image
                 logger.info("🖼️ Convertendo para PIL Image...")
@@ -831,7 +831,7 @@ async def ocr_fallback_gemini(image_content):
         
         # Configurar Gemini
         genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
         logger.info("✅ Gemini configurado")
         
         # Converter bytes para PIL Image com validação
