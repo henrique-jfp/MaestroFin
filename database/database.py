@@ -85,25 +85,61 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
     Encontra um usuário pelo seu telegram_id e deleta o registro dele.
     Devido ao cascade, todos os dados associados (lançamentos, metas, etc.)
     serão deletados automaticamente.
+    
+    IMPORTANTE: Também deleta conexões bancárias na API Pluggy (Open Finance).
     """
     db = next(get_db())
     try:
         # Encontra o usuário para garantir que ele exista
         usuario_a_deletar = db.query(Usuario).filter(Usuario.telegram_id == telegram_id).first()
         
-        if usuario_a_deletar:
-            # A mágica acontece aqui!
-            db.delete(usuario_a_deletar)
-            db.commit()
-            logging.info(f"Todos os dados do usuário com telegram_id {telegram_id} foram deletados com sucesso.")
-            return True
-        else:
+        if not usuario_a_deletar:
             logging.warning(f"Tentativa de deletar dados de um usuário inexistente: {telegram_id}")
             return False
+        
+        # ==================== DELETAR CONEXÕES OPEN FINANCE ====================
+        try:
+            from models import PluggyItem
+            from gerente_financeiro.open_finance_oauth_handler import pluggy_request
+            
+            # Buscar todos os items do usuário
+            pluggy_items = db.query(PluggyItem).filter(PluggyItem.id_usuario == usuario_a_deletar.id).all()
+            
+            if pluggy_items:
+                logging.info(f"🔄 Deletando {len(pluggy_items)} conexão(ões) Open Finance do usuário {telegram_id}...")
+                
+                for item in pluggy_items:
+                    try:
+                        # Deletar item na API Pluggy
+                        pluggy_request("DELETE", f"/items/{item.pluggy_item_id}")
+                        logging.info(f"✅ Item {item.pluggy_item_id} ({item.connector_name}) deletado na Pluggy")
+                    except Exception as e:
+                        # Log mas não falha - item pode já ter sido deletado na Pluggy
+                        logging.warning(f"⚠️ Erro ao deletar item {item.pluggy_item_id} na Pluggy: {e}")
+                
+                # Deletar registros locais (cascade deleta accounts e transactions)
+                db.query(PluggyItem).filter(PluggyItem.id_usuario == usuario_a_deletar.id).delete()
+                logging.info(f"✅ Registros locais Open Finance deletados")
+        
+        except ImportError:
+            # PluggyItem ainda não existe (tabelas não criadas)
+            logging.info("ℹ️ Tabelas Open Finance ainda não existem, pulando deleção...")
+        except Exception as e:
+            # Log mas não falha - deleção do usuário deve continuar
+            logging.error(f"❌ Erro ao deletar conexões Open Finance: {e}", exc_info=True)
+        
+        # ==================== DELETAR USUÁRIO ====================
+        # A mágica acontece aqui! Cascade deleta:
+        # - lancamentos, contas, objetivos, agendamentos, conquistas_usuario
+        # - pluggy_items → pluggy_accounts → pluggy_transactions (cascade)
+        db.delete(usuario_a_deletar)
+        db.commit()
+        logging.info(f"✅ Todos os dados do usuário com telegram_id {telegram_id} foram deletados com sucesso.")
+        return True
             
     except Exception as e:
         db.rollback()
-        logging.error(f"Erro CRÍTICO ao deletar dados do usuário {telegram_id}: {e}", exc_info=True)
+        logging.error(f"❌ Erro CRÍTICO ao deletar dados do usuário {telegram_id}: {e}", exc_info=True)
         return False
     finally:
         db.close()    
