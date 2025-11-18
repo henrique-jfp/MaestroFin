@@ -197,13 +197,14 @@ def save_pluggy_item_to_db(user_id: int, item_data: Dict, connector_data: Dict) 
         db.close()
 
 
-def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
+def _sync_investments_from_accounts(pluggy_item_id: int, db, raw_accounts: List[Dict] = None) -> None:
     """
     Cria/atualiza registros de Investment para contas do tipo INVESTMENT.
     
     Args:
         pluggy_item_id: ID local do PluggyItem
         db: Sessão do banco de dados (já aberta)
+        raw_accounts: Lista de contas cruas da API Pluggy (opcional, para acessar bankData)
     """
     try:
         from models import PluggyAccount, PluggyItem, Investment, InvestmentSnapshot, Usuario
@@ -224,9 +225,13 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
             PluggyAccount.id_item == pluggy_item_id
         ).all()
         
+        # Mapa de dados crus para acesso rápido
+        raw_map = {acc["id"]: acc for acc in raw_accounts} if raw_accounts else {}
+        
         # Filtrar contas que são investimentos
         # Aceitar: type=INVESTMENT OU nome contém "cofrinho" OU subtype indica investimento
         # OU possui transações de rendimento de aplicação financeira
+        # OU possui automaticallyInvestedBalance > 0
         investment_accounts = []
         for acc in all_accounts:
             nome_lower = (acc.name or "").lower()
@@ -248,6 +253,14 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao verificar rendimentos: {e}")
             
+            # Verificar automaticallyInvestedBalance nos dados crus
+            is_remunerated = False
+            raw_data = raw_map.get(acc.pluggy_account_id)
+            if raw_data and "bankData" in raw_data and raw_data["bankData"]:
+                auto_invested = raw_data["bankData"].get("automaticallyInvestedBalance", 0) or 0
+                if float(auto_invested) > 0:
+                    is_remunerated = True
+            
             is_investment = (
                 acc.type == "INVESTMENT" or
                 "cofrinho" in nome_lower or
@@ -258,15 +271,21 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
                 "savings" in subtype_lower or
                 "poupança" in nome_lower or
                 "poupanca" in nome_lower or
-                has_rendimentos
+                has_rendimentos or
+                is_remunerated
             )
             
             if is_investment:
+                # Armazenar flag temporária no objeto para usar depois
+                acc._is_remunerated = is_remunerated
                 investment_accounts.append(acc)
+                
                 motivo = []
                 if acc.type == "INVESTMENT": motivo.append("tipo=INVESTMENT")
                 if "cofrinho" in nome_lower or "cofre" in nome_lower: motivo.append("nome contém cofrinho/cofre")
                 if has_rendimentos: motivo.append("possui transações de rendimento")
+                if is_remunerated: motivo.append("saldo automático investido")
+                
                 logger.info(f"💰 Detectado investimento: {acc.name} (tipo: {acc.type}, razão: {', '.join(motivo)})")
         
         if not investment_accounts:
@@ -278,6 +297,10 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
         for account in investment_accounts:
             # Tentar descobrir o tipo de investimento pelo nome/subtype
             tipo = _guess_investment_type(account.name, account.subtype)
+            
+            # Se for conta remunerada e caiu como OUTRO, ajustar
+            if getattr(account, "_is_remunerated", False) and tipo == "OUTRO":
+                tipo = "CONTA REMUNERADA"
             
             valor_atual = Decimal(account.balance) if account.balance else Decimal(0)
             
@@ -454,7 +477,7 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         
         # Sincronizar investimentos (criar/atualizar registros de Investment)
         try:
-            _sync_investments_from_accounts(pluggy_item.id, db)
+            _sync_investments_from_accounts(pluggy_item.id, db, accounts)
         except Exception as e:
             logger.error(f"⚠️  Erro ao sincronizar investimentos: {e}", exc_info=True)
         
@@ -2919,13 +2942,13 @@ Categorias:"""
                     inv_data = pluggy_request("GET", "/investments", params={"itemId": item.pluggy_item_id})
                     inv_results = inv_data.get("results", [])
                     
-                    message += f"📈 *Investimentos (API):* {len(inv_results)}\n"
+                    message += f"📈 *Investimentos (Endpoint /investments):* {len(inv_results)}\n"
                     if inv_results:
                         for inv in inv_results[:3]:  # Mostrar até 3
                             message += f"  • {inv.get('name', 'N/A')}\n"
                             message += f"    Valor: R$ {inv.get('balance', 0):.2f}\n"
                     else:
-                        message += "  ℹ️ Nenhum investimento retornado pela API\n"
+                        message += "  ℹ️ Nenhum investimento retornado pelo endpoint específico\n"
                 except Exception as e:
                     message += f"  ⚠️ Erro ao buscar: {str(e)[:50]}\n"
                 
@@ -2939,7 +2962,7 @@ Categorias:"""
             ).all()
             
             message += f"━━━━━━━━━━━━━━━━\n"
-            message += f"💎 *Investimentos no Banco:* {len(investments)}\n"
+            message += f"💎 *Investimentos Detectados (Total):* {len(investments)}\n"
             for inv in investments:
                 message += f"  • {inv.nome}\n"
                 message += f"    Tipo: {inv.tipo}\n"
