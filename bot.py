@@ -180,6 +180,9 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
+# 📈 INVESTMENT HANDLER
+from gerente_financeiro.investment_handler import get_investment_handlers
+
 # 🏦 OPEN FINANCE OAUTH (substitui handler antigo)
 try:
     from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
@@ -422,6 +425,15 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
             ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
         ])
         logger.info("✅ Comandos Open Finance adicionados: /minhas_contas, /sincronizar, /importar_transacoes")
+    
+    # Adicionar handlers de investimentos
+    try:
+        investment_handlers = get_investment_handlers()
+        for handler in investment_handlers:
+            application.add_handler(handler)
+        logger.info("✅ Handlers de investimentos registrados: /investimentos, /dashboard_investimentos, /patrimonio")
+    except Exception as e:
+        logger.error(f"❌ Erro ao registrar handlers de investimentos: {e}", exc_info=True)
 
     for name, builder in command_builders:
         build_and_add(name, builder)

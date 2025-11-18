@@ -177,6 +177,142 @@ def save_pluggy_item_to_db(user_id: int, item_data: Dict, connector_data: Dict) 
         db.close()
 
 
+def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
+    """
+    Cria/atualiza registros de Investment para contas do tipo INVESTMENT.
+    
+    Args:
+        pluggy_item_id: ID local do PluggyItem
+        db: Sessão do banco de dados (já aberta)
+    """
+    try:
+        from models import PluggyAccount, PluggyItem, Investment, InvestmentSnapshot, Usuario
+        from datetime import date
+        from decimal import Decimal
+        
+        # Buscar item para pegar id_usuario
+        pluggy_item = db.query(PluggyItem).filter(PluggyItem.id == pluggy_item_id).first()
+        if not pluggy_item:
+            logger.warning(f"⚠️  PluggyItem {pluggy_item_id} não encontrado")
+            return
+        
+        id_usuario = pluggy_item.id_usuario
+        banco_nome = pluggy_item.connector_name
+        
+        # Buscar contas de investimento deste item
+        investment_accounts = db.query(PluggyAccount).filter(
+            PluggyAccount.id_item == pluggy_item_id,
+            PluggyAccount.type == "INVESTMENT"
+        ).all()
+        
+        if not investment_accounts:
+            logger.info(f"ℹ️  Nenhuma conta de investimento encontrada para item {pluggy_item_id}")
+            return
+        
+        logger.info(f"📈 Encontradas {len(investment_accounts)} conta(s) de investimento")
+        
+        for account in investment_accounts:
+            # Tentar descobrir o tipo de investimento pelo nome/subtype
+            tipo = _guess_investment_type(account.name, account.subtype)
+            
+            valor_atual = Decimal(account.balance) if account.balance else Decimal(0)
+            
+            # Verificar se já existe Investment para esta account
+            existing_investment = db.query(Investment).filter(
+                Investment.id_account == account.id
+            ).first()
+            
+            if existing_investment:
+                # Atualizar investment existente
+                valor_anterior = existing_investment.valor_atual
+                existing_investment.valor_atual = valor_atual
+                existing_investment.updated_at = datetime.now()
+                
+                logger.info(f"🔄 Investment atualizado: {account.name} - R$ {float(valor_anterior):.2f} → R$ {float(valor_atual):.2f}")
+                
+                # Criar snapshot se valor mudou
+                if valor_atual != valor_anterior:
+                    rentabilidade = valor_atual - valor_anterior
+                    rentabilidade_pct = (rentabilidade / valor_anterior * 100) if valor_anterior > 0 else 0
+                    
+                    snapshot = InvestmentSnapshot(
+                        id_investment=existing_investment.id,
+                        valor=valor_atual,
+                        rentabilidade_periodo=rentabilidade,
+                        rentabilidade_percentual=rentabilidade_pct,
+                        data_snapshot=date.today()
+                    )
+                    db.add(snapshot)
+                    logger.info(f"📊 Snapshot criado: {account.name} - Rent: R$ {float(rentabilidade):.2f} ({float(rentabilidade_pct):.2f}%)")
+            else:
+                # Criar novo investment
+                new_investment = Investment(
+                    id_usuario=id_usuario,
+                    id_account=account.id,
+                    nome=account.name or "Investimento",
+                    tipo=tipo,
+                    banco=banco_nome,
+                    valor_inicial=valor_atual,
+                    valor_atual=valor_atual,
+                    fonte="PLUGGY",
+                    ativo=True
+                )
+                db.add(new_investment)
+                db.flush()  # Para obter o ID
+                
+                logger.info(f"✅ Investment criado: {account.name} ({tipo}) - R$ {float(valor_atual):.2f}")
+                
+                # Criar snapshot inicial
+                snapshot = InvestmentSnapshot(
+                    id_investment=new_investment.id,
+                    valor=valor_atual,
+                    rentabilidade_periodo=Decimal(0),
+                    rentabilidade_percentual=Decimal(0),
+                    data_snapshot=date.today()
+                )
+                db.add(snapshot)
+        
+        db.commit()
+        logger.info(f"💾 Investimentos sincronizados com sucesso para item {pluggy_item_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao sincronizar investimentos: {e}", exc_info=True)
+        db.rollback()
+
+
+def _guess_investment_type(nome: str, subtype: Optional[str]) -> str:
+    """
+    Tenta adivinhar o tipo de investimento baseado no nome e subtype.
+    
+    Returns:
+        Um dos tipos: CDB, LCI, LCA, POUPANCA, TESOURO, ACAO, FUNDO, COFRINHO, OUTRO
+    """
+    nome_lower = (nome or "").lower()
+    subtype_lower = (subtype or "").lower()
+    
+    combinado = f"{nome_lower} {subtype_lower}"
+    
+    # Mapear palavras-chave para tipos
+    if any(word in combinado for word in ["cdb", "certificado de deposito"]):
+        return "CDB"
+    elif any(word in combinado for word in ["lci", "credito imobiliario"]):
+        return "LCI"
+    elif any(word in combinado for word in ["lca", "agronegocio"]):
+        return "LCA"
+    elif any(word in combinado for word in ["poupanca", "poupança", "savings"]):
+        return "POUPANCA"
+    elif any(word in combinado for word in ["tesouro", "selic", "ipca", "prefixado"]):
+        return "TESOURO"
+    elif any(word in combinado for word in ["acao", "ação", "stock", "bolsa"]):
+        return "ACAO"
+    elif any(word in combinado for word in ["fundo", "fund"]):
+        return "FUNDO"
+    elif any(word in combinado for word in ["cofrinho", "cofre", "piggy"]):
+        return "COFRINHO"
+    else:
+        return "OUTRO"
+
+
 def save_pluggy_accounts_to_db(item_id: str) -> bool:
     """
     Busca accounts do item na API Pluggy e salva no banco.
@@ -243,6 +379,12 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         
         db.commit()
         logger.info(f"💾 {saved_count} account(s) salva(s) para item {item_id}")
+        
+        # Sincronizar investimentos (criar/atualizar registros de Investment)
+        try:
+            _sync_investments_from_accounts(pluggy_item.id, db)
+        except Exception as e:
+            logger.error(f"⚠️  Erro ao sincronizar investimentos: {e}", exc_info=True)
         
         return True
         

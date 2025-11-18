@@ -30,6 +30,9 @@ class Usuario(Base):
     objetivos = relationship("Objetivo", back_populates="usuario", cascade="all, delete-orphan")
     agendamentos = relationship("Agendamento", back_populates="usuario", cascade="all, delete-orphan")
     conquistas = relationship("ConquistaUsuario", back_populates="usuario", cascade="all, delete-orphan")
+    investments = relationship("Investment", back_populates="usuario", cascade="all, delete-orphan")
+    investment_goals = relationship("InvestmentGoal", back_populates="usuario", cascade="all, delete-orphan")
+    patrimony_snapshots = relationship("PatrimonySnapshot", back_populates="usuario", cascade="all, delete-orphan")
 
 class Conquista(Base):
     __tablename__ = 'conquistas'
@@ -376,3 +379,133 @@ class PluggyTransaction(Base):
     
     def __repr__(self):
         return f"<PluggyTransaction(id={self.pluggy_transaction_id}, amount=R${self.amount}, date={self.date})>"
+
+
+# ==================== MODELS DE INVESTIMENTOS ====================
+
+class Investment(Base):
+    """Investimentos do usuário (manual ou via Pluggy)"""
+    __tablename__ = 'investments'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False)
+    id_account = Column(Integer, ForeignKey('pluggy_accounts.id', ondelete='SET NULL'), nullable=True)
+    
+    # Informações básicas
+    nome = Column(String(255), nullable=False)
+    tipo = Column(String(50), nullable=False)  # CDB, LCI, LCA, POUPANCA, TESOURO, ACAO, FUNDO, COFRINHO, OUTRO
+    banco = Column(String(255))
+    
+    # Valores
+    valor_inicial = Column(Numeric(15, 2), default=0)
+    valor_atual = Column(Numeric(15, 2), nullable=False)
+    
+    # Rentabilidade
+    taxa_contratada = Column(Numeric(5, 4))  # Ex: 100% CDI = 1.0000
+    indexador = Column(String(50))  # CDI, IPCA, SELIC, PREFIXADO
+    data_aplicacao = Column(Date)
+    data_vencimento = Column(Date)
+    
+    # Controle
+    ativo = Column(Boolean, default=True)
+    fonte = Column(String(50), default='MANUAL')  # MANUAL, PLUGGY
+    
+    # Metadata
+    observacoes = Column(Text)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    
+    # Relacionamentos
+    usuario = relationship("Usuario", back_populates="investments")
+    account = relationship("PluggyAccount", foreign_keys=[id_account])
+    snapshots = relationship("InvestmentSnapshot", back_populates="investment", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<Investment(id={self.id}, nome={self.nome}, valor=R${self.valor_atual})>"
+
+
+class InvestmentSnapshot(Base):
+    """Histórico de valores dos investimentos"""
+    __tablename__ = 'investment_snapshots'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    id_investment = Column(Integer, ForeignKey('investments.id', ondelete='CASCADE'), nullable=False)
+    
+    # Valores no momento do snapshot
+    valor = Column(Numeric(15, 2), nullable=False)
+    rentabilidade_periodo = Column(Numeric(15, 2))  # Quanto rendeu desde último snapshot
+    rentabilidade_percentual = Column(Numeric(5, 2))  # % de rendimento
+    
+    # Comparações
+    cdi_periodo = Column(Numeric(5, 4))  # CDI acumulado no período
+    ipca_periodo = Column(Numeric(5, 4))  # IPCA acumulado no período
+    
+    # Metadata
+    data_snapshot = Column(Date, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    # Relacionamentos
+    investment = relationship("Investment", back_populates="snapshots")
+    
+    def __repr__(self):
+        return f"<InvestmentSnapshot(investment={self.id_investment}, data={self.data_snapshot}, valor=R${self.valor})>"
+
+
+class InvestmentGoal(Base):
+    """Metas de investimento"""
+    __tablename__ = 'investment_goals'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False)
+    
+    # Meta
+    titulo = Column(String(255), nullable=False)
+    descricao = Column(Text)
+    valor_alvo = Column(Numeric(15, 2), nullable=False)
+    prazo = Column(Date)
+    
+    # Progresso
+    valor_atual = Column(Numeric(15, 2), default=0)
+    concluida = Column(Boolean, default=False)
+    data_conclusao = Column(DateTime)
+    
+    # Configurações
+    aporte_mensal_sugerido = Column(Numeric(15, 2))
+    tipo_investimento_sugerido = Column(String(50))  # CONSERVADOR, MODERADO, ARROJADO
+    
+    # Metadata
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    
+    # Relacionamentos
+    usuario = relationship("Usuario", back_populates="investment_goals")
+    
+    def __repr__(self):
+        return f"<InvestmentGoal(id={self.id}, titulo={self.titulo}, progresso={self.valor_atual}/{self.valor_alvo})>"
+
+
+class PatrimonySnapshot(Base):
+    """Snapshot patrimonial mensal"""
+    __tablename__ = 'patrimony_snapshots'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False)
+    
+    # Valores consolidados
+    total_contas = Column(Numeric(15, 2), default=0)  # Saldo em contas correntes/poupança
+    total_investimentos = Column(Numeric(15, 2), default=0)  # Soma de todos investimentos
+    total_patrimonio = Column(Numeric(15, 2), nullable=False)  # Soma total
+    
+    # Variação
+    variacao_mensal = Column(Numeric(15, 2))  # Diferença para mês anterior
+    variacao_percentual = Column(Numeric(5, 2))  # % de crescimento
+    
+    # Metadata
+    mes_referencia = Column(Date, nullable=False)  # Primeiro dia do mês
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    # Relacionamentos
+    usuario = relationship("Usuario", back_populates="patrimony_snapshots")
+    
+    def __repr__(self):
+        return f"<PatrimonySnapshot(usuario={self.id_usuario}, mes={self.mes_referencia}, total=R${self.total_patrimonio})>"

@@ -493,6 +493,30 @@ HELP_TEXTS = {
         "   • 🔒 Segurança total com OAuth oficial dos bancos\n"
         "   • ⚡ Importação em massa ou individual\n\n"
         "💡  <b>Dica Pro:</b> Após conectar, o bot sincroniza automaticamente suas transações!"
+    ),
+    "investimentos": (
+        "<b>📈 Investimentos e Patrimônio</b>\n\n"
+        "Acompanhe seus investimentos e veja seu patrimônio crescer!\n\n"
+        "💰  <code>/investimentos</code>\n"
+        "   • Lista completa de todos os seus investimentos com valores atualizados e rentabilidade.\n\n"
+        "📊  <code>/dashboard_investimentos</code>\n"
+        "   • Dashboard visual com rentabilidade total, performance mensal e distribuição por tipo (CDB, LCI, Ações, etc.)\n\n"
+        "💎  <code>/patrimonio</code>\n"
+        "   • Visão consolidada do seu patrimônio total (contas bancárias + investimentos) com evolução histórica dos últimos 6 meses.\n\n"
+        "✨  <b>Funcionalidades:</b>\n"
+        "   • 📈 Acompanhamento automático via Open Finance\n"
+        "   • 💹 Cálculo de rentabilidade mensal\n"
+        "   • 📉 Comparação com CDI e IPCA\n"
+        "   • 🎯 Sistema de metas de investimento\n"
+        "   • 📊 Histórico completo com snapshots mensais\n"
+        "   • 🏆 Ranking dos seus melhores investimentos\n\n"
+        "💡  <b>Tipos suportados:</b>\n"
+        "   • 💎 CDB, LCI, LCA\n"
+        "   • 🏛 Tesouro Direto\n"
+        "   • 📊 Ações e Fundos\n"
+        "   • 🐷 Poupança\n"
+        "   • 🪙 Cofrinhos digitais\n\n"
+        "🔥  <b>Dica Pro:</b> Conecte seu banco com <code>/conectar_banco</code> para importar investimentos automaticamente!"
     )
 }
 
@@ -512,6 +536,9 @@ def get_help_keyboard(current_section: str = "main") -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("🏦 Open Banking", callback_data="help_openbanking"),
+            InlineKeyboardButton("📈 Investimentos", callback_data="help_investimentos"),
+        ],
+        [
             InlineKeyboardButton("⚙️ Ferramentas", callback_data="help_config"),
         ]
     ]
