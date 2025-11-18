@@ -1313,8 +1313,8 @@ class OpenFinanceOAuthHandler:
                 )
                 return
             
-            # ✨ NOVO LAYOUT: Agrupado por banco com informações consolidadas
-            message = "🏦 *Suas Contas Open Finance*\n\n"
+            # ✨ LAYOUT CONSOLIDADO: Cartões e Contas
+            message = "💳 *Cartões e Contas*\n\n"
             
             # Cores dos bancos
             bank_colors = {
@@ -1349,7 +1349,8 @@ class OpenFinanceOAuthHandler:
                 ).all()
                 
                 if not accounts:
-                    message += "   ℹ️ _Nenhuma conta encontrada_\n\n"
+                    message += "ℹ️ _Nenhuma conta encontrada_\n"
+                    message += "━━━━━━━━━━━━━━━━━━━━━━\n"
                     continue
                 
                 # Separar por tipo
@@ -1357,33 +1358,36 @@ class OpenFinanceOAuthHandler:
                 credit_cards = [a for a in accounts if a.type == "CREDIT"]
                 investments = [a for a in accounts if a.type == "INVESTMENT"]
                 
-                # Saldo total das contas bancárias
-                total_balance = sum(float(a.balance) for a in bank_accounts if a.balance is not None)
-                if total_balance != 0 or bank_accounts:
+                # Saldo (contas bancárias)
+                if bank_accounts:
+                    total_balance = sum(float(a.balance) for a in bank_accounts if a.balance is not None)
                     balance_str = f"R$ {total_balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    message += f"   � *Saldo:* `{balance_str}`\n"
+                    message += f"💰 Saldo: {balance_str}\n"
                 
-                # Informações dos cartões de crédito
-                for card in credit_cards:
-                    # Limite do cartão
-                    if card.credit_limit is not None:
-                        limit_str = f"R$ {float(card.credit_limit):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        message += f"   � *Limite Cartão:* `{limit_str}`\n"
-                    
-                    # Fatura atual (limite - saldo disponível)
-                    if card.balance is not None and card.credit_limit is not None:
-                        fatura_atual = float(card.credit_limit) - float(card.balance)
-                        fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        message += f"   🧾 *Fatura Atual:* `{fatura_str}`\n"
+                
+                # Cartões de crédito
+                if credit_cards:
+                    for card in credit_cards:
+                        # Limite restante
+                        if card.balance is not None:
+                            limite_restante = float(card.balance)
+                            limite_str = f"R$ {limite_restante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            message += f"📉 Limite restante: {limite_str}\n"
+                        
+                        # Fatura atual
+                        if card.balance is not None and card.credit_limit is not None:
+                            fatura_atual = float(card.credit_limit) - float(card.balance)
+                            fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            message += f"🧾 Fatura atual: {fatura_str}\n"
                 
                 # Investimentos (se houver)
                 if investments:
                     total_inv = sum(float(i.balance) for i in investments if i.balance is not None)
                     if total_inv > 0:
                         inv_str = f"R$ {total_inv:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        message += f"   📈 *Investimentos:* `{inv_str}`\n"
+                        message += f"📈 Investimentos: {inv_str}\n"
                 
-                message += "\n"
+                message += "━━━━━━━━━━━━━━━━━━━━━━\n"
             
             # Botões de ação
             keyboard = [
@@ -1393,8 +1397,7 @@ class OpenFinanceOAuthHandler:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            message += "━━━━━━━━━━━━━━━━━━━━\n"
-            message += "_Use os botões abaixo:_"
+            message += "\n_Use os botões abaixo:_"
             
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="MarkdownV2")
             
