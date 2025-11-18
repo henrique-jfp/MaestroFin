@@ -149,6 +149,29 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
             db.rollback()
             raise  # Re-raise para abortar a deleção completa
         
+        # ==================== DELETAR TOKENS BANCÁRIOS (user_bank_tokens) ====================
+        # Alguns tokens bancários (ex: tokens de OAuth/Pluggy) podem estar em tabelas
+        # auxiliares que referenciam diretamente "usuarios" sem ON DELETE CASCADE.
+        # Para evitar ForeignKeyViolation ao deletar o usuário, limpamos essas
+        # tabelas explicitamente aqui.
+
+        try:
+            # Usamos SQL direto porque a tabela pode não ter modelo SQLAlchemy
+            deleted_tokens = db.execute(
+                text("DELETE FROM user_bank_tokens WHERE id_usuario = :id_usuario"),
+                {"id_usuario": usuario_a_deletar.id}
+            ).rowcount
+            logging.info(f"✅ {deleted_tokens} tokens bancários (user_bank_tokens) deletados")
+            db.flush()
+        except Exception as e:
+            # Em caso de erro, fazemos rollback e abortamos a deleção completa
+            logging.error(
+                f"❌ Erro ao deletar tokens bancários (user_bank_tokens) do usuário {telegram_id}: {e}",
+                exc_info=True,
+            )
+            db.rollback()
+            raise
+
         # ==================== DELETAR USUÁRIO ====================
         # A mágica acontece aqui! Cascade deleta:
         # - lancamentos, contas, objetivos, agendamentos, conquistas_usuario
