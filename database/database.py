@@ -139,7 +139,8 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
             deleted_items = db.query(PluggyItem).filter(
                 PluggyItem.id_usuario == usuario_a_deletar.id
             ).delete(synchronize_session=False)
-            logging.info(f"✅ {deleted_items} conexões Open Finance deletadas")                db.flush()  # Aplica as mudanças imediatamente
+            logging.info(f"✅ {deleted_items} conexões Open Finance deletadas")
+            db.flush()  # Aplica as mudanças imediatamente
         
         except ImportError:
             logging.info("ℹ️ Tabelas Open Finance ainda não existem, pulando deleção...")
