@@ -28,11 +28,42 @@ from dateutil.relativedelta import relativedelta
 import numpy as np 
 from scipy.interpolate import make_interp_spline
 
-# --- SISTEMA DE CACHE INTELIGENTE ---
+# --- SISTEMA DE CACHE INTELIGENTE V2 (OTIMIZADO) ---
 _cache_financeiro = {}
 _cache_tempo = {}
 _cache_memoria = {}  # <-- Cache principal em memória
-CACHE_TTL = 300  # 5 minutos em segundos
+_cache_hash_transacoes = {}  # <-- Hash das transações para invalidação automática
+CACHE_TTL = 30  # ⚡ 30 segundos (rápido para evitar dados desatualizados)
+CACHE_MAX_SIZE = 100  # Limite de itens no cache
+
+logger = logging.getLogger(__name__)
+
+def _gerar_hash_transacoes(db: Session, user_id: int) -> str:
+    """
+    Gera hash único baseado na última modificação das transações.
+    Qualquer mudança (nova, editada, deletada) invalida o cache.
+    """
+    from models import Lancamento
+    from database.database import SessionLocal
+    
+    try:
+        # Busca data da última modificação ou criação
+        ultima_modificacao = db.query(
+            func.max(Lancamento.data_transacao)
+        ).filter(
+            Lancamento.id_usuario == user_id
+        ).scalar()
+        
+        total_transacoes = db.query(func.count(Lancamento.id)).filter(
+            Lancamento.id_usuario == user_id
+        ).scalar()
+        
+        # Hash baseado em data + total (muda se adicionar/remover)
+        hash_data = f"{user_id}:{ultima_modificacao}:{total_transacoes}"
+        return hashlib.md5(hash_data.encode()).hexdigest()
+    except Exception as e:
+        logger.warning(f"Erro ao gerar hash de transações: {e}")
+        return f"{user_id}:{time.time()}"  # Fallback: nunca cachea
 
 def _gerar_chave_cache(user_id: int, tipo: str, **parametros) -> str:
     """Gera uma chave única para cache baseada nos parâmetros"""
@@ -44,24 +75,70 @@ def _gerar_chave_cache(user_id: int, tipo: str, **parametros) -> str:
     texto_chave = json.dumps(dados_chave, sort_keys=True)
     return hashlib.md5(texto_chave.encode()).hexdigest()
 
-def _cache_valido(chave: str) -> bool:
-    """Verifica se o cache ainda é válido"""
+def _cache_valido(chave: str, db: Session = None, user_id: int = None) -> bool:
+    """
+    Verifica se o cache ainda é válido.
+    ⚡ NOVO: Invalida automaticamente se transações mudaram.
+    """
     if chave not in _cache_tempo:
         return False
+    
+    # Verificar TTL (tempo)
     tempo_cache = _cache_tempo[chave]
     tempo_atual = datetime.now().timestamp()
-    return (tempo_atual - tempo_cache) < CACHE_TTL
+    if (tempo_atual - tempo_cache) >= CACHE_TTL:
+        logger.debug(f"❌ Cache expirado por TTL: {chave}")
+        return False
+    
+    # ⚡ NOVO: Verificar se transações mudaram (invalidação inteligente)
+    if db and user_id:
+        hash_atual = _gerar_hash_transacoes(db, user_id)
+        hash_cache = _cache_hash_transacoes.get(chave)
+        
+        if hash_cache and hash_cache != hash_atual:
+            logger.info(f"🔄 Cache invalidado (transações mudaram): user {user_id}")
+            # Remove do cache imediatamente
+            _cache_financeiro.pop(chave, None)
+            _cache_tempo.pop(chave, None)
+            _cache_hash_transacoes.pop(chave, None)
+            return False
+    
+    return True
 
-def _obter_do_cache(chave: str) -> Any:
-    """Obtém dados do cache se válido"""
-    if _cache_valido(chave):
+def _obter_do_cache(chave: str, db: Session = None, user_id: int = None) -> Any:
+    """
+    Obtém dados do cache se válido.
+    ⚡ NOVO: Valida se transações mudaram antes de retornar.
+    """
+    if _cache_valido(chave, db, user_id):
+        logger.debug(f"✅ Cache hit: {chave}")
         return _cache_financeiro.get(chave)
+    
+    logger.debug(f"❌ Cache miss: {chave}")
     return None
 
-def _salvar_no_cache(chave: str, dados: Any) -> None:
-    """Salva dados no cache com timestamp"""
+def _salvar_no_cache(chave: str, dados: Any, db: Session = None, user_id: int = None) -> None:
+    """
+    Salva dados no cache com timestamp e hash das transações.
+    ⚡ NOVO: Salva hash para invalidação automática.
+    """
+    # Limita tamanho do cache
+    if len(_cache_financeiro) >= CACHE_MAX_SIZE:
+        # Remove item mais antigo
+        chave_mais_antiga = min(_cache_tempo.items(), key=lambda x: x[1])[0]
+        _cache_financeiro.pop(chave_mais_antiga, None)
+        _cache_tempo.pop(chave_mais_antiga, None)
+        _cache_hash_transacoes.pop(chave_mais_antiga, None)
+        logger.debug(f"🗑️ Cache limpo (limite atingido): {chave_mais_antiga}")
+    
     _cache_financeiro[chave] = dados
     _cache_tempo[chave] = datetime.now().timestamp()
+    
+    # ⚡ NOVO: Salva hash das transações para invalidação automática
+    if db and user_id:
+        _cache_hash_transacoes[chave] = _gerar_hash_transacoes(db, user_id)
+    
+    logger.debug(f"💾 Dados salvos no cache: {chave}")
     
 def limpar_cache_usuario(user_id: int) -> None:
     """Limpa todo o cache de um usuário específico"""
@@ -1434,10 +1511,13 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
         total_lancamentos=len(lancamentos)
     )
     
-    dados_cache = _obter_do_cache(chave_cache)
+    # 🧠 Cache inteligente com invalidação por hash
+    dados_cache = _obter_do_cache(chave_cache, db, usuario.id)
     if dados_cache:
-        logger.info(f"Contexto financeiro obtido do cache para usuário {usuario.id}")
+        logger.info(f"✅ Contexto financeiro obtido do CACHE para usuário {usuario.id}")
         return dados_cache
+    
+    logger.info(f"🔄 Cache MISS ou INVALIDADO - recalculando contexto para usuário {usuario.id}")
 
     # Análise comportamental completa
     analise_comportamental = analisar_comportamento_financeiro(lancamentos)
@@ -1566,8 +1646,9 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
 
     resultado = json.dumps(contexto_completo, indent=2, ensure_ascii=False)
     
-    # Salva no cache
-    _salvar_no_cache(chave_cache, resultado)
+    # 🧠 Salva no cache com hash de transações
+    _salvar_no_cache(chave_cache, resultado, db, usuario.id)
+    logger.info(f"💾 Contexto salvo no cache para usuário {usuario.id}")
     logger.info(f"✅ Contexto financeiro v6.0 (com Open Finance) calculado para usuário {usuario.id}")
     logger.info(f"📊 Total: {len(lancamentos)} manuais + {len(transacoes_bancarias)} bancárias = {total_transacoes} transações")
     
