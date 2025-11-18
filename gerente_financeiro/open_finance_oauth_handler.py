@@ -1925,12 +1925,14 @@ class OpenFinanceOAuthHandler:
                 logger.info(f"✅ Conta normal: amount={'positivo' if float(txn.amount) > 0 else 'negativo'} → {tipo.upper()}")
             
             # Criar lançamento
+            # CORREÇÃO: usar nome do banco/conta em vez de string genérica
+            nome_banco = account.name if account else "Sem conta"
             lancamento = Lancamento(
                 descricao=txn.description,
                 valor=abs(float(txn.amount)),
                 tipo=tipo,
                 data_transacao=datetime.combine(txn.date, datetime.min.time()),
-                forma_pagamento="Cartão de Crédito" if is_credit_card else "Open Finance",
+                forma_pagamento=nome_banco,  # ✅ Nome real: "Nubank", "Itaú", etc.
                 id_usuario=usuario.id,
                 id_categoria=suggested_category.id if suggested_category else None
             )
@@ -2034,12 +2036,14 @@ class OpenFinanceOAuthHandler:
                         logger.info(f"✅ [MASSA] Conta normal: {txn.id} → {tipo.upper()} (amount={'positivo' if float(txn.amount) > 0 else 'negativo'})")
                     
                     # Criar lançamento
+                    # CORREÇÃO: usar nome do banco/conta em vez de string genérica
+                    nome_banco = account.name if account else "Sem conta"
                     lancamento = Lancamento(
                         descricao=txn.description,
                         valor=abs(float(txn.amount)),
                         tipo=tipo,
                         data_transacao=datetime.combine(txn.date, datetime.min.time()),
-                        forma_pagamento="Cartão de Crédito" if is_credit_card else "Open Finance",
+                        forma_pagamento=nome_banco,  # ✅ Nome real: "Nubank", "Itaú", etc.
                         id_usuario=usuario.id,
                         id_categoria=suggested_category.id if suggested_category else None
                     )
@@ -2221,7 +2225,7 @@ Categoria escolhida:"""
             
             # Configurar Gemini
             genai.configure(api_key=GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')  # ✅ API v1beta
             
             # Buscar categorias disponíveis
             categorias = db.query(Categoria).all()

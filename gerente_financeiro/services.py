@@ -1160,8 +1160,9 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
                 # Preparar dados para fluxo de caixa
                 dados_fluxo = []
                 for l in lancamentos:
-                    entrada = float(l.valor) if l.tipo == 'Entrada' else 0
-                    saida = abs(float(l.valor)) if l.tipo == 'Saída' else 0
+                    # CORREÇÃO: Tipos corretos são 'Receita' e 'Despesa' (não 'Entrada'/'Saída')
+                    entrada = float(l.valor) if l.tipo == 'Receita' else 0
+                    saida = abs(float(l.valor)) if l.tipo == 'Despesa' else 0
                     dados_fluxo.append({
                         'data': l.data_transacao,
                         'entrada': entrada,
