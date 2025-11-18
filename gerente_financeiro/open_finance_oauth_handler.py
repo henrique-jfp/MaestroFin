@@ -1486,6 +1486,10 @@ class OpenFinanceOAuthHandler:
                 logger.warning(f"⚠️  OAuth URL não encontrado. parameter={parameter}, userAction={item_updated.get('userAction')}")
             
             if oauth_url:
+                # 🔍 DETECTAR SE É BRADESCO OU BANCO QUE EXIGE APP
+                is_bradesco = "bradesco" in connector['name'].lower()
+                requires_app = is_bradesco  # Adicionar outros bancos aqui se necessário
+                
                 # Criar botão inline com URL
                 keyboard = [
                     [InlineKeyboardButton("🔐 Autorizar no Banco", url=oauth_url)],
@@ -1494,24 +1498,41 @@ class OpenFinanceOAuthHandler:
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
-                # Mensagem principal
-                msg_text = (
-                    f"🔐 *Autorização Necessária*\n\n"
-                    f"🏦 Banco: *{connector['name']}*\n"
-                    f"🆔 Conexão: `{item_id}`\n\n"
-                    f"👉 Clique no botão abaixo para autorizar o acesso:\n\n"
-                    f"⚠️ Você será redirecionado para o site oficial do banco.\n"
-                    f"✅ Após autorizar, clique em *'Já Autorizei'*."
-                )
-                
-                # Adicionar link bruto para casos de erro (ex: Bradesco no mobile)
-                # Isso ajuda quando o deep link falha e abre a loja de apps
-                msg_text += f"\n\n💡 *Problemas?* Copie e cole no navegador:\n`{oauth_url}`"
+                # Mensagem principal adaptada por banco
+                if requires_app:
+                    # 📱 BRADESCO: Instruções específicas para app
+                    msg_text = (
+                        f"🔐 *Autorização via App do Banco*\n\n"
+                        f"🏦 Banco: *{connector['name']}*\n"
+                        f"🆔 Conexão: `{item_id}`\n\n"
+                        f"⚠️ *IMPORTANTE:* O {connector['name']} exige autorização pelo *app oficial*\\.\n\n"
+                        f"📱 *Como autorizar:*\n"
+                        f"1\\. Abra o *App {connector['name']}* no seu celular\n"
+                        f"2\\. Vá em: *Menu* → *Open Finance* ou *Compartilhar Dados*\n"
+                        f"3\\. Procure por *Maestro Financeiro* ou *Pluggy*\n"
+                        f"4\\. Autorize o compartilhamento de dados\n"
+                        f"5\\. Volte aqui e clique em *'Já Autorizei'*\n\n"
+                        f"💡 *Alternativa:* Tente clicar no botão abaixo\\. Se abrir uma página pedindo para baixar o app, ignore e siga as instruções acima\\.\n\n"
+                        f"🔗 *Link OAuth* \\(se o app pedir\\):\n"
+                        f"`{oauth_url}`"
+                    )
+                else:
+                    # 🌐 OUTROS BANCOS: Fluxo OAuth web normal
+                    msg_text = (
+                        f"🔐 *Autorização Necessária*\n\n"
+                        f"🏦 Banco: *{connector['name']}*\n"
+                        f"🆔 Conexão: `{item_id}`\n\n"
+                        f"👉 Clique no botão abaixo para autorizar o acesso:\n\n"
+                        f"⚠️ Você será redirecionado para o site oficial do banco\\.\n"
+                        f"✅ Após autorizar, clique em *'Já Autorizei'*\\.\n\n"
+                        f"💡 *Problemas?* Copie e cole no navegador:\n"
+                        f"`{oauth_url}`"
+                    )
 
                 await status_msg.edit_text(
                     msg_text,
                     reply_markup=reply_markup,
-                    parse_mode="Markdown"
+                    parse_mode="MarkdownV2"
                 )
                 
                 # Iniciar polling em background
@@ -2130,6 +2151,7 @@ class OpenFinanceOAuthHandler:
         logger.info(f"🔄 Iniciando polling para item {item_id} (connector: {connector.get('name')})")
         
         oauth_url_sent = False  # Flag para evitar enviar OAuth URL múltiplas vezes
+        waiting_user_input_count = 0  # Contador para timeout específico de WAITING_USER_INPUT
         attempt = 0
         last_execution_status = None
         
@@ -2143,6 +2165,98 @@ class OpenFinanceOAuthHandler:
                 execution_status = item.get("executionStatus")
                 
                 logger.info(f"📊 Polling item {item_id}: tentativa {attempt}/{max_attempts}, status={status}, executionStatus={execution_status}")
+                
+                # ⏰ PROTEÇÃO: Timeout específico para WAITING_USER_INPUT
+                # Bradesco e outros bancos podem ficar presos nesse status sem mudança
+                if status == "WAITING_USER_INPUT" or execution_status == "WAITING_USER_INPUT":
+                    waiting_user_input_count += 1
+                    logger.info(f"⏳ WAITING_USER_INPUT detectado: {waiting_user_input_count}/20 tentativas")
+                    
+                    # Se passou de 20 tentativas (~1min40s), enviar orientação ao usuário
+                    if waiting_user_input_count >= 20:
+                        logger.warning(f"⏰ Timeout em WAITING_USER_INPUT após {waiting_user_input_count} tentativas")
+                        
+                        # ✅ LIMPAR conexão pendente (timeout em WAITING_USER_INPUT)
+                        if user_id in _pending_connections:
+                            del _pending_connections[user_id]
+                            logger.info(f"⏰ Conexão pendente removida para usuário {user_id} (timeout WAITING_USER_INPUT)")
+                        
+                        # Enviar mensagem orientando o usuário
+                        safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
+                        
+                        # Procurar OAuth URL novamente para reenviar
+                        oauth_url = None
+                        if "parameter" in item and isinstance(item["parameter"], dict):
+                            oauth_url = item["parameter"].get("data")
+                        if not oauth_url and "userAction" in item:
+                            user_action = item["userAction"]
+                            if isinstance(user_action, dict):
+                                oauth_url = user_action.get("url")
+                        
+                        if oauth_url:
+                            safe_url = oauth_url.replace("\\", "\\\\").replace("`", "\\`")
+                            keyboard = [
+                                [InlineKeyboardButton("🔐 Autorizar no Banco", url=oauth_url)],
+                                [InlineKeyboardButton("✅ Já Autorizei", callback_data=f"of_authorized_{item_id}")],
+                                [InlineKeyboardButton("❌ Cancelar", callback_data="of_cancel_auth")]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            # 🔍 DETECTAR SE É BRADESCO OU BANCO QUE EXIGE APP
+                            is_bradesco = "bradesco" in bank_name.lower()
+                            
+                            if is_bradesco:
+                                # 📱 Instruções específicas para Bradesco
+                                await context.bot.send_message(
+                                    chat_id=user_id,
+                                    text=f"⏰ *A autorização está demorando\\.\\.\\.*\n\n"
+                                         f"🏦 Banco: *{safe_bank_name}*\n"
+                                         f"🆔 Conexão: `{item_id}`\n\n"
+                                         f"� *O Bradesco exige autorização pelo app oficial\\!*\n\n"
+                                         f"�🔍 *Como autorizar no App Bradesco:*\n"
+                                         f"1\\. Abra o *App Bradesco*\n"
+                                         f"2\\. Menu → *Open Finance* / *Compartilhar Dados*\n"
+                                         f"3\\. Procure *Maestro Financeiro* ou *Pluggy*\n"
+                                         f"4\\. Autorize o compartilhamento\n"
+                                         f"5\\. Volte aqui e clique *'Já Autorizei'*\n\n"
+                                         f"💡 *Não consegue encontrar?*\n"
+                                         f"Procure nas configurações por: _Consentimentos_, _Compartilhar Dados_ ou _Open Banking_\\.\n\n"
+                                         f"⚠️ Ignore se o link abrir uma página pedindo para baixar o app\\. Use o app que você já tem instalado\\.",
+                                    reply_markup=reply_markup,
+                                    parse_mode="MarkdownV2"
+                                )
+                            else:
+                                # 🌐 Instruções genéricas para outros bancos
+                                await context.bot.send_message(
+                                    chat_id=user_id,
+                                    text=f"⏰ *A autorização está demorando\\.\\.\\.*\n\n"
+                                         f"🏦 Banco: *{safe_bank_name}*\n"
+                                         f"🆔 Conexão: `{item_id}`\n\n"
+                                         f"🔍 *O que fazer agora:*\n"
+                                         f"1\\. Clique em *'Autorizar no Banco'* abaixo\n"
+                                         f"2\\. Complete a autorização no site do {safe_bank_name}\n"
+                                         f"3\\. Volte aqui e clique em *'Já Autorizei'*\n\n"
+                                         f"💡 *Link direto* \\(se o botão não funcionar\\):\n"
+                                         f"`{safe_url}`\n\n"
+                                         f"⚠️ Se você já autorizou e nada aconteceu, clique em *'Já Autorizei'* para verificar manualmente\\.",
+                                    reply_markup=reply_markup,
+                                    parse_mode="MarkdownV2"
+                                )
+                        else:
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=f"⏰ *A autorização está demorando\\.\\.\\.*\n\n"
+                                     f"🏦 Banco: *{safe_bank_name}*\n\n"
+                                     f"⚠️ Por favor, verifique se você completou a autorização no site do banco\\.\n\n"
+                                     f"Use /minhas\\_contas para verificar se a conexão foi estabelecida\\.",
+                                parse_mode="MarkdownV2"
+                            )
+                        
+                        # Sair do loop - não adianta continuar polling
+                        break
+                else:
+                    # Se status mudou de WAITING_USER_INPUT, resetar contador
+                    waiting_user_input_count = 0
                 
                 # Detectar mudança no executionStatus (indica progresso)
                 if last_execution_status and execution_status != last_execution_status:
