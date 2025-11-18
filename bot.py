@@ -447,9 +447,11 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
         callback_builders.extend([
             ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_")),
-            ("action_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_action_callback, pattern="^action_"))
+            ("action_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_action_callback, pattern="^action_")),
+            ("of_sync_now", lambda: CallbackQueryHandler(of_oauth_handler.handle_sync_now_callback, pattern="^of_sync_now_")),
+            ("of_view_accounts", lambda: CallbackQueryHandler(of_oauth_handler.handle_view_accounts_callback, pattern="^of_view_accounts$"))
         ])
-        logger.info("✅ Callback handlers Open Finance adicionados (import, action)")
+        logger.info("✅ Callback handlers Open Finance adicionados (import, action, sync_now, view_accounts)")
 
     for name, builder in callback_builders:
         build_and_add(name, builder)

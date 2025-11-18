@@ -768,6 +768,215 @@ def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
         db.close()
 
 
+def fetch_bank_connection_stats(item_id: str) -> Dict:
+    """
+    🔍 Busca estatísticas da conexão bancária recém estabelecida.
+    
+    Retorna informações sobre:
+    - Total de transações disponíveis
+    - Saldo atual das contas
+    - Investimentos encontrados
+    - Faturas de cartão de crédito
+    
+    Args:
+        item_id: ID do item Pluggy recém conectado
+        
+    Returns:
+        Dict com estatísticas: {
+            'total_transactions': int,
+            'total_accounts': int,
+            'total_investments': int,
+            'accounts_summary': List[Dict],
+            'investments_summary': List[Dict],
+            'total_balance': Decimal
+        }
+    """
+    try:
+        from decimal import Decimal
+        
+        logger.info(f"🔍 Buscando estatísticas para item {item_id}")
+        
+        # 1️⃣ Buscar contas
+        accounts_data = pluggy_request("GET", f"/accounts", params={"itemId": item_id})
+        accounts = accounts_data.get("results", [])
+        
+        total_balance = Decimal(0)
+        accounts_summary = []
+        
+        for account in accounts:
+            balance = Decimal(account.get("balance", 0) or 0)
+            total_balance += balance
+            
+            accounts_summary.append({
+                'name': account.get('name', 'Conta'),
+                'type': account.get('type', 'BANK'),
+                'balance': balance,
+                'credit_limit': Decimal(account.get('creditLimit', 0) or 0)
+            })
+        
+        # 2️⃣ Buscar transações (conta quantas existem)
+        total_transactions = 0
+        for account in accounts:
+            try:
+                transactions_data = pluggy_request(
+                    "GET", 
+                    f"/transactions", 
+                    params={"accountId": account["id"], "pageSize": 1}  # Só pra contar
+                )
+                total_transactions += transactions_data.get("total", 0)
+            except Exception as e:
+                logger.warning(f"⚠️  Erro ao contar transações da conta {account['id']}: {e}")
+        
+        # 3️⃣ Buscar investimentos
+        investments_summary = []
+        try:
+            investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id})
+            investments = investments_data.get("results", [])
+            
+            for inv in investments:
+                investments_summary.append({
+                    'name': inv.get('name', 'Investimento'),
+                    'type': inv.get('type', 'Desconhecido'),
+                    'amount': Decimal(inv.get('amount', 0) or 0)
+                })
+                
+        except Exception as e:
+            logger.warning(f"⚠️  Erro ao buscar investimentos: {e}")
+        
+        stats = {
+            'total_transactions': total_transactions,
+            'total_accounts': len(accounts),
+            'total_investments': len(investments_summary),
+            'accounts_summary': accounts_summary,
+            'investments_summary': investments_summary,
+            'total_balance': total_balance
+        }
+        
+        logger.info(f"✅ Estatísticas: {total_transactions} transações, {len(accounts)} contas, {len(investments_summary)} investimentos")
+        
+        return stats
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao buscar estatísticas: {e}", exc_info=True)
+        return {
+            'total_transactions': 0,
+            'total_accounts': 0,
+            'total_investments': 0,
+            'accounts_summary': [],
+            'investments_summary': [],
+            'total_balance': Decimal(0),
+            'error': str(e)
+        }
+
+
+def calcular_limite_disponivel(conta_id: int, db) -> Dict:
+    """
+    💳 Calcula o limite disponível de um cartão de crédito.
+    
+    Fórmula: Limite Disponível = Limite Total - Σ(Faturas do mês atual para frente)
+    
+    Args:
+        conta_id: ID da conta (cartão de crédito)
+        db: Sessão do banco de dados
+        
+    Returns:
+        Dict com informações: {
+            'limite_total': Decimal,
+            'limite_disponivel': Decimal,
+            'fatura_atual': Decimal,
+            'faturas_futuras': Decimal,
+            'total_comprometido': Decimal
+        }
+    """
+    try:
+        from models import Conta, Lancamento
+        from decimal import Decimal
+        from datetime import datetime, date
+        from dateutil.relativedelta import relativedelta
+        
+        # Buscar conta
+        conta = db.query(Conta).filter(Conta.id == conta_id).first()
+        
+        if not conta or conta.tipo != 'Cartão de Crédito':
+            return {
+                'error': 'Conta não encontrada ou não é um cartão de crédito',
+                'limite_total': Decimal(0),
+                'limite_disponivel': Decimal(0),
+                'fatura_atual': Decimal(0),
+                'faturas_futuras': Decimal(0),
+                'total_comprometido': Decimal(0)
+            }
+        
+        limite_total = Decimal(conta.limite_cartao or 0)
+        
+        if limite_total == 0:
+            return {
+                'limite_total': Decimal(0),
+                'limite_disponivel': Decimal(0),
+                'fatura_atual': Decimal(0),
+                'faturas_futuras': Decimal(0),
+                'total_comprometido': Decimal(0),
+                'warning': 'Limite não configurado'
+            }
+        
+        # Data atual
+        hoje = date.today()
+        
+        # Buscar TODAS as transações de Saída (gastos) do mês atual para frente
+        lancamentos_futuros = db.query(Lancamento).filter(
+            Lancamento.id_conta == conta_id,
+            Lancamento.tipo == 'Saída',
+            Lancamento.data_transacao >= datetime(hoje.year, hoje.month, 1)
+        ).all()
+        
+        # Calcular total comprometido
+        total_comprometido = sum(Decimal(lanc.valor) for lanc in lancamentos_futuros)
+        
+        # Separar fatura atual vs futuras (baseado no dia de fechamento)
+        dia_fechamento = conta.dia_fechamento or 1
+        
+        # Data de fechamento do mês atual
+        if hoje.day <= dia_fechamento:
+            # Ainda estamos no período da fatura atual
+            data_fechamento_atual = date(hoje.year, hoje.month, dia_fechamento)
+        else:
+            # Já passou o fechamento, estamos na próxima fatura
+            proximo_mes = hoje + relativedelta(months=1)
+            data_fechamento_atual = date(proximo_mes.year, proximo_mes.month, dia_fechamento)
+        
+        fatura_atual = Decimal(0)
+        faturas_futuras = Decimal(0)
+        
+        for lanc in lancamentos_futuros:
+            if lanc.data_transacao.date() <= data_fechamento_atual:
+                fatura_atual += Decimal(lanc.valor)
+            else:
+                faturas_futuras += Decimal(lanc.valor)
+        
+        # Calcular limite disponível
+        limite_disponivel = limite_total - total_comprometido
+        
+        return {
+            'limite_total': limite_total,
+            'limite_disponivel': max(limite_disponivel, Decimal(0)),  # Não pode ser negativo
+            'fatura_atual': fatura_atual,
+            'faturas_futuras': faturas_futuras,
+            'total_comprometido': total_comprometido,
+            'percentual_usado': (total_comprometido / limite_total * 100) if limite_total > 0 else Decimal(0)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao calcular limite disponível: {e}", exc_info=True)
+        return {
+            'error': str(e),
+            'limite_total': Decimal(0),
+            'limite_disponivel': Decimal(0),
+            'fatura_atual': Decimal(0),
+            'faturas_futuras': Decimal(0),
+            'total_comprometido': Decimal(0)
+        }
+
+
 class OpenFinanceOAuthHandler:
     """Handler para Open Finance com OAuth"""
     
@@ -1246,12 +1455,36 @@ class OpenFinanceOAuthHandler:
                     del _pending_connections[user_id]
                     logger.info(f"✅ Conexão pendente removida para usuário {user_id} (sucesso)")
                 
+                # 🔍 Buscar estatísticas da conexão
+                stats = fetch_bank_connection_stats(item_id)
+                
+                # Montar mensagem com estatísticas
+                total_trans = stats.get('total_transactions', 0)
+                total_inv = stats.get('total_investments', 0)
+                total_contas = stats.get('total_accounts', 0)
+                
+                mensagem = f"✅ *Banco conectado com sucesso!*\n\n"
+                mensagem += f"🏦 *{connector_name}*\n\n"
+                mensagem += f"📊 *Dados Encontrados:*\n"
+                mensagem += f"💳 {total_contas} conta(s)\n"
+                mensagem += f"📝 {total_trans} lançamento(s)\n"
+                
+                if total_inv > 0:
+                    mensagem += f"📈 {total_inv} investimento(s)\n"
+                
+                mensagem += f"\n💡 Use /sincronizar para importar os dados\\!"
+                
+                # Botão para sincronizar
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Sincronizar Agora", callback_data=f"of_sync_now_{item_id}")],
+                    [InlineKeyboardButton("📋 Ver Contas", callback_data="of_view_accounts")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
                 await query.edit_message_text(
-                    f"✅ *Banco conectado com sucesso!*\n\n"
-                    f"🏦 {connector_name}\n"
-                    f"✅ Status: {status}\n\n"
-                    f"Use /minhas_contas para ver suas contas.",
-                    parse_mode="Markdown"
+                    mensagem,
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
                 )
                 return ConversationHandler.END
                 
@@ -2383,6 +2616,63 @@ Categorias:"""
             )
         finally:
             db.close()
+    
+    # ==================== CALLBACKS EXTRAS ====================
+    
+    async def handle_sync_now_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handler para botão 'Sincronizar Agora' após conectar banco"""
+        query = update.callback_query
+        await query.answer("🔄 Iniciando sincronização...")
+        
+        try:
+            # Extrair item_id do callback_data
+            item_id = query.data.split("_")[-1]
+            user_id = update.effective_user.id
+            
+            # Mensagem de progresso
+            await query.edit_message_text(
+                "🔄 *Sincronizando dados\\.\\.\\.*\n\n"
+                "Isso pode levar alguns segundos\\.\\.\\.",
+                parse_mode="MarkdownV2"
+            )
+            
+            # Realizar sincronização
+            result = sync_all_transactions_for_user(user_id)
+            
+            if "error" in result:
+                await query.edit_message_text(
+                    f"❌ *Erro na sincronização*\n\n"
+                    f"Detalhes: {result['error']}",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Sucesso
+            await query.edit_message_text(
+                f"✅ *Sincronização Concluída\\!*\n\n"
+                f"📊 *Resultados:*\n"
+                f"💳 {result.get('accounts', 0)} conta\\(s\\)\n"
+                f"📝 {result.get('new', 0)} nova\\(s\\) transação\\(ões\\)\n"
+                f"🔄 {result.get('updated', 0)} atualizada\\(s\\)\n\n"
+                f"Use /minhas\\_contas para ver os detalhes\\!",
+                parse_mode="MarkdownV2"
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Erro no callback de sincronização: {e}", exc_info=True)
+            await query.edit_message_text(
+                "❌ Erro ao sincronizar dados\\.\n\n"
+                "Tente usar o comando /sincronizar\\.",
+                parse_mode="MarkdownV2"
+            )
+    
+    async def handle_view_accounts_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handler para botão 'Ver Contas' após conectar banco"""
+        query = update.callback_query
+        await query.answer()
+        
+        # Redirecionar para o comando /minhas_contas
+        await self.minhas_contas(update, context)
     
     # ==================== CONVERSATION HANDLER ====================
     
