@@ -414,12 +414,28 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         from database.database import get_db
         from models import PluggyItem, PluggyAccount
         
-        # Buscar accounts na API Pluggy
-        accounts_data = pluggy_request("GET", f"/accounts", params={"itemId": item_id})
-        accounts = accounts_data.get("results", [])
+        # Buscar accounts na API Pluggy (com paginação)
+        all_accounts = []
+        page = 1
+        total_pages = 1
+        
+        while page <= total_pages:
+            logger.info(f"🔄 Buscando accounts página {page}...")
+            accounts_data = pluggy_request("GET", f"/accounts", params={"itemId": item_id, "page": page})
+            
+            results = accounts_data.get("results", [])
+            all_accounts.extend(results)
+            
+            total_pages = accounts_data.get("totalPages", 1)
+            total_items = accounts_data.get("total", 0)
+            
+            logger.info(f"📊 Página {page}/{total_pages}: {len(results)} contas (Total API: {total_items})")
+            page += 1
+            
+        accounts = all_accounts
         
         # 🔍 LOG DETALHADO: Ver tipos de contas retornadas
-        logger.info(f"📊 Total de {len(accounts)} conta(s) retornada(s) pela API Pluggy")
+        logger.info(f"📊 Total de {len(accounts)} conta(s) recuperada(s) após paginação")
         import json
         for acc in accounts:
             logger.info(f"   💳 Conta: {acc.get('name')} | Tipo: {acc.get('type')} | Subtipo: {acc.get('subtype')}")
@@ -476,6 +492,7 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         logger.info(f"💾 {saved_count} account(s) salva(s) para item {item_id}")
         
         # Sincronizar investimentos (criar/atualizar registros de Investment)
+        # Passamos a lista crua de accounts para análise detalhada (ex: bankData)
         try:
             _sync_investments_from_accounts(pluggy_item.id, db, accounts)
         except Exception as e:
@@ -521,25 +538,41 @@ def save_pluggy_investments_to_db(item_id: str, pluggy_item_id: int, db) -> bool
         
         logger.info(f"📈 Buscando investimentos via /investments para item {item_id}...")
         
-        # Buscar investimentos na API Pluggy
-        logger.info(f"🔄 Fazendo requisição GET /investments?itemId={item_id}")
-        try:
-            investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id})
-            import json
-            logger.info(f"✅ Response da API Pluggy /investments: {json.dumps(investments_data, indent=2, default=str)}")
-        except Exception as api_error:
-            logger.warning(f"⚠️  Endpoint /investments não retornou dados para item {item_id}: {api_error}")
-            return True  # Não é erro crítico - alguns bancos não têm investimentos
+        # Buscar investimentos na API Pluggy (com paginação)
+        all_investments = []
+        page = 1
+        total_pages = 1
         
-        investments = investments_data.get("results", [])
+        while page <= total_pages:
+            logger.info(f"🔄 Buscando investimentos página {page}...")
+            try:
+                investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id, "page": page})
+                
+                results = investments_data.get("results", [])
+                all_investments.extend(results)
+                
+                total_pages = investments_data.get("totalPages", 1)
+                total_items = investments_data.get("total", 0)
+                
+                logger.info(f"📊 Página {page}/{total_pages}: {len(results)} investimentos (Total API: {total_items})")
+                
+                # Log do primeiro item da página para debug
+                if results:
+                    import json
+                    logger.info(f"🔍 Exemplo de investimento (pág {page}): {json.dumps(results[0], indent=2, default=str)}")
+                
+                page += 1
+            except Exception as api_error:
+                logger.warning(f"⚠️  Erro ao buscar página {page} de investimentos: {api_error}")
+                break
+        
+        investments = all_investments
         
         if not investments:
             logger.warning(f"⚠️  Nenhum investimento encontrado via /investments para item {item_id}")
-            logger.warning(f"📊 Response completo: {investments_data}")
             return True
         
         logger.info(f"💰 {len(investments)} investimento(s) encontrado(s) via API Pluggy!")
-        logger.info(f"📋 Primeiro investimento: {investments[0] if investments else 'N/A'}")
         
         # Buscar item para pegar id_usuario e banco
         pluggy_item = db.query(PluggyItem).filter(PluggyItem.id == pluggy_item_id).first()
@@ -1882,7 +1915,9 @@ class OpenFinanceOAuthHandler:
             
             if "error" in stats:
                 await status_msg.edit_text(
-                    f"❌ Erro na sincronização:\n{stats['error']}"
+                    f"❌ *Erro na sincronização*\n\n"
+                    f"Detalhes: {stats['error']}",
+                    parse_mode="Markdown"
                 )
                 return
             
@@ -1988,7 +2023,7 @@ class OpenFinanceOAuthHandler:
             message += "Clique para importar:\n\n"
             
             keyboard = []
-            for idx, txn in enumerate(pending_txns[:10], 1):  # Mostrar apenas 10 por vez
+            for idx, txn in enumerate(pending_txns[:10], 1): # Mostrar apenas 10 por vez
                 # ✅ CORREÇÃO: Determinar cor baseado no tipo de conta
                 account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
                 is_credit_card = account and account.type == "CREDIT"
@@ -2336,21 +2371,8 @@ class OpenFinanceOAuthHandler:
                 # - Pagamentos fatura: vêm como type="CREDIT" + amount negativo (é pagamento)
                 # 
                 # Nossa lógica: amount > 0 no CC = DESPESA, amount < 0 = pagamento (ignorar)
-                if float(txn.amount) < 0:
-                    # Pagamento de fatura - não importar
-                    logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando importação")
-                    await query.edit_message_text(
-                        "ℹ️ *Pagamento de fatura detectado*\n\n"
-                        "Esta transação é um pagamento de fatura do cartão\\.\n"
-                        "Não será importada para evitar duplicação\\.",
-                        parse_mode="MarkdownV2"
-                    )
-                    return
-                else:
-                    # ✅ CORREÇÃO: IGNORAMOS o "type" da API para cartões
-                    # Amount positivo em CC = GASTO (DESPESA), independente do "type" ser "CREDIT"
-                    tipo = "Despesa"  # Gasto no cartão - SEMPRE DESPESA
-                    logger.info(f"✅ Cartão de crédito: categorizando como DESPESA (amount positivo, ignorando type='{txn.type}')")
+                tipo = "Despesa"  # Gasto no cartão - SEMPRE DESPESA
+                logger.info(f"✅ Cartão de crédito: categorizando como DESPESA (amount positivo, ignorando type='{txn.type}')")
             else:
                 # Para conta corrente/poupança: lógica normal
                 tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
@@ -2494,11 +2516,18 @@ class OpenFinanceOAuthHandler:
             
             db.commit()
             
-            message = f"✅ *Importação concluída\\!*\n\n"
-            message += f"📊 {imported_count} transação\\(ões\\) importada\\(s\\)\n"
+            # Mensagem final
+            emoji_final = "🎉" if falha == 0 else "✅" if sucesso > 0 else "❌"
+            
+            message = f"{emoji_final} *Importação concluída\\!*\n\n"
+            message += f"📊 *Resultados:*\n"
+            message += f"✅ Sucesso: {imported_count}\n"
+            
             if skipped_count > 0:
-                message += f"⏭️ {skipped_count} pagamento\\(s\\) de fatura ignorado\\(s\\)\n"
-            message += f"\nUse /relatorio para ver seus gastos\\."
+                message += f"⏭️ Ignorados: {skipped_count}\n\n"
+                message += f"💡 Dica: Lançamentos não categorizados podem ser editados manualmente\\."
+            else:
+                message += f"\n🎯 Todos os lançamentos foram categorizados com sucesso\\!"
             
             await query.edit_message_text(message, parse_mode="MarkdownV2")
             
