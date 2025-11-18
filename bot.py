@@ -625,7 +625,7 @@ def create_application():
             logger.warning(f"⚠️ Jobs falhou: {job_error} - continuando")
         
         # 🏦 OPEN FINANCE AUTO-SYNC
-        if OPEN_FINANCE_ENABLED:
+        if OPEN_FINANCE_OAUTH_ENABLED:
             try:
                 from open_finance.data_sync import DataSynchronizer
                 synchronizer = DataSynchronizer()
