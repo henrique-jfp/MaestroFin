@@ -220,10 +220,29 @@ def _sync_investments_from_accounts(pluggy_item_id: int, db) -> None:
         banco_nome = pluggy_item.connector_name
         
         # Buscar contas de investimento deste item
-        investment_accounts = db.query(PluggyAccount).filter(
-            PluggyAccount.id_item == pluggy_item_id,
-            PluggyAccount.type == "INVESTMENT"
+        all_accounts = db.query(PluggyAccount).filter(
+            PluggyAccount.id_item == pluggy_item_id
         ).all()
+        
+        # Filtrar contas que são investimentos
+        # Aceitar: type=INVESTMENT OU nome contém "cofrinho" OU subtype indica investimento
+        investment_accounts = []
+        for acc in all_accounts:
+            nome_lower = (acc.name or "").lower()
+            subtype_lower = (acc.subtype or "").lower()
+            
+            is_investment = (
+                acc.type == "INVESTMENT" or
+                "cofrinho" in nome_lower or
+                "cofre" in nome_lower or
+                "investimento" in nome_lower or
+                "investment" in subtype_lower or
+                "savings" in subtype_lower
+            )
+            
+            if is_investment:
+                investment_accounts.append(acc)
+                logger.info(f"💰 Detectado investimento: {acc.name} (tipo: {acc.type}, subtipo: {acc.subtype})")
         
         if not investment_accounts:
             logger.info(f"ℹ️  Nenhuma conta de investimento encontrada para item {pluggy_item_id}")
@@ -2777,9 +2796,18 @@ Categorias:"""
                 message += f"💳 *Contas ({len(accounts)}):*\n"
                 
                 for acc in accounts:
-                    message += f"  • {acc.name}\n"
-                    message += f"    Tipo: `{acc.type}`\n"
-                    message += f"    Subtipo: `{acc.subtype or 'N/A'}`\n"
+                    # Detectar se pode ser investimento
+                    nome_lower = (acc.name or "").lower()
+                    is_possible_investment = any(word in nome_lower for word in ["cofrinho", "cofre", "investimento", "poupança", "savings"])
+                    
+                    emoji = "💰" if is_possible_investment else "  •"
+                    message += f"{emoji} {acc.name}\n"
+                    message += f"    Tipo: `{acc.type}`"
+                    
+                    if is_possible_investment and acc.type != "INVESTMENT":
+                        message += f" ⚠️ _Pode ser investimento!_"
+                    
+                    message += f"\n    Subtipo: `{acc.subtype or 'N/A'}`\n"
                     message += f"    Saldo: R$ {acc.balance or 0:.2f}\n"
                     if acc.credit_limit:
                         message += f"    Limite: R$ {acc.credit_limit:.2f}\n"
