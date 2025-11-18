@@ -53,6 +53,11 @@ class OpenFinanceHandler:
 
             # Usar novo mapeamento de conectores otimizado
             main_banks = filter_and_sort_connectors(connectors)
+            
+            logger.info(f"📊 Total de conectores Pluggy: {len(connectors)}")
+            logger.info(f"✅ Conectores filtrados (sem duplicatas): {len(main_banks)}")
+            for bank in main_banks:
+                logger.info(f"   - {bank.get('name')} (ID: {bank.get('id')})")
 
             if not main_banks:
                 await update.message.reply_text(
@@ -65,10 +70,11 @@ class OpenFinanceHandler:
             keyboard = []
             for bank in main_banks:
                 display_name = bank.get('name', '').strip() or bank.get('name', '')
+                bank_id = str(bank['id'])  # ✅ Converter para string
                 keyboard.append([
                     InlineKeyboardButton(
                         display_name,
-                        callback_data=f"bank_{bank['id']}"
+                        callback_data=f"bank_{bank_id}"  # ✅ Usar string
                     )
                 ])
 
@@ -90,7 +96,7 @@ class OpenFinanceHandler:
                 parse_mode='HTML'
             )
             
-            # Salvar lista de conectores no contexto
+            # Salvar lista de conectores no contexto COM STRINGS
             context.user_data['connectors'] = {str(c['id']): c for c in connectors}
             context.user_data['current_user_id'] = user_id
             
@@ -115,7 +121,10 @@ class OpenFinanceHandler:
         connector_id = query.data.replace("bank_", "")
         connector = context.user_data['connectors'].get(connector_id)
         
+        logger.info(f"🏦 Conector selecionado: ID={connector_id}, Dados={connector}")
+        
         if not connector:
+            logger.error(f"❌ Conector {connector_id} não encontrado em {list(context.user_data['connectors'].keys())}")
             await query.edit_message_text("❌ Banco não encontrado.")
             return ConversationHandler.END
 

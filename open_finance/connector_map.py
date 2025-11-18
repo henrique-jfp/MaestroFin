@@ -75,13 +75,13 @@ def get_preferred_connector_id(connector_list: list, bank_keyword: str) -> int:
 
 def filter_and_sort_connectors(connector_list: list) -> list:
     """
-    Filtra e ordena os conectores para mostrar apenas os recomendados
+    Filtra e ordena os conectores para mostrar apenas os recomendados (SEM DUPLICATAS)
     
     Args:
         connector_list: Lista completa de conectores do Pluggy
         
     Returns:
-        Lista filtrada e ordenada de conectores recomendados
+        Lista filtrada e ordenada de conectores recomendados (um por banco)
     """
     blocked_terms = [
         "empresa",
@@ -98,41 +98,51 @@ def filter_and_sort_connectors(connector_list: list) -> list:
         "cartões",
     ]
     
-    allowed_keywords = {
-        "inter": [215, 823],
-        "itaú": [601, 201],
-        "itau": [601, 201],
-        "bradesco": [203, 603],
-        "nubank": [612],
-        "nu bank": [612],
-        "caixa": [219, 619, 783],
-        "cef": [219, 619, 783],
-        "santander": [608, 208],
+    # Ordem de preferência: usar APENAS O PRIMEIRO (preferido) de cada banco
+    preferred_connectors = {
+        "inter": 823,       # Inter - CPF (Open Finance)
+        "itaú": 601,       # Itaú - CPF (Open Finance)
+        "itau": 601,       # Itaú - CPF (Open Finance)
+        "bradesco": 603,   # Bradesco - CPF (Open Finance)
+        "nubank": 612,     # Nubank - CPF (Open Finance)
+        "nu bank": 612,    # Nubank alias
+        "caixa": 619,      # Caixa - CPF (Open Finance)
+        "cef": 619,        # Caixa alias
+        "santander": 608,  # Santander - CPF (Open Finance)
     }
     
     filtered = []
-    used_ids = set()
+    used_bank_names = set()  # Rastrear nomes de banco JÁ ADICIONADOS
+    used_connector_ids = set()  # Rastrear IDs já usados
     
-    # Primeiro, adicionar os conectores preferidos na ordem desejada
-    for bank_name, ids in allowed_keywords.items():
-        for target_id in ids:
-            for connector in connector_list:
-                conn_id = connector.get('id')
-                conn_name = (connector.get('name') or '').lower()
-                
-                if conn_id in used_ids:
-                    continue
-                
-                if conn_id != target_id:
-                    continue
-                
-                # Verificar se está bloqueado
-                if any(term in conn_name for term in blocked_terms):
-                    continue
-                
-                filtered.append(connector)
-                used_ids.add(conn_id)
-                break  # Próximo ID
+    # Adicionar conectores na ordem de preferência
+    for bank_keyword, preferred_id in preferred_connectors.items():
+        # Ignorar se banco já foi adicionado
+        if bank_keyword in used_bank_names:
+            continue
+        
+        # Procurar o conector preferido
+        for connector in connector_list:
+            conn_id = connector.get('id')
+            conn_name = (connector.get('name') or '').lower()
+            
+            # Verificar se já foi usado
+            if conn_id in used_connector_ids:
+                continue
+            
+            # Verificar se é o ID preferido
+            if conn_id != preferred_id:
+                continue
+            
+            # Verificar se está bloqueado
+            if any(term in conn_name for term in blocked_terms):
+                continue
+            
+            # ✅ Adicionar e marcar como usado
+            filtered.append(connector)
+            used_connector_ids.add(conn_id)
+            used_bank_names.add(bank_keyword)
+            break  # Passar para próximo banco
     
     return filtered
 
