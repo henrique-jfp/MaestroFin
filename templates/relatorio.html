@@ -340,8 +340,18 @@
                         <i class="fas fa-calendar-alt"></i>
                     </div>
                     <h4>Evolução Temporal</h4>
-                    {% set crescimento_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
-                    {% set reducao_despesa = ((1 - (despesa_total|float / (despesa_total|float * 1.05))) * 100) %}
+                    {% if receita_total|float > 0 %}
+                        {% set crescimento_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
+                    {% else %}
+                        {% set crescimento_receita = 0 %}
+                    {% endif %}
+                    
+                    {% if despesa_total|float > 0 %}
+                        {% set reducao_despesa = ((1 - (despesa_total|float / (despesa_total|float * 1.05))) * 100) %}
+                    {% else %}
+                        {% set reducao_despesa = 0 %}
+                    {% endif %}
+
                     <p>Comparado à média dos últimos meses: suas receitas
                         {% if crescimento_receita > 0 %}
                         <strong>cresceram {{ "%.1f"|format(crescimento_receita) }}%</strong> 📈
@@ -696,7 +706,11 @@
             <h3><i class="fas fa-trending-up"></i> Tendências Identificadas</h3>
             <div class="tendencias-grid">
                 <div class="tendencia-card">
-                    {% set crescimento_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
+                    {% if receita_total|float > 0 %}
+                        {% set crescimento_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
+                    {% else %}
+                        {% set crescimento_receita = 0 %}
+                    {% endif %}
                     <div class="tendencia-icon {% if crescimento_receita > 0 %}positiva{% else %}negativa{% endif %}">
                         <i class="fas fa-arrow-{% if crescimento_receita > 0 %}up{% else %}down{% endif %}"></i>
                     </div>
@@ -709,7 +723,11 @@
                 </div>
 
                 <div class="tendencia-card">
-                    {% set variacao_gastos = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}
+                    {% if despesa_total|float > 0 %}
+                        {% set variacao_gastos = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}
+                    {% else %}
+                        {% set variacao_gastos = 0 %}
+                    {% endif %}
                     <div class="tendencia-icon {% if variacao_gastos < 0 %}positiva{% else %}negativa{% endif %}">
                         <i class="fas fa-arrow-{% if variacao_gastos < 0 %}down{% else %}up{% endif %}"></i>
                     </div>

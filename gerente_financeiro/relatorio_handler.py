@@ -350,28 +350,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             "❌ Ocorreu um erro ao gerar o relatório. Tente novamente em alguns minutos.",
             parse_mode='HTML'
         )
-        try:
-            pdf_buffer = BytesIO(pdf_bytes)
-            nome_usuario_safe = contexto_dados['usuario'].nome_completo.split(' ')[0] if hasattr(contexto_dados.get('usuario'), 'nome_completo') else "Usuario"
-            # Remove caracteres especiais do nome para o arquivo
-            nome_usuario_safe = re.sub(r'[^\w\-_]', '', nome_usuario_safe)
-            pdf_buffer.name = f"Relatorio_{data_alvo.strftime('%Y-%m')}_{nome_usuario_safe}.pdf"
-            
-            await context.bot.send_document(
-                chat_id=user_id,
-                document=InputFile(pdf_buffer),
-                caption=f"✅ Aqui está o seu relatório financeiro {periodo_str}!"
-            )
-            
-            logger.info(f"Relatório enviado com sucesso para usuário {user_id}")
-            
-        except Exception as e:
-            logger.error(f"Erro ao enviar PDF: {e}", exc_info=True)
-            raise
 
-    except Exception as e:
-        logger.error(f"Erro geral ao gerar relatório para o usuário {user_id}: {e}", exc_info=True)
-        await update.message.reply_text("❌ Ops! Ocorreu um erro ao gerar seu relatório. A equipe de filmagem já foi notificada.")
     finally:
         db.close()
         
