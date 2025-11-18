@@ -80,6 +80,152 @@ def pluggy_request(method: str, endpoint: str, data: Optional[Dict] = None, para
     return response.json()
 
 
+# ==================== PERSISTÊNCIA NO BANCO ====================
+
+def save_pluggy_item_to_db(user_id: int, item_data: Dict, connector_data: Dict) -> bool:
+    """
+    Salva ou atualiza PluggyItem no banco de dados.
+    
+    Args:
+        user_id: Telegram ID do usuário
+        item_data: Dados do item retornados pela API Pluggy
+        connector_data: Dados do conector (banco) usado
+    
+    Returns:
+        True se salvou com sucesso, False caso contrário
+    """
+    try:
+        from database.database import get_db
+        from models import Usuario, PluggyItem
+        
+        db = next(get_db())
+        
+        # Buscar usuário
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+        if not usuario:
+            logger.error(f"❌ Usuário {user_id} não encontrado no banco")
+            return False
+        
+        # Verificar se item já existe
+        existing_item = db.query(PluggyItem).filter(
+            PluggyItem.pluggy_item_id == item_data["id"]
+        ).first()
+        
+        if existing_item:
+            # Atualizar item existente
+            existing_item.status = item_data.get("status", "UNKNOWN")
+            existing_item.status_detail = item_data.get("statusDetail")
+            existing_item.execution_status = item_data.get("executionStatus")
+            existing_item.last_updated_at = datetime.now()
+            existing_item.updated_at = datetime.now()
+            
+            logger.info(f"🔄 Item {item_data['id']} atualizado no banco")
+        else:
+            # Criar novo item
+            new_item = PluggyItem(
+                id_usuario=usuario.id,
+                pluggy_item_id=item_data["id"],
+                connector_id=connector_data["id"],
+                connector_name=connector_data["name"],
+                status=item_data.get("status", "UNKNOWN"),
+                status_detail=item_data.get("statusDetail"),
+                execution_status=item_data.get("executionStatus"),
+                last_updated_at=datetime.now() if item_data.get("status") in ("UPDATED", "PARTIAL_SUCCESS") else None
+            )
+            
+            db.add(new_item)
+            logger.info(f"✅ Item {item_data['id']} ({connector_data['name']}) salvo no banco")
+        
+        db.commit()
+        
+        # Buscar e salvar accounts
+        save_pluggy_accounts_to_db(item_data["id"])
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao salvar PluggyItem no banco: {e}", exc_info=True)
+        return False
+    finally:
+        db.close()
+
+
+def save_pluggy_accounts_to_db(item_id: str) -> bool:
+    """
+    Busca accounts do item na API Pluggy e salva no banco.
+    
+    Args:
+        item_id: ID do item na Pluggy
+    
+    Returns:
+        True se salvou com sucesso, False caso contrário
+    """
+    try:
+        from database.database import get_db
+        from models import PluggyItem, PluggyAccount
+        
+        # Buscar accounts na API Pluggy
+        accounts_data = pluggy_request("GET", f"/accounts", params={"itemId": item_id})
+        accounts = accounts_data.get("results", [])
+        
+        if not accounts:
+            logger.info(f"ℹ️  Nenhuma account encontrada para item {item_id}")
+            return True
+        
+        db = next(get_db())
+        
+        # Buscar PluggyItem no banco
+        pluggy_item = db.query(PluggyItem).filter(
+            PluggyItem.pluggy_item_id == item_id
+        ).first()
+        
+        if not pluggy_item:
+            logger.error(f"❌ PluggyItem {item_id} não encontrado no banco")
+            return False
+        
+        saved_count = 0
+        for account in accounts:
+            # Verificar se account já existe
+            existing_account = db.query(PluggyAccount).filter(
+                PluggyAccount.pluggy_account_id == account["id"]
+            ).first()
+            
+            if existing_account:
+                # Atualizar account existente
+                existing_account.balance = account.get("balance")
+                existing_account.credit_limit = account.get("creditLimit")
+                existing_account.updated_at = datetime.now()
+                logger.info(f"🔄 Account {account['id']} atualizada")
+            else:
+                # Criar nova account
+                new_account = PluggyAccount(
+                    id_item=pluggy_item.id,
+                    pluggy_account_id=account["id"],
+                    type=account.get("type", "BANK"),
+                    subtype=account.get("subtype"),
+                    number=account.get("number"),
+                    name=account.get("name", "Conta"),
+                    balance=account.get("balance"),
+                    currency_code=account.get("currencyCode", "BRL"),
+                    credit_limit=account.get("creditLimit")
+                )
+                
+                db.add(new_account)
+                saved_count += 1
+                logger.info(f"✅ Account {account['id']} ({account.get('name')}) salva")
+        
+        db.commit()
+        logger.info(f"💾 {saved_count} account(s) salva(s) para item {item_id}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao salvar PluggyAccounts: {e}", exc_info=True)
+        return False
+    finally:
+        db.close()
+
+
 class OpenFinanceOAuthHandler:
     """Handler para Open Finance com OAuth"""
     
@@ -273,6 +419,13 @@ class OpenFinanceOAuthHandler:
             context.user_data["of_item_id"] = item_id
             context.user_data["of_item_status"] = item.get("status")
             
+            # Salvar connector data para persistência futura
+            self.active_connections[user_id] = {
+                "item_id": item_id,
+                "connector": connector,
+                "created_at": datetime.now()
+            }
+            
             # Aguardar alguns segundos para API processar
             await asyncio.sleep(3)
             
@@ -403,6 +556,107 @@ class OpenFinanceOAuthHandler:
             )
             return ConversationHandler.END
     
+    # ==================== /minhas_contas ====================
+    
+    async def minhas_contas(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Lista contas bancárias conectadas via Open Finance"""
+        user_id = update.effective_user.id
+        
+        logger.info(f"👤 Usuário {user_id} consultando contas Open Finance")
+        
+        try:
+            from database.database import get_db
+            from models import Usuario, PluggyItem, PluggyAccount
+            
+            db = next(get_db())
+            
+            # Buscar usuário
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await update.message.reply_text(
+                    "❌ Usuário não encontrado.\n"
+                    "Use /start para criar sua conta."
+                )
+                return
+            
+            # Buscar items do usuário
+            items = db.query(PluggyItem).filter(
+                PluggyItem.id_usuario == usuario.id
+            ).order_by(PluggyItem.created_at.desc()).all()
+            
+            if not items:
+                await update.message.reply_text(
+                    "🏦 *Nenhuma conta conectada*\n\n"
+                    "Você ainda não conectou nenhum banco via Open Finance\\.\n\n"
+                    "Use /conectar\\_banco para conectar\\.",
+                    parse_mode="MarkdownV2"
+                )
+                return
+            
+            # Montar mensagem com todas as contas
+            message = "🏦 *Suas Contas Open Finance*\n\n"
+            
+            for item in items:
+                # Status do item
+                status_emoji = {
+                    "UPDATED": "✅",
+                    "UPDATING": "🔄",
+                    "LOGIN_ERROR": "❌",
+                    "ERROR": "❌",
+                    "PARTIAL_SUCCESS": "⚠️"
+                }.get(item.status, "❓")
+                
+                # Escapar caracteres especiais
+                safe_bank = item.connector_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[")
+                safe_status = item.status.replace("_", "\\_")
+                
+                message += f"{status_emoji} *{safe_bank}*\n"
+                message += f"   Status: `{safe_status}`\n"
+                
+                # Buscar accounts deste item
+                accounts = db.query(PluggyAccount).filter(
+                    PluggyAccount.id_item == item.id
+                ).all()
+                
+                if accounts:
+                    for acc in accounts:
+                        # Tipo de conta
+                        type_emoji = {
+                            "BANK": "🏦",
+                            "CREDIT": "💳",
+                            "INVESTMENT": "📈"
+                        }.get(acc.type, "💰")
+                        
+                        safe_acc_name = acc.name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[")
+                        
+                        message += f"   {type_emoji} {safe_acc_name}\n"
+                        
+                        if acc.balance is not None:
+                            balance_str = f"R$ {float(acc.balance):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            message += f"      Saldo: `{balance_str}`\n"
+                        
+                        if acc.credit_limit is not None:
+                            limit_str = f"R$ {float(acc.credit_limit):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            message += f"      Limite: `{limit_str}`\n"
+                else:
+                    message += "   ℹ️  Nenhuma conta encontrada\n"
+                
+                message += "\n"
+            
+            message += "🔄 Use /conectar\\_banco para adicionar mais bancos\\.\n"
+            message += "🗑️ Use /desconectar\\_banco para remover conexões\\."
+            
+            await update.message.reply_text(message, parse_mode="MarkdownV2")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao listar contas: {e}", exc_info=True)
+            await update.message.reply_text(
+                "❌ Erro ao buscar suas contas.\n"
+                "Tente novamente em alguns instantes."
+            )
+        finally:
+            db.close()
+    
     async def cancel_conversation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Cancela a conversa"""
         if update.callback_query:
@@ -436,6 +690,22 @@ class OpenFinanceOAuthHandler:
                 
                 # Status de sucesso
                 if status in ("UPDATED", "PARTIAL_SUCCESS"):
+                    # 💾 Salvar item e accounts no banco de dados
+                    try:
+                        # Buscar dados do conector (precisa estar salvo no contexto)
+                        connector_data = self.active_connections.get(user_id, {}).get("connector")
+                        if connector_data:
+                            save_success = save_pluggy_item_to_db(user_id, item, connector_data)
+                            if save_success:
+                                logger.info(f"💾 Dados do item {item_id} salvos no banco")
+                            else:
+                                logger.warning(f"⚠️  Falha ao salvar dados do item {item_id} no banco")
+                        else:
+                            logger.warning(f"⚠️  Connector data não encontrada para salvar item {item_id}")
+                    except Exception as save_error:
+                        logger.error(f"❌ Erro ao salvar item no banco: {save_error}")
+                        # Não falhar a conexão se salvar no banco falhar
+                    
                     # Escapar caracteres especiais do Markdown
                     safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
                     await context.bot.send_message(

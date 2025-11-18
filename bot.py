@@ -393,6 +393,12 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
                 ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
             )
             logger.info("✅ Open Finance OAuth handler registrado")
+            
+            # Registrar comando /minhas_contas
+            command_builders.append(
+                ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas))
+            )
+            logger.info("✅ Comando /minhas_contas registrado")
         except Exception as e:
             logger.error(f"❌ Erro ao registrar Open Finance OAuth: {e}", exc_info=True)
 
