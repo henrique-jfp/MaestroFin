@@ -114,7 +114,7 @@ def save_pluggy_item_to_db(user_id: int, item_data: Dict, connector_data: Dict) 
         if existing_item:
             # Atualizar item existente
             existing_item.status = item_data.get("status", "UNKNOWN")
-            existing_item.status_detail = item_data.get("statusDetail")
+            existing_item.status_detail = json.dumps(item_data.get("statusDetail")) if item_data.get("statusDetail") else None
             existing_item.execution_status = item_data.get("executionStatus")
             existing_item.last_updated_at = datetime.now()
             existing_item.updated_at = datetime.now()
@@ -128,7 +128,7 @@ def save_pluggy_item_to_db(user_id: int, item_data: Dict, connector_data: Dict) 
                 connector_id=connector_data["id"],
                 connector_name=connector_data["name"],
                 status=item_data.get("status", "UNKNOWN"),
-                status_detail=item_data.get("statusDetail"),
+                status_detail=json.dumps(item_data.get("statusDetail")) if item_data.get("statusDetail") else None,
                 execution_status=item_data.get("executionStatus"),
                 last_updated_at=datetime.now() if item_data.get("status") in ("UPDATED", "PARTIAL_SUCCESS") else None
             )
@@ -460,12 +460,33 @@ class OpenFinanceOAuthHandler:
             # Mostrar APENAS bancos prioritários (sem "outros")
             display_connectors = priority[:20]  # Máximo 20 bancos principais
             
+            # Cores dos bancos (bolinhas coloridas)
+            bank_colors = {
+                "Nubank": "🟣",          # Roxo
+                "Inter": "🟠",           # Laranja
+                "Bradesco": "🔴",        # Vermelho
+                "Itaú": "🔵",            # Azul
+                "Itau": "🔵",            # Azul
+                "Santander": "🔴",       # Vermelho
+                "Mercado Pago": "🔵",    # Azul claro
+                "XP": "⚫",              # Preto
+                "Banco do Brasil": "🟡", # Amarelo
+                "Caixa": "🔵",           # Azul
+            }
+            
             # Criar teclado inline
             keyboard = []
             for conn in display_connectors:
+                # Buscar cor do banco
+                emoji = "⚪"  # Branco padrão
+                for bank_name, color in bank_colors.items():
+                    if bank_name.lower() in conn['name'].lower():
+                        emoji = color
+                        break
+                
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"🏦 {conn['name']}", 
+                        f"{emoji} {conn['name']}", 
                         callback_data=f"of_bank_{conn['id']}"
                     )
                 ])

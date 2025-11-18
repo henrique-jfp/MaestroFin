@@ -384,6 +384,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     ]
     
     # 🔐 Open Finance OAuth - Substitui handler antigo
+    of_oauth_handler = None
     if OPEN_FINANCE_OAUTH_ENABLED:
         try:
             logger.info("🔄 Instanciando OpenFinanceOAuthHandler...")
@@ -393,15 +394,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
                 ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
             )
             logger.info("✅ Open Finance OAuth handler registrado")
-            
-            # Registrar comandos Open Finance
-            command_builders.extend([
-                ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas)),
-                ("/sincronizar", lambda: CommandHandler("sincronizar", of_oauth_handler.sincronizar)),
-                ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
-                ("/import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_"))
-            ])
-            logger.info("✅ Comandos Open Finance registrados: /minhas_contas, /sincronizar, /importar_transacoes")
         except Exception as e:
             logger.error(f"❌ Erro ao registrar Open Finance OAuth: {e}", exc_info=True)
 
@@ -423,6 +415,15 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),
         ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
     ]
+    
+    # Adicionar comandos Open Finance se habilitado
+    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
+        command_builders.extend([
+            ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas)),
+            ("/sincronizar", lambda: CommandHandler("sincronizar", of_oauth_handler.sincronizar)),
+            ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
+        ])
+        logger.info("✅ Comandos Open Finance adicionados: /minhas_contas, /sincronizar, /importar_transacoes")
 
     for name, builder in command_builders:
         build_and_add(name, builder)
@@ -438,6 +439,13 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("fatura_agendar_sim", lambda: CallbackQueryHandler(callback_agendar_parcelas_sim, pattern="^fatura_agendar_sim$")),
         ("fatura_agendar_nao", lambda: CallbackQueryHandler(callback_agendar_parcelas_nao, pattern="^fatura_agendar_nao$")),
     ]
+    
+    # Adicionar callback handler Open Finance
+    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
+        callback_builders.append(
+            ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_"))
+        )
+        logger.info("✅ Callback handler Open Finance adicionado (pattern: ^import_)")
 
     for name, builder in callback_builders:
         build_and_add(name, builder)
