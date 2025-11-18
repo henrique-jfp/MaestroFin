@@ -226,6 +226,169 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         db.close()
 
 
+def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days: int = 30) -> Dict:
+    """
+    Sincroniza transações de uma conta específica.
+    
+    Args:
+        account_id: ID local da PluggyAccount
+        pluggy_account_id: ID da account na Pluggy
+        days: Quantidade de dias para buscar transações (padrão 30)
+    
+    Returns:
+        Dict com estatísticas: {new: X, updated: Y, total: Z}
+    """
+    try:
+        from database.database import get_db
+        from models import PluggyAccount, PluggyTransaction
+        from datetime import datetime, timedelta
+        
+        db = next(get_db())
+        
+        # Calcular data inicial
+        date_from = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        
+        # Buscar transações na API Pluggy
+        logger.info(f"🔄 Buscando transações da account {pluggy_account_id} (últimos {days} dias)...")
+        
+        transactions_data = pluggy_request(
+            "GET", 
+            "/transactions", 
+            params={
+                "accountId": pluggy_account_id,
+                "from": date_from
+            }
+        )
+        
+        transactions = transactions_data.get("results", [])
+        logger.info(f"📊 {len(transactions)} transações encontradas na API")
+        
+        new_count = 0
+        updated_count = 0
+        
+        for txn in transactions:
+            # Verificar se transação já existe
+            existing = db.query(PluggyTransaction).filter(
+                PluggyTransaction.pluggy_transaction_id == txn["id"]
+            ).first()
+            
+            if existing:
+                # Atualizar status se mudou
+                if existing.status != txn.get("status"):
+                    existing.status = txn.get("status")
+                    existing.updated_at = datetime.now()
+                    updated_count += 1
+            else:
+                # Criar nova transação
+                new_txn = PluggyTransaction(
+                    id_account=account_id,
+                    pluggy_transaction_id=txn["id"],
+                    description=txn.get("description", "Sem descrição"),
+                    amount=txn.get("amount", 0),
+                    date=datetime.strptime(txn["date"], "%Y-%m-%d").date() if txn.get("date") else datetime.now().date(),
+                    category=txn.get("category"),
+                    status=txn.get("status"),
+                    type=txn.get("type"),
+                    merchant_name=txn.get("merchant", {}).get("name") if txn.get("merchant") else None,
+                    merchant_category=txn.get("merchant", {}).get("category") if txn.get("merchant") else None,
+                    imported_to_lancamento=False
+                )
+                
+                db.add(new_txn)
+                new_count += 1
+        
+        db.commit()
+        
+        logger.info(f"✅ Sincronização concluída: {new_count} novas, {updated_count} atualizadas")
+        
+        return {
+            "new": new_count,
+            "updated": updated_count,
+            "total": len(transactions)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao sincronizar transações: {e}", exc_info=True)
+        return {"new": 0, "updated": 0, "total": 0, "error": str(e)}
+    finally:
+        db.close()
+
+
+def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
+    """
+    Sincroniza transações de todas as contas do usuário.
+    
+    Args:
+        user_id: Telegram ID do usuário
+        days: Quantidade de dias para buscar transações
+    
+    Returns:
+        Dict com estatísticas consolidadas
+    """
+    try:
+        from database.database import get_db
+        from models import Usuario, PluggyItem, PluggyAccount
+        
+        db = next(get_db())
+        
+        # Buscar usuário
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+        if not usuario:
+            logger.error(f"❌ Usuário {user_id} não encontrado")
+            return {"error": "Usuário não encontrado"}
+        
+        # Buscar todos os items ativos do usuário
+        items = db.query(PluggyItem).filter(
+            PluggyItem.id_usuario == usuario.id,
+            PluggyItem.status.in_(["UPDATED", "PARTIAL_SUCCESS"])
+        ).all()
+        
+        if not items:
+            logger.info(f"ℹ️  Usuário {user_id} não tem conexões ativas")
+            return {"items": 0, "accounts": 0, "new": 0, "updated": 0}
+        
+        total_new = 0
+        total_updated = 0
+        total_accounts = 0
+        
+        for item in items:
+            # Buscar accounts deste item
+            accounts = db.query(PluggyAccount).filter(
+                PluggyAccount.id_item == item.id
+            ).all()
+            
+            for account in accounts:
+                total_accounts += 1
+                
+                # Sincronizar transações desta account
+                stats = sync_transactions_for_account(
+                    account.id, 
+                    account.pluggy_account_id, 
+                    days
+                )
+                
+                total_new += stats.get("new", 0)
+                total_updated += stats.get("updated", 0)
+        
+        logger.info(
+            f"✅ Sincronização completa para usuário {user_id}: "
+            f"{total_new} novas transações em {total_accounts} contas"
+        )
+        
+        return {
+            "items": len(items),
+            "accounts": total_accounts,
+            "new": total_new,
+            "updated": total_updated
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao sincronizar usuário {user_id}: {e}", exc_info=True)
+        return {"error": str(e)}
+    finally:
+        db.close()
+
+
 class OpenFinanceOAuthHandler:
     """Handler para Open Finance com OAuth"""
     
@@ -657,6 +820,179 @@ class OpenFinanceOAuthHandler:
         finally:
             db.close()
     
+    # ==================== /sincronizar ====================
+    
+    async def sincronizar(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Sincroniza transações bancárias manualmente"""
+        user_id = update.effective_user.id
+        
+        logger.info(f"👤 Usuário {user_id} solicitou sincronização manual")
+        
+        status_msg = await update.message.reply_text(
+            "🔄 Sincronizando transações bancárias...\n"
+            "Isso pode levar alguns segundos."
+        )
+        
+        try:
+            # Sincronizar transações
+            stats = sync_all_transactions_for_user(user_id, days=30)
+            
+            if "error" in stats:
+                await status_msg.edit_text(
+                    f"❌ Erro na sincronização:\n{stats['error']}"
+                )
+                return
+            
+            if stats.get("accounts", 0) == 0:
+                await status_msg.edit_text(
+                    "ℹ️  Você não tem contas conectadas.\n\n"
+                    "Use /conectar_banco para conectar um banco."
+                )
+                return
+            
+            # Montar mensagem de resultado
+            new = stats.get("new", 0)
+            accounts = stats.get("accounts", 0)
+            
+            if new == 0:
+                message = (
+                    "✅ *Sincronização concluída\\!*\n\n"
+                    f"📊 {accounts} conta\\(s\\) verificada\\(s\\)\n"
+                    f"ℹ️  Nenhuma transação nova encontrada\\.\n\n"
+                    f"Todas as suas transações já estão sincronizadas\\!"
+                )
+            else:
+                message = (
+                    f"✅ *Sincronização concluída\\!*\n\n"
+                    f"📊 {accounts} conta\\(s\\) verificada\\(s\\)\n"
+                    f"🆕 *{new} nova\\(s\\) transação\\(ões\\)* encontrada\\(s\\)\\!\n\n"
+                    f"Use /importar\\_transacoes para importar\\."
+                )
+                
+                # Notificar usuário sobre novas transações
+                await self._notify_new_transactions(user_id, new, context)
+            
+            await status_msg.edit_text(message, parse_mode="MarkdownV2")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro na sincronização: {e}", exc_info=True)
+            await status_msg.edit_text(
+                "❌ Erro ao sincronizar transações.\n"
+                "Tente novamente em alguns instantes."
+            )
+    
+    # ==================== /importar_transacoes ====================
+    
+    async def importar_transacoes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Lista transações não importadas para o usuário importar"""
+        user_id = update.effective_user.id
+        
+        logger.info(f"👤 Usuário {user_id} acessando importação de transações")
+        
+        try:
+            from database.database import get_db
+            from models import Usuario, PluggyTransaction, PluggyAccount, PluggyItem
+            from sqlalchemy import and_
+            
+            db = next(get_db())
+            
+            # Buscar usuário
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await update.message.reply_text("❌ Usuário não encontrado.")
+                return
+            
+            # Buscar transações não importadas do usuário
+            # Join: PluggyTransaction -> PluggyAccount -> PluggyItem -> Usuario
+            pending_txns = (
+                db.query(PluggyTransaction)
+                .join(PluggyAccount, PluggyTransaction.id_account == PluggyAccount.id)
+                .join(PluggyItem, PluggyAccount.id_item == PluggyItem.id)
+                .filter(
+                    and_(
+                        PluggyItem.id_usuario == usuario.id,
+                        PluggyTransaction.imported_to_lancamento == False
+                    )
+                )
+                .order_by(PluggyTransaction.date.desc())
+                .limit(20)  # Limitar a 20 transações por vez
+                .all()
+            )
+            
+            if not pending_txns:
+                await update.message.reply_text(
+                    "✅ *Tudo em dia\\!*\n\n"
+                    "Você não tem transações pendentes de importação\\.\n\n"
+                    "Use /sincronizar para buscar novas transações\\.",
+                    parse_mode="MarkdownV2"
+                )
+                return
+            
+            # Criar botões inline para cada transação
+            message = f"💳 *Transações Pendentes* \\({len(pending_txns)}\\)\n\n"
+            message += "Clique para importar:\n\n"
+            
+            keyboard = []
+            for idx, txn in enumerate(pending_txns[:10], 1):  # Mostrar apenas 10 por vez
+                # Formatar valor
+                amount_str = f"R$ {abs(float(txn.amount)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                emoji = "🔴" if float(txn.amount) < 0 else "🟢"
+                
+                # Truncar descrição
+                desc = txn.description[:30] + "..." if len(txn.description) > 30 else txn.description
+                desc_safe = desc.replace("_", " ").replace("*", " ").replace("[", " ")
+                
+                date_str = txn.date.strftime("%d/%m")
+                
+                button_text = f"{emoji} {date_str} - {desc_safe} - {amount_str}"
+                keyboard.append([
+                    InlineKeyboardButton(
+                        button_text, 
+                        callback_data=f"import_txn_{txn.id}"
+                    )
+                ])
+            
+            # Botões de ação
+            keyboard.append([
+                InlineKeyboardButton("✅ Importar Todas", callback_data="import_all"),
+                InlineKeyboardButton("❌ Cancelar", callback_data="import_cancel")
+            ])
+            
+            if len(pending_txns) > 10:
+                message += f"\n\n_Mostrando 10 de {len(pending_txns)} transações\\._"
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                message, 
+                reply_markup=reply_markup,
+                parse_mode="MarkdownV2"
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao listar transações: {e}", exc_info=True)
+            await update.message.reply_text(
+                "❌ Erro ao buscar transações.\n"
+                "Tente novamente em alguns instantes."
+            )
+        finally:
+            db.close()
+    
+    async def _notify_new_transactions(self, user_id: int, count: int, context: ContextTypes.DEFAULT_TYPE):
+        """Notifica usuário sobre novas transações (interno)"""
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    f"🔔 *Nova\\(s\\) transação\\(ões\\) detectada\\(s\\)\\!*\n\n"
+                    f"Encontrei *{count} nova\\(s\\) transação\\(ões\\)* nas suas contas bancárias\\.\n\n"
+                    f"Use /importar\\_transacoes para revisar e importar\\."
+                ),
+                parse_mode="MarkdownV2"
+            )
+        except Exception as e:
+            logger.error(f"❌ Erro ao notificar usuário: {e}")
+    
     async def cancel_conversation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Cancela a conversa"""
         if update.callback_query:
@@ -758,6 +1094,211 @@ class OpenFinanceOAuthHandler:
                 )
             except Exception as e:
                 logger.error(f"❌ Erro ao enviar mensagem de timeout: {e}")
+    
+    # ==================== IMPORT CALLBACKS ====================
+    
+    async def handle_import_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Processa callbacks dos botões de importação"""
+        query = update.callback_query
+        await query.answer()
+        
+        data = query.data
+        user_id = query.from_user.id
+        
+        if data == "import_cancel":
+            await query.edit_message_text("❌ Importação cancelada.")
+            return
+        
+        if data == "import_all":
+            # Importar todas as transações pendentes
+            await self._import_all_transactions(user_id, query)
+            return
+        
+        if data.startswith("import_txn_"):
+            # Importar transação específica
+            txn_id = int(data.replace("import_txn_", ""))
+            await self._import_single_transaction(user_id, txn_id, query, context)
+            return
+    
+    async def _import_single_transaction(self, user_id: int, txn_id: int, query, context):
+        """Importa uma transação específica"""
+        try:
+            from database.database import get_db
+            from models import Usuario, PluggyTransaction, Lancamento, Categoria
+            
+            db = next(get_db())
+            
+            # Buscar transação
+            txn = db.query(PluggyTransaction).filter(PluggyTransaction.id == txn_id).first()
+            if not txn:
+                await query.edit_message_text("❌ Transação não encontrada.")
+                return
+            
+            # Buscar usuário
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await query.edit_message_text("❌ Usuário não encontrado.")
+                return
+            
+            # Sugerir categoria baseado no merchant ou descrição
+            suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
+            
+            # Determinar tipo (receita ou despesa)
+            tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
+            
+            # Criar lançamento
+            lancamento = Lancamento(
+                descricao=txn.description,
+                valor=abs(float(txn.amount)),
+                tipo=tipo,
+                data_transacao=datetime.combine(txn.date, datetime.min.time()),
+                forma_pagamento="Open Finance",
+                id_usuario=usuario.id,
+                id_categoria=suggested_category.id if suggested_category else None
+            )
+            
+            db.add(lancamento)
+            
+            # Marcar transação como importada
+            txn.imported_to_lancamento = True
+            txn.id_lancamento = lancamento.id
+            
+            db.commit()
+            
+            # Formatar mensagem
+            amount_str = f"R$ {abs(float(txn.amount)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            cat_name = suggested_category.nome if suggested_category else "Sem categoria"
+            
+            await query.edit_message_text(
+                f"✅ *Transação importada\\!*\n\n"
+                f"📝 {txn.description}\n"
+                f"💰 {amount_str}\n"
+                f"📂 Categoria: {cat_name}\n"
+                f"📅 Data: {txn.date.strftime('%d/%m/%Y')}\n\n"
+                f"Use /importar\\_transacoes para continuar\\.",
+                parse_mode="MarkdownV2"
+            )
+            
+            logger.info(f"✅ Transação {txn_id} importada para usuário {user_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao importar transação: {e}", exc_info=True)
+            await query.edit_message_text("❌ Erro ao importar transação.")
+        finally:
+            db.close()
+    
+    async def _import_all_transactions(self, user_id: int, query):
+        """Importa todas as transações pendentes"""
+        try:
+            from database.database import get_db
+            from models import Usuario, PluggyTransaction, Lancamento, PluggyAccount, PluggyItem
+            from sqlalchemy import and_
+            
+            db = next(get_db())
+            
+            # Buscar usuário
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await query.edit_message_text("❌ Usuário não encontrado.")
+                return
+            
+            # Buscar todas transações pendentes
+            pending_txns = (
+                db.query(PluggyTransaction)
+                .join(PluggyAccount, PluggyTransaction.id_account == PluggyAccount.id)
+                .join(PluggyItem, PluggyAccount.id_item == PluggyItem.id)
+                .filter(
+                    and_(
+                        PluggyItem.id_usuario == usuario.id,
+                        PluggyTransaction.imported_to_lancamento == False
+                    )
+                )
+                .all()
+            )
+            
+            if not pending_txns:
+                await query.edit_message_text("✅ Nenhuma transação pendente.")
+                return
+            
+            imported_count = 0
+            for txn in pending_txns:
+                try:
+                    # Sugerir categoria
+                    suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
+                    
+                    # Determinar tipo
+                    tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
+                    
+                    # Criar lançamento
+                    lancamento = Lancamento(
+                        descricao=txn.description,
+                        valor=abs(float(txn.amount)),
+                        tipo=tipo,
+                        data_transacao=datetime.combine(txn.date, datetime.min.time()),
+                        forma_pagamento="Open Finance",
+                        id_usuario=usuario.id,
+                        id_categoria=suggested_category.id if suggested_category else None
+                    )
+                    
+                    db.add(lancamento)
+                    
+                    # Marcar como importada
+                    txn.imported_to_lancamento = True
+                    txn.id_lancamento = lancamento.id
+                    
+                    imported_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"❌ Erro ao importar transação {txn.id}: {e}")
+                    continue
+            
+            db.commit()
+            
+            await query.edit_message_text(
+                f"✅ *Importação concluída\\!*\n\n"
+                f"📊 {imported_count} transação\\(ões\\) importada\\(s\\)\\.\n\n"
+                f"Use /relatorio para ver seus gastos\\.",
+                parse_mode="MarkdownV2"
+            )
+            
+            logger.info(f"✅ {imported_count} transações importadas para usuário {user_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro na importação em massa: {e}", exc_info=True)
+            await query.edit_message_text("❌ Erro ao importar transações.")
+        finally:
+            db.close()
+    
+    def _suggest_category(self, description: str, merchant_name: str, db):
+        """Sugere categoria baseado na descrição e merchant"""
+        from models import Categoria
+        
+        desc_lower = description.lower() if description else ""
+        merchant_lower = merchant_name.lower() if merchant_name else ""
+        
+        # Palavras-chave para cada categoria
+        category_keywords = {
+            "Alimentação": ["mercado", "supermercado", "padaria", "açougue", "hortifruti", "ifood", "uber eats", "rappi", "restaurante", "lanchonete"],
+            "Transporte": ["uber", "99", "cabify", "posto", "combustível", "gasolina", "etanol", "ipva", "estacionamento"],
+            "Lazer": ["netflix", "spotify", "disney", "amazon prime", "cinema", "teatro", "show"],
+            "Saúde": ["farmácia", "drogaria", "hospital", "clínica", "médico", "dentista"],
+            "Moradia": ["aluguel", "condomínio", "água", "luz", "energia", "gas", "internet"],
+            "Compras": ["magazine", "americanas", "mercado livre", "amazon", "shein", "shopee"],
+            "Serviços": ["telefone", "celular", "internet", "tv", "streaming"]
+        }
+        
+        # Procurar por palavras-chave
+        for cat_name, keywords in category_keywords.items():
+            for keyword in keywords:
+                if keyword in desc_lower or keyword in merchant_lower:
+                    # Buscar categoria no banco
+                    categoria = db.query(Categoria).filter(Categoria.nome == cat_name).first()
+                    if categoria:
+                        logger.info(f"💡 Categoria sugerida para '{description}': {cat_name}")
+                        return categoria
+        
+        # Sem sugestão
+        return None
     
     # ==================== CONVERSATION HANDLER ====================
     
