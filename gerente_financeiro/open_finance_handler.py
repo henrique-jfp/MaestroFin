@@ -110,7 +110,7 @@ class OpenFinanceHandler:
             return ConversationHandler.END
     
     async def conectar_banco_selected(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Banco selecionado - solicitar credenciais"""
+        """Banco selecionado - verificar OAuth ou solicitar credenciais"""
         query = update.callback_query
         await query.answer()
         
@@ -128,7 +128,19 @@ class OpenFinanceHandler:
             await query.edit_message_text("❌ Banco não encontrado.")
             return ConversationHandler.END
 
-        # Preparar coleta sequencial das credenciais
+        # ✨ VERIFICAR SE SUPORTA OAUTH
+        if connector.get('oauth', False):
+            logger.info(f"🔐 Banco {connector['name']} suporta OAuth - usando fluxo OAuth")
+            await query.edit_message_text(
+                f"🔐 <b>{connector['name']}</b>\n\n"
+                f"⚠️ Este banco usa <b>Open Finance com OAuth</b>.\n\n"
+                f"🚧 <i>Fluxo OAuth ainda não implementado no bot.</i>\n"
+                f"📝 Use o script test_pluggy_oauth.py por enquanto.",
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+
+        # Preparar coleta sequencial das credenciais (fluxo antigo)
         context.user_data['selected_connector'] = connector
         context.user_data['credential_fields'] = connector.get('credentials', [])
         context.user_data['collected_credentials'] = {}
