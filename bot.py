@@ -182,15 +182,15 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 
-# 🏦 OPEN FINANCE
+# 🏦 OPEN FINANCE OAUTH (substitui handler antigo)
 try:
-    from gerente_financeiro.open_finance_handler import OpenFinanceHandler
+    from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
     from open_finance.data_sync import schedule_daily_sync
-    OPEN_FINANCE_ENABLED = True
-    logging.info("✅ Open Finance habilitado")
+    OPEN_FINANCE_OAUTH_ENABLED = True
+    logging.info("✅ Open Finance OAuth habilitado")
 except ImportError as e:
-    OPEN_FINANCE_ENABLED = False
-    logging.warning(f"⚠️ Open Finance não disponível: {e}")
+    OPEN_FINANCE_OAUTH_ENABLED = False
+    logging.warning(f"⚠️ Open Finance OAuth não disponível: {e}")
 
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("debugocr")
@@ -382,6 +382,17 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("edit_conv", lambda: edit_conv),
         ("extrato_conv", criar_conversation_handler_extrato),
     ]
+    
+    # 🔐 Open Finance OAuth - Substitui handler antigo
+    if OPEN_FINANCE_OAUTH_ENABLED:
+        try:
+            of_oauth_handler = OpenFinanceOAuthHandler()
+            conversation_builders.append(
+                ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
+            )
+            logger.info("✅ Open Finance OAuth handler registrado")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao registrar Open Finance OAuth: {e}")
 
     for name, builder in conversation_builders:
         build_and_add(name, builder)
@@ -420,17 +431,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     for name, builder in callback_builders:
         build_and_add(name, builder)
 
-    if OPEN_FINANCE_ENABLED:
-        try:
-            of_handler = OpenFinanceHandler()
-            for index, handler in enumerate(of_handler.get_handlers()):
-                add(handler, f"open_finance_handler_{index}")
-            logger.info("✅ Handlers Open Finance adicionados")
-        except Exception as exc:
-            if safe_mode:
-                logger.error("❌ Erro ao adicionar handlers Open Finance: %s", exc)
-            else:
-                raise
+    # ❌ Handler antigo removido - substituído por OpenFinanceOAuthHandler
+    # O novo handler OAuth é mais seguro e suporta 100+ bancos
 
     try:
         from gerente_financeiro.spx_handler import spx_handler
