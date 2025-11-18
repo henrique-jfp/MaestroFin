@@ -1316,18 +1316,18 @@ class OpenFinanceOAuthHandler:
             # ✨ LAYOUT CONSOLIDADO: Cartões e Contas
             message = "💳 *Cartões e Contas*\n\n"
             
-            # Cores dos bancos
+            # Emojis dos bancos
             bank_colors = {
                 "Nubank": "🟣",
                 "Inter": "🟠", 
                 "Bradesco": "🔴",
-                "Itaú": "�",
-                "Itau": "🔵",
-                "Santander": "🔴",
+                "Itaú": "🟧",
+                "Itau": "��",
+                "Santander": "🔺",
+                "Banco do Brasil": "🟨",
+                "Caixa": "🟦",
                 "Mercado Pago": "🔵",
                 "XP": "⚫",
-                "Banco do Brasil": "🟡",
-                "Caixa": "🔵",
             }
             
             for item in items:
