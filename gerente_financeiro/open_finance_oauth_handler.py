@@ -37,6 +37,30 @@ _api_key_cache = {"key": None, "expires_at": None}
 _pending_connections = {}  # {user_id: {"item_id": str, "timestamp": datetime, "connector_name": str}}
 
 
+def _parse_transaction_date(date_string: Optional[str]) -> datetime.date:
+    """
+    Parse de data de transação da API Pluggy.
+    Suporta formatos: 
+    - ISO 8601 completo: "2025-11-15T19:29:37.000Z"
+    - Apenas data: "2025-11-15"
+    """
+    if not date_string:
+        return datetime.now().date()
+    
+    try:
+        # Tenta ISO 8601 completo primeiro
+        if "T" in date_string:
+            # Remove milissegundos e timezone para simplificar
+            date_string = date_string.split(".")[0].replace("Z", "")
+            return datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S").date()
+        else:
+            # Formato apenas data
+            return datetime.strptime(date_string, "%Y-%m-%d").date()
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao fazer parse de data '{date_string}': {e}. Usando data atual.")
+        return datetime.now().date()
+
+
 def get_pluggy_api_key() -> str:
     """Obtém API Key da Pluggy (com cache de 23h)"""
     now = datetime.now()
@@ -311,7 +335,7 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
                     pluggy_transaction_id=txn["id"],
                     description=txn.get("description", "Sem descrição"),
                     amount=txn.get("amount", 0),
-                    date=datetime.strptime(txn["date"], "%Y-%m-%d").date() if txn.get("date") else datetime.now().date(),
+                    date=_parse_transaction_date(txn.get("date")),
                     category=txn.get("category"),
                     status=txn.get("status"),
                     type=txn.get("type"),
