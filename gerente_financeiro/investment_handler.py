@@ -214,7 +214,9 @@ async def dashboard_investimentos(update: Update, context: ContextTypes.DEFAULT_
         
         emoji_trend = "📈" if rentabilidade_total >= 0 else "📉"
         message += f"{emoji_trend} *Rentabilidade Total*\n"
-        message += f"   R$ {abs(rentabilidade_total):,.2f} \\({rent_pct:+.2f}\\%\\)\n\n".replace(",", "X").replace(".", ",").replace("X", ".")
+        # Escapar caracteres especiais do MarkdownV2 (incluindo +, -)
+        rent_pct_str = f"{rent_pct:+.2f}".replace("+", "\\+").replace("-", "\\-")
+        message += f"   R$ {abs(rentabilidade_total):,.2f} \\({rent_pct_str}\\%\\)\n\n".replace(",", "X").replace(".", ",").replace("X", ".")
         
         if rent_mes != 0:
             emoji_mes = "📈" if rent_mes >= 0 else "📉"
@@ -346,11 +348,13 @@ async def patrimonio_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         if variacao is not None:
             emoji_var = "📈" if variacao >= 0 else "📉"
-            sinal = "+" if variacao >= 0 else ""
+            sinal = "\\+" if variacao >= 0 else "\\-"  # Escapar + e -
             message += f"{emoji_var} {sinal}R$ {abs(variacao):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             
             if variacao_pct is not None:
-                message += f" \\({variacao_pct:+.2f}\\%\\)"
+                # Escapar caracteres especiais do MarkdownV2
+                variacao_pct_str = f"{variacao_pct:+.2f}".replace("+", "\\+").replace("-", "\\-")
+                message += f" \\({variacao_pct_str}\\%\\)"
             
             message += f" desde {ultimo_snapshot.mes_referencia.strftime('%m/%Y')}\n"
         

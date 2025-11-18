@@ -77,6 +77,11 @@ class DashboardHandler:
     def verificar_dashboard_online(self) -> bool:
         """Verifica se o dashboard está online"""
         try:
+            # ⚠️ Desabilitar verificação para URLs localhost (não funciona no Railway)
+            if 'localhost' in self.dashboard_url or '127.0.0.1' in self.dashboard_url:
+                logger.warning("⚠️ Dashboard configurado para localhost - verificação desabilitada no Railway")
+                return False
+            
             response = requests.get(f"{self.dashboard_url}/api/status", timeout=5)
             return response.status_code == 200
         except Exception as e:
