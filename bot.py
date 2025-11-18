@@ -79,9 +79,7 @@ def track_analytics(command_name):
                         execution_time_ms=int(execution_time)
                     )
                     
-                    # Atualizar estatísticas diárias
-                    if hasattr(analytics, 'track_daily_user'):
-                        analytics.track_daily_user(user_id, username, command_name)
+                    # track_daily_user() removido - método não existe
                     
                     logging.info(f"📊 Analytics: {username} usou /{command_name} ({execution_time:.0f}ms)")
                     return result

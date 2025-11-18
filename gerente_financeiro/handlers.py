@@ -50,7 +50,7 @@ def track_analytics(command_name):
                         command=command_name,
                         success=True
                     )
-                    analytics.track_daily_user(user_id, username, command_name)
+                    # track_daily_user() removido - método não existe na classe
                     logging.info(f"📊 Analytics: {username} usou /{command_name}")
                 except Exception as e:
                     logging.error(f"❌ Erro no analytics: {e}")
