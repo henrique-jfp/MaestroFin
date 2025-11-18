@@ -893,46 +893,32 @@ class OpenFinanceOAuthHandler:
             }
             logger.info(f"🔒 Conexão pendente registrada para usuário {user_id}")
             
-            # Aguardar e tentar múltiplas vezes até encontrar OAuth URL
-            oauth_url = None
-            max_attempts = 10  # 10 tentativas = ~20 segundos
+            # Aguardar alguns segundos para API processar
+            await asyncio.sleep(3)
             
-            for attempt in range(1, max_attempts + 1):
-                await asyncio.sleep(2)  # Aguardar 2s entre tentativas
-                
-                # Consultar item novamente
-                item_updated = pluggy_request("GET", f"/items/{item_id}")
-                status = item_updated.get("status")
-                
-                logger.info(f"� Tentativa {attempt}/{max_attempts}: status={status}")
-                
-                # Procurar URL OAuth em parameter
-                parameter = item_updated.get("parameter", {})
-                if parameter and parameter.get("type") == "oauth" and parameter.get("data"):
-                    oauth_url = parameter["data"]
-                    logger.info(f"✅ OAuth URL encontrado em parameter.data: {oauth_url}")
-                    break
-                
-                # Procurar em userAction
+            # Consultar item novamente para pegar URL OAuth
+            item_updated = pluggy_request("GET", f"/items/{item_id}")
+            
+            logger.info(f"📋 Item atualizado: status={item_updated.get('status')}")
+            logger.info(f"🔍 Item atualizado completo: {json.dumps(item_updated, indent=2, default=str)}")
+            
+            # Procurar URL OAuth
+            oauth_url = None
+            parameter = item_updated.get("parameter", {})
+            
+            if parameter and parameter.get("type") == "oauth" and parameter.get("data"):
+                oauth_url = parameter["data"]
+                logger.info(f"🔗 OAuth URL encontrado em parameter.data: {oauth_url}")
+            
+            if not oauth_url:
+                # Tentar em userAction
                 user_action = item_updated.get("userAction")
                 if user_action and user_action.get("url"):
                     oauth_url = user_action["url"]
-                    logger.info(f"✅ OAuth URL encontrado em userAction.url: {oauth_url}")
-                    break
-                
-                # Se está esperando input do usuário mas não tem URL, algo está errado
-                if status == "WAITING_USER_INPUT" and attempt >= 3:
-                    logger.warning(f"⚠️ Status WAITING_USER_INPUT mas sem OAuth URL após {attempt} tentativas")
-                    logger.info(f"🔍 Item completo: {json.dumps(item_updated, indent=2, default=str)}")
-                
-                # Se já completou, não precisa de OAuth
-                if status in ("UPDATED", "PARTIAL_SUCCESS"):
-                    logger.info(f"✅ Item já completou: {status}")
-                    break
+                    logger.info(f"🔗 OAuth URL encontrado em userAction.url: {oauth_url}")
             
             if not oauth_url:
-                logger.error(f"❌ OAuth URL não encontrado após {max_attempts} tentativas")
-                logger.info(f"🔍 Item final: {json.dumps(item_updated, indent=2, default=str)}")
+                logger.warning(f"⚠️  OAuth URL não encontrado. parameter={parameter}, userAction={item_updated.get('userAction')}")
             
             if oauth_url:
                 # Criar botão inline com URL
