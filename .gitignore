@@ -28,6 +28,7 @@ credenciais/*.json
 # 📝 Logs
 *.log
 logs/
+debug_logs/
 
 # 🗂️ Temporary
 *.tmp
@@ -36,6 +37,16 @@ logs/
 *.backup
 .tmp/
 temp/
+
+# 🧪 Test & Debug Files (exceto test_pluggy_oauth.py que é funcional)
+debug_*.py
+investigate_*.py
+analyze_*.py
+
+# 📄 Temporary Docs
+*_TEMP.md
+*_OLD.md
+RASCUNHO_*.md
 
 # 💻 IDE
 .vscode/
