@@ -606,6 +606,11 @@ class OpenFinanceOAuthHandler:
             item_id = item["id"]
             
             logger.info(f"✅ Item criado: {item_id} para usuário {user_id}")
+            logger.info(f"📋 Response inicial: status={item.get('status')}, connector={connector.get('name')}, connectorId={connector.get('id')}")
+            
+            # Log completo do item para debug
+            import json
+            logger.info(f"🔍 Item completo: {json.dumps(item, indent=2, default=str)}")
             
             # Salvar item no contexto
             context.user_data["of_item_id"] = item_id
@@ -624,18 +629,26 @@ class OpenFinanceOAuthHandler:
             # Consultar item novamente para pegar URL OAuth
             item_updated = pluggy_request("GET", f"/items/{item_id}")
             
+            logger.info(f"📋 Item atualizado: status={item_updated.get('status')}")
+            logger.info(f"🔍 Item atualizado completo: {json.dumps(item_updated, indent=2, default=str)}")
+            
             # Procurar URL OAuth
             oauth_url = None
             parameter = item_updated.get("parameter", {})
             
             if parameter and parameter.get("type") == "oauth" and parameter.get("data"):
                 oauth_url = parameter["data"]
+                logger.info(f"🔗 OAuth URL encontrado em parameter.data: {oauth_url}")
             
             if not oauth_url:
                 # Tentar em userAction
                 user_action = item_updated.get("userAction")
                 if user_action and user_action.get("url"):
                     oauth_url = user_action["url"]
+                    logger.info(f"🔗 OAuth URL encontrado em userAction.url: {oauth_url}")
+            
+            if not oauth_url:
+                logger.warning(f"⚠️  OAuth URL não encontrado. parameter={parameter}, userAction={item_updated.get('userAction')}")
             
             if oauth_url:
                 # Criar botão inline com URL
@@ -665,10 +678,59 @@ class OpenFinanceOAuthHandler:
                 return WAITING_AUTH
                 
             else:
-                # Sem OAuth URL - pode ser erro ou banco que não precisa
+                # Sem OAuth URL - verificar se precisa de autorização
                 status = item_updated.get("status")
                 
-                if status in ("UPDATED", "PARTIAL_SUCCESS"):
+                # Se está OUTDATED ou WAITING_USER_INPUT, precisa autorizar no banco
+                if status in ("OUTDATED", "WAITING_USER_INPUT", "LOGIN_ERROR"):
+                    # Tentar obter URL de autenticação via userAction
+                    user_action = item_updated.get("userAction")
+                    auth_url = None
+                    
+                    if user_action:
+                        auth_url = user_action.get("url") or user_action.get("instructions")
+                    
+                    # Se não tem URL, gerar instruções genéricas
+                    if not auth_url:
+                        await status_msg.edit_text(
+                            f"🔐 *Autorização Pendente*\n\n"
+                            f"🏦 Banco: *{connector['name']}*\n"
+                            f"🆔 Conexão: `{item_id}`\n\n"
+                            f"⚠️ *Ação Necessária:*\n"
+                            f"1. Acesse o app/site do {connector['name']}\n"
+                            f"2. Vá em Configurações → Open Finance\n"
+                            f"3. Autorize o acesso do Maestro Financeiro\n\n"
+                            f"Após autorizar, a sincronização começará automaticamente.\n\n"
+                            f"Status atual: `{status}`",
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        # Tem URL de autorização
+                        keyboard = [
+                            [InlineKeyboardButton("🔐 Autorizar no Banco", url=auth_url)],
+                            [InlineKeyboardButton("✅ Já Autorizei", callback_data=f"of_authorized_{item_id}")],
+                            [InlineKeyboardButton("❌ Cancelar", callback_data="of_cancel_auth")]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await status_msg.edit_text(
+                            f"🔐 *Autorização Pendente*\n\n"
+                            f"🏦 Banco: *{connector['name']}*\n"
+                            f"🆔 Conexão: `{item_id}`\n\n"
+                            f"👉 Clique no botão para autorizar:\n\n"
+                            f"Status: `{status}`",
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                    
+                    # Polling em background
+                    asyncio.create_task(
+                        self._poll_item_status(user_id, item_id, connector["name"], context)
+                    )
+                    
+                    return WAITING_AUTH
+                
+                elif status in ("UPDATED", "PARTIAL_SUCCESS"):
                     await status_msg.edit_text(
                         f"✅ *Banco conectado!*\n\n"
                         f"🏦 {connector['name']}\n"
@@ -1043,7 +1105,9 @@ class OpenFinanceOAuthHandler:
         """Faz polling do status do item em background"""
         logger.info(f"🔄 Iniciando polling para item {item_id}")
         
+        oauth_url_sent = False  # Flag para evitar enviar OAuth URL múltiplas vezes
         attempt = 0
+        
         while attempt < max_attempts:
             try:
                 await asyncio.sleep(5)  # Aguardar 5 segundos entre tentativas
@@ -1052,6 +1116,51 @@ class OpenFinanceOAuthHandler:
                 status = item.get("status")
                 
                 logger.info(f"📊 Polling item {item_id}: tentativa {attempt+1}/{max_attempts}, status={status}")
+                
+                # Se está OUTDATED ou WAITING_USER_INPUT e ainda não enviamos OAuth URL
+                if status in ("OUTDATED", "WAITING_USER_INPUT") and not oauth_url_sent:
+                    # Tentar extrair OAuth URL do item
+                    oauth_url = None
+                    
+                    # Verificar no campo parameter.data
+                    if "parameter" in item and isinstance(item["parameter"], dict):
+                        param_data = item["parameter"].get("data", {})
+                        if isinstance(param_data, dict):
+                            oauth_url = param_data.get("authorizationUrl") or param_data.get("url")
+                    
+                    # Verificar no campo userAction
+                    if not oauth_url and "userAction" in item:
+                        user_action = item["userAction"]
+                        if isinstance(user_action, dict):
+                            oauth_url = user_action.get("url") or user_action.get("authorizationUrl")
+                    
+                    # Se encontrou OAuth URL, enviar para o usuário
+                    if oauth_url:
+                        logger.info(f"🔗 OAuth URL encontrado no polling: {oauth_url}")
+                        
+                        keyboard = [
+                            [InlineKeyboardButton("🔐 Autorizar no Banco", url=oauth_url)],
+                            [InlineKeyboardButton("✅ Já Autorizei", callback_data=f"of_authorized_{item_id}")],
+                            [InlineKeyboardButton("❌ Cancelar", callback_data="of_cancel_auth")]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
+                        
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=f"🔐 *Autorização Necessária*\n\n"
+                                 f"🏦 Banco: *{safe_bank_name}*\n"
+                                 f"🆔 Conexão: `{item_id}`\n\n"
+                                 f"👉 Clique no botão abaixo para autorizar o acesso:\n\n"
+                                 f"⚠️ Você será redirecionado para o site oficial do banco\\.\n"
+                                 f"✅ Após autorizar, clique em *'Já Autorizei'*\\.",
+                            reply_markup=reply_markup,
+                            parse_mode="MarkdownV2"
+                        )
+                        
+                        oauth_url_sent = True
+                        logger.info(f"✅ OAuth URL enviado para usuário {user_id}")
                 
                 # Status de sucesso
                 if status in ("UPDATED", "PARTIAL_SUCCESS"):
