@@ -101,7 +101,7 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
         
         # ==================== DELETAR CONEXÕES OPEN FINANCE ====================
         try:
-            from models import PluggyItem
+            from models import PluggyItem, PluggyAccount, PluggyTransaction
             from gerente_financeiro.open_finance_oauth_handler import pluggy_request
             
             # Buscar todos os items do usuário
@@ -110,25 +110,45 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
             if pluggy_items:
                 logging.info(f"🔄 Deletando {len(pluggy_items)} conexão(ões) Open Finance do usuário {telegram_id}...")
                 
+                # 1. Deletar na API Pluggy (isso remove tudo na Pluggy)
                 for item in pluggy_items:
                     try:
-                        # Deletar item na API Pluggy
                         pluggy_request("DELETE", f"/items/{item.pluggy_item_id}")
                         logging.info(f"✅ Item {item.pluggy_item_id} ({item.connector_name}) deletado na Pluggy")
                     except Exception as e:
-                        # Log mas não falha - item pode já ter sido deletado na Pluggy
                         logging.warning(f"⚠️ Erro ao deletar item {item.pluggy_item_id} na Pluggy: {e}")
                 
-                # Deletar registros locais (cascade deleta accounts e transactions)
-                db.query(PluggyItem).filter(PluggyItem.id_usuario == usuario_a_deletar.id).delete()
-                logging.info(f"✅ Registros locais Open Finance deletados")
+                # 2. Deletar do banco LOCAL na ORDEM CORRETA (evitar FK violation)
+                item_ids = [item.id for item in pluggy_items]
+                
+                # 2.1. Primeiro: pluggy_transactions (referencia pluggy_accounts)
+                deleted_txns = db.query(PluggyTransaction).filter(
+                    PluggyTransaction.account_id.in_(
+                        db.query(PluggyAccount.id).filter(PluggyAccount.item_id.in_(item_ids))
+                    )
+                ).delete(synchronize_session=False)
+                logging.info(f"✅ {deleted_txns} transações Open Finance deletadas")
+                
+                # 2.2. Segundo: pluggy_accounts (referencia pluggy_items)
+                deleted_accounts = db.query(PluggyAccount).filter(
+                    PluggyAccount.item_id.in_(item_ids)
+                ).delete(synchronize_session=False)
+                logging.info(f"✅ {deleted_accounts} contas Open Finance deletadas")
+                
+                # 2.3. Terceiro: pluggy_items (agora sem dependências)
+                deleted_items = db.query(PluggyItem).filter(
+                    PluggyItem.id_usuario == usuario_a_deletar.id
+                ).delete(synchronize_session=False)
+                logging.info(f"✅ {deleted_items} conexões Open Finance deletadas")
+                
+                db.flush()  # Aplica as mudanças imediatamente
         
         except ImportError:
-            # PluggyItem ainda não existe (tabelas não criadas)
             logging.info("ℹ️ Tabelas Open Finance ainda não existem, pulando deleção...")
         except Exception as e:
-            # Log mas não falha - deleção do usuário deve continuar
             logging.error(f"❌ Erro ao deletar conexões Open Finance: {e}", exc_info=True)
+            db.rollback()
+            raise  # Re-raise para abortar a deleção completa
         
         # ==================== DELETAR USUÁRIO ====================
         # A mágica acontece aqui! Cascade deleta:
