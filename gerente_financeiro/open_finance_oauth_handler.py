@@ -27,6 +27,18 @@ logger = logging.getLogger(__name__)
 SELECTING_BANK, ENTERING_CPF, WAITING_AUTH = range(3)
 
 
+# 🔥 HELPER PARA EXECUTAR FUNÇÕES BLOQUEANTES DE FORMA NÃO-BLOQUEANTE
+def run_sync_in_executor(func, *args):
+    """
+    Executa uma função síncrona bloqueante em uma thread separada.
+    Permite que o event loop continue processando outras requisições.
+    """
+    import concurrent.futures
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        return loop.run_in_executor(executor, func, *args)
+
+
 def escape_markdown_v2(text: str) -> str:
     """
     Escapa caracteres especiais para MarkdownV2 do Telegram.
@@ -1910,8 +1922,10 @@ class OpenFinanceOAuthHandler:
         )
         
         try:
-            # Sincronizar transações
-            stats = sync_all_transactions_for_user(user_id, days=30)
+            # 🔥 EXECUTAR SINCRONIZAÇÃO EM THREAD SEPARADA (NÃO-BLOQUEANTE)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            stats = await loop.run_in_executor(None, lambda: sync_all_transactions_for_user(user_id, 30))
             
             if "error" in stats:
                 await status_msg.edit_text(
