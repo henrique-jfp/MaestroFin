@@ -397,8 +397,11 @@ def save_pluggy_accounts_to_db(item_id: str) -> bool:
         
         # 🔍 LOG DETALHADO: Ver tipos de contas retornadas
         logger.info(f"📊 Total de {len(accounts)} conta(s) retornada(s) pela API Pluggy")
+        import json
         for acc in accounts:
             logger.info(f"   💳 Conta: {acc.get('name')} | Tipo: {acc.get('type')} | Subtipo: {acc.get('subtype')}")
+            # Log do JSON completo da conta para debug (ajuda a achar Cofrinhos escondidos)
+            logger.info(f"   🔍 JSON Conta: {json.dumps(acc, indent=2, default=str)}")
         
         if not accounts:
             logger.info(f"ℹ️  Nenhuma account encontrada para item {item_id}")
@@ -499,7 +502,8 @@ def save_pluggy_investments_to_db(item_id: str, pluggy_item_id: int, db) -> bool
         logger.info(f"🔄 Fazendo requisição GET /investments?itemId={item_id}")
         try:
             investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id})
-            logger.info(f"✅ Response da API Pluggy /investments: {investments_data}")
+            import json
+            logger.info(f"✅ Response da API Pluggy /investments: {json.dumps(investments_data, indent=2, default=str)}")
         except Exception as api_error:
             logger.warning(f"⚠️  Endpoint /investments não retornou dados para item {item_id}: {api_error}")
             return True  # Não é erro crítico - alguns bancos não têm investimentos
@@ -1722,15 +1726,16 @@ class OpenFinanceOAuthHandler:
                         message += f"💳 _{card_name}_\n"
                         
                         # Pluggy retorna:
-                        # - balance: limite DISPONÍVEL (quanto ainda pode gastar)
-                        # - credit_limit: limite TOTAL do cartão
+                        # - balance: Valor UTILIZADO do limite (Fatura Atual)
+                        # - credit_limit: Limite TOTAL do cartão
                         
                         # Valores padrão
                         limite_total = float(card.credit_limit) if card.credit_limit is not None else 0
-                        limite_disponivel = float(card.balance) if card.balance is not None else 0
+                        valor_utilizado = float(card.balance) if card.balance is not None else 0
                         
-                        # Calcular fatura atual (Limite Total - Disponível)
-                        fatura_atual = max(0, limite_total - limite_disponivel)
+                        # Calcular fatura atual e limite disponível
+                        fatura_atual = valor_utilizado
+                        limite_disponivel = max(0, limite_total - valor_utilizado)
                         
                         # Emoji baseado no percentual usado
                         percentual_usado = (fatura_atual / limite_total * 100) if limite_total > 0 else 0
