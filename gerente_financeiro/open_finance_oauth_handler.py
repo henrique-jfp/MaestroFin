@@ -1381,22 +1381,30 @@ class OpenFinanceOAuthHandler:
         item_id: str, 
         bank_name: str,
         context: ContextTypes.DEFAULT_TYPE,
-        max_attempts: int = 60
+        max_attempts: int = 60  # 60 tentativas x 5s = 5 minutos
     ):
         """Faz polling do status do item em background"""
         logger.info(f"🔄 Iniciando polling para item {item_id}")
         
         oauth_url_sent = False  # Flag para evitar enviar OAuth URL múltiplas vezes
         attempt = 0
+        last_execution_status = None
         
         while attempt < max_attempts:
             try:
                 await asyncio.sleep(5)  # Aguardar 5 segundos entre tentativas
+                attempt += 1
                 
                 item = pluggy_request("GET", f"/items/{item_id}")
                 status = item.get("status")
+                execution_status = item.get("executionStatus")
                 
-                logger.info(f"📊 Polling item {item_id}: tentativa {attempt+1}/{max_attempts}, status={status}")
+                logger.info(f"📊 Polling item {item_id}: tentativa {attempt}/{max_attempts}, status={status}, executionStatus={execution_status}")
+                
+                # Detectar mudança no executionStatus (indica progresso)
+                if last_execution_status and execution_status != last_execution_status:
+                    logger.info(f"🔄 ExecutionStatus mudou: {last_execution_status} → {execution_status}")
+                last_execution_status = execution_status
                 
                 # Se está OUTDATED ou WAITING_USER_INPUT e ainda não enviamos OAuth URL
                 if status in ("OUTDATED", "WAITING_USER_INPUT") and not oauth_url_sent:
@@ -1443,8 +1451,8 @@ class OpenFinanceOAuthHandler:
                         oauth_url_sent = True
                         logger.info(f"✅ OAuth URL enviado para usuário {user_id}")
                 
-                # Status de sucesso
-                if status in ("UPDATED", "PARTIAL_SUCCESS"):
+                # Status de sucesso - verificar TANTO status quanto executionStatus
+                if status in ("UPDATED", "PARTIAL_SUCCESS") or execution_status in ("SUCCESS", "PARTIAL_SUCCESS"):
                     # ✅ LIMPAR conexão pendente (sucesso)
                     if user_id in _pending_connections:
                         del _pending_connections[user_id]
@@ -1476,11 +1484,16 @@ class OpenFinanceOAuthHandler:
                              f"Use /minhas\\_contas para ver suas contas\\.",
                         parse_mode="MarkdownV2"
                     )
-                    logger.info(f"✅ Item {item_id} conectado com sucesso")
+                    logger.info(f"✅ Item {item_id} conectado com sucesso (status={status}, executionStatus={execution_status})")
                     break
                 
                 # Status de erro
                 if status in ("LOGIN_ERROR", "INVALID_CREDENTIALS", "ERROR", "SUSPENDED"):
+                    # ✅ LIMPAR conexão pendente (erro)
+                    if user_id in _pending_connections:
+                        del _pending_connections[user_id]
+                        logger.info(f"❌ Conexão pendente removida para usuário {user_id} (erro)")
+                    
                     status_detail = item.get("statusDetail", "Erro desconhecido")
                     # Escapar caracteres especiais
                     safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
@@ -1495,25 +1508,33 @@ class OpenFinanceOAuthHandler:
                              f"Tente novamente com /conectar\\_banco",
                         parse_mode="MarkdownV2"
                     )
-                    logger.warning(f"❌ Item {item_id} falhou: {status}")
+                    logger.warning(f"❌ Item {item_id} falhou: {status} - {status_detail}")
                     break
                 
-                attempt += 1
-                
             except Exception as e:
-                logger.error(f"❌ Erro no polling do item {item_id}: {e}")
-                attempt += 1
+                logger.error(f"❌ Erro no polling do item {item_id} (tentativa {attempt}): {e}")
+                # Continuar tentando mesmo com erros
         
+        # Se saiu do loop por timeout (não por break)
         if attempt >= max_attempts:
-            logger.warning(f"⏰ Timeout no polling do item {item_id}")
+            logger.warning(f"⏰ Timeout no polling do item {item_id} após {attempt} tentativas ({max_attempts*5}s)")
+            
+            # ✅ LIMPAR conexão pendente (timeout)
+            if user_id in _pending_connections:
+                del _pending_connections[user_id]
+                logger.info(f"⏰ Conexão pendente removida para usuário {user_id} (timeout)")
+            
             try:
                 safe_bank_name = bank_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("`", "\\`")
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"⏰ *Timeout na conexão*\n\n"
+                    text=f"⏰ *Tempo esgotado*\n\n"
                          f"🏦 {safe_bank_name}\n"
-                         f"⏳ A sincronização está demorando mais que o esperado\\.\n\n"
-                         f"Verifique /minhas\\_contas em alguns minutos\\.",
+                         f"⏳ A sincronização está demorando mais que 5 minutos\\.\n\n"
+                         f"✅ A conexão pode ter sido concluída\\. Verifique com:\n"
+                         f"• /minhas\\_contas \\- Ver contas conectadas\n"
+                         f"• /sincronizar \\- Tentar sincronizar novamente\n\n"
+                         f"❌ Se não funcionou, tente reconectar com /conectar\\_banco",
                     parse_mode="MarkdownV2"
                 )
             except Exception as e:
