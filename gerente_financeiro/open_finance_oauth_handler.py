@@ -993,9 +993,9 @@ class OpenFinanceOAuthHandler:
                             parse_mode="Markdown"
                         )
                     
-                    # Polling em background
+                    # Polling em background - PASSAR connector como parâmetro
                     asyncio.create_task(
-                        self._poll_item_status(user_id, item_id, connector["name"], context)
+                        self._poll_item_status(user_id, item_id, connector["name"], context, connector)
                     )
                     
                     return WAITING_AUTH
@@ -1016,9 +1016,9 @@ class OpenFinanceOAuthHandler:
                         f"Vou te avisar quando estiver pronto!"
                     )
                     
-                    # Polling em background
+                    # Polling em background - PASSAR connector como parâmetro
                     asyncio.create_task(
-                        self._poll_item_status(user_id, item_id, connector["name"], context)
+                        self._poll_item_status(user_id, item_id, connector["name"], context, connector)
                     )
                     
                     return ConversationHandler.END
@@ -1381,10 +1381,11 @@ class OpenFinanceOAuthHandler:
         item_id: str, 
         bank_name: str,
         context: ContextTypes.DEFAULT_TYPE,
+        connector: dict,  # NOVO: connector passado como parâmetro
         max_attempts: int = 60  # 60 tentativas x 5s = 5 minutos
     ):
         """Faz polling do status do item em background"""
-        logger.info(f"🔄 Iniciando polling para item {item_id}")
+        logger.info(f"🔄 Iniciando polling para item {item_id} (connector: {connector.get('name')})")
         
         oauth_url_sent = False  # Flag para evitar enviar OAuth URL múltiplas vezes
         attempt = 0
@@ -1460,18 +1461,14 @@ class OpenFinanceOAuthHandler:
                     
                     # 💾 Salvar item e accounts no banco de dados
                     try:
-                        # Buscar dados do conector (precisa estar salvo no contexto)
-                        connector_data = self.active_connections.get(user_id, {}).get("connector")
-                        if connector_data:
-                            save_success = save_pluggy_item_to_db(user_id, item, connector_data)
-                            if save_success:
-                                logger.info(f"💾 Dados do item {item_id} salvos no banco")
-                            else:
-                                logger.warning(f"⚠️  Falha ao salvar dados do item {item_id} no banco")
+                        # Connector passado como parâmetro - garantido disponível
+                        save_success = save_pluggy_item_to_db(user_id, item, connector)
+                        if save_success:
+                            logger.info(f"💾 Dados do item {item_id} salvos no banco (connector={connector.get('name')})")
                         else:
-                            logger.warning(f"⚠️  Connector data não encontrada para salvar item {item_id}")
+                            logger.warning(f"⚠️  Falha ao salvar dados do item {item_id} no banco")
                     except Exception as save_error:
-                        logger.error(f"❌ Erro ao salvar item no banco: {save_error}")
+                        logger.error(f"❌ Erro ao salvar item no banco: {save_error}", exc_info=True)
                         # Não falhar a conexão se salvar no banco falhar
                     
                     # Escapar caracteres especiais do Markdown
