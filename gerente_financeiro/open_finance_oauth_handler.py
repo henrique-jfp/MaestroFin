@@ -1308,11 +1308,11 @@ class OpenFinanceOAuthHandler:
                 }.get(item.status, "❓")
                 
                 # Escapar caracteres especiais
-                safe_bank = item.connector_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[")
+                safe_bank = item.connector_name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace(".", "\\.")
                 safe_status = item.status.replace("_", "\\_")
                 
                 message += f"{status_emoji} *{safe_bank}*\n"
-                message += f"   Status: `{safe_status}`\n"
+                message += f"    Status: `{safe_status}`\n"
                 
                 # Buscar accounts deste item
                 accounts = db.query(PluggyAccount).filter(
@@ -1321,31 +1321,60 @@ class OpenFinanceOAuthHandler:
                 
                 if accounts:
                     for acc in accounts:
-                        # Tipo de conta
-                        type_emoji = {
-                            "BANK": "🏦",
-                            "CREDIT": "💳",
-                            "INVESTMENT": "📈"
-                        }.get(acc.type, "💰")
+                        # Separador visual
+                        message += f"    ━━━━━━━━━━━━━━━━━━━━\n"
                         
-                        safe_acc_name = acc.name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[")
+                        # Tipo de conta com emoji
+                        if acc.type == "CREDIT":
+                            type_emoji = "💳"
+                            type_name = "Cartão de Crédito"
+                        elif acc.type == "BANK":
+                            type_emoji = "🏦"
+                            type_name = "Conta Bancária"
+                        elif acc.type == "INVESTMENT":
+                            type_emoji = "📈"
+                            type_name = "Investimento"
+                        else:
+                            type_emoji = "💰"
+                            type_name = "Conta"
                         
-                        message += f"   {type_emoji} {safe_acc_name}\n"
+                        # Nome da conta escapado
+                        safe_acc_name = acc.name.replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace(".", "\\.")
                         
-                        if acc.balance is not None:
+                        message += f"    {type_emoji} *{safe_acc_name}*\n"
+                        message += f"    `{type_name}`\n\n"
+                        
+                        # Para conta bancária ou investimento: mostrar saldo
+                        if acc.type in ("BANK", "INVESTMENT") and acc.balance is not None:
                             balance_str = f"R$ {float(acc.balance):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            message += f"      Saldo: `{balance_str}`\n"
+                            message += f"    💵 *Saldo:* `{balance_str}`\n"
                         
-                        if acc.credit_limit is not None:
-                            limit_str = f"R$ {float(acc.credit_limit):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            message += f"      Limite: `{limit_str}`\n"
+                        # Para cartão de crédito: mostrar limite e fatura
+                        if acc.type == "CREDIT":
+                            if acc.balance is not None:
+                                balance_str = f"R$ {float(acc.balance):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                message += f"    💵 *Saldo:* `{balance_str}`\n"
+                            
+                            if acc.credit_limit is not None:
+                                limit_str = f"R$ {float(acc.credit_limit):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                message += f"    💎 *Limite:* `{limit_str}`\n"
+                            
+                            # Calcular fatura atual (saldo disponível - limite)
+                            if acc.balance is not None and acc.credit_limit is not None:
+                                fatura_atual = float(acc.credit_limit) - float(acc.balance)
+                                if fatura_atual > 0:
+                                    fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    message += f"    🧾 *Fatura Atual:* `{fatura_str}`\n"
+                        
+                        message += "\n"
                 else:
-                    message += "   ℹ️  Nenhuma conta encontrada\n"
+                    message += "    ℹ️  _Nenhuma conta encontrada_\n\n"
                 
                 message += "\n"
             
-            message += "🔄 Use /conectar\\_banco para adicionar mais bancos\\.\n"
-            message += "🗑️ Use /desconectar\\_banco para remover conexões\\."
+            message += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            message += "➕ /conectar\\_banco \\- Adicionar banco\n"
+            message += "🗑️ /desconectar\\_banco \\- Remover conexão"
             
             await update.message.reply_text(message, parse_mode="MarkdownV2")
             
