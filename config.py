@@ -36,7 +36,27 @@ else:
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+
+# GEMINI MODEL NAME com validação e fallback automático
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+# Lista de modelos válidos (atualizada em Nov 2024)
+VALID_GEMINI_MODELS = [
+    "gemini-1.5-flash",       # Modelo rápido e eficiente (recomendado)
+    "gemini-1.5-pro",         # Modelo avançado para tarefas complexas
+    "gemini-1.5-flash-002",   # Versão específica do Flash
+    "gemini-1.5-pro-002",     # Versão específica do Pro
+]
+
+# Validar e corrigir modelo automaticamente
+if _model_env not in VALID_GEMINI_MODELS:
+    logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
+    logging.warning(f"⚠️ Usando fallback: 'gemini-1.5-flash'")
+    GEMINI_MODEL_NAME = "gemini-1.5-flash"
+else:
+    GEMINI_MODEL_NAME = _model_env
+    
+logging.info(f"🤖 Modelo Gemini ativo: {GEMINI_MODEL_NAME}")
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")

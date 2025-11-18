@@ -26,6 +26,16 @@ logger = logging.getLogger(__name__)
 # Estados da conversa
 SELECTING_BANK, ENTERING_CPF, WAITING_AUTH = range(3)
 
+
+def escape_markdown_v2(text: str) -> str:
+    """
+    Escapa caracteres especiais para MarkdownV2 do Telegram.
+    
+    Caracteres que precisam ser escapados: _*[]()~`>#+-=|{}.!
+    """
+    special_chars = r'_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{char}' if char in special_chars else char for char in text)
+
 # Configuração Pluggy
 PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID")
 PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET")
@@ -1339,7 +1349,7 @@ class OpenFinanceOAuthHandler:
                         break
                 
                 # Nome do banco escapado
-                safe_bank = item.connector_name.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("_", "\\_").replace("*", "\\*").replace("[", "\\[").replace("]", "\\]")
+                safe_bank = escape_markdown_v2(item.connector_name)
                 
                 message += f"{bank_emoji} *{safe_bank}*\n"
                 
@@ -1362,6 +1372,8 @@ class OpenFinanceOAuthHandler:
                 if bank_accounts:
                     total_balance = sum(float(a.balance) for a in bank_accounts if a.balance is not None)
                     balance_str = f"R$ {total_balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    # Escapar caracteres especiais para MarkdownV2
+                    balance_str = escape_markdown_v2(balance_str)
                     message += f"💰 Saldo: {balance_str}\n"
                 
                 
@@ -1372,12 +1384,16 @@ class OpenFinanceOAuthHandler:
                         if card.balance is not None:
                             limite_restante = float(card.balance)
                             limite_str = f"R$ {limite_restante:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            # Escapar caracteres especiais para MarkdownV2
+                            limite_str = escape_markdown_v2(limite_str)
                             message += f"📉 Limite restante: {limite_str}\n"
                         
                         # Fatura atual
                         if card.balance is not None and card.credit_limit is not None:
                             fatura_atual = float(card.credit_limit) - float(card.balance)
                             fatura_str = f"R$ {fatura_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            # Escapar caracteres especiais para MarkdownV2
+                            fatura_str = escape_markdown_v2(fatura_str)
                             message += f"🧾 Fatura atual: {fatura_str}\n"
                 
                 # Investimentos (se houver)
@@ -1385,6 +1401,8 @@ class OpenFinanceOAuthHandler:
                     total_inv = sum(float(i.balance) for i in investments if i.balance is not None)
                     if total_inv > 0:
                         inv_str = f"R$ {total_inv:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        # Escapar caracteres especiais para MarkdownV2
+                        inv_str = escape_markdown_v2(inv_str)
                         message += f"📈 Investimentos: {inv_str}\n"
                 
                 message += "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1556,7 +1574,7 @@ class OpenFinanceOAuthHandler:
                 else:
                     emoji = "🔴" if float(txn.amount) < 0 else "🟢"  # Normal para contas
                 
-                # Formatar valor
+                # Formatar valor (sem pontos, pois vai em botão inline - não precisa escape)
                 amount_str = f"R$ {abs(float(txn.amount)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 
                 # Truncar descrição
@@ -1927,13 +1945,17 @@ class OpenFinanceOAuthHandler:
             
             # Formatar mensagem
             amount_str = f"R$ {abs(float(txn.amount)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            # Escapar caracteres especiais para MarkdownV2
+            amount_str = escape_markdown_v2(amount_str)
             cat_name = suggested_category.nome if suggested_category else "Sem categoria"
+            cat_name_safe = escape_markdown_v2(cat_name)
+            desc_safe = escape_markdown_v2(txn.description)
             
             await query.edit_message_text(
                 f"✅ *Transação importada\\!*\n\n"
-                f"📝 {txn.description}\n"
+                f"📝 {desc_safe}\n"
                 f"💰 {amount_str}\n"
-                f"📂 Categoria: {cat_name}\n"
+                f"📂 Categoria: {cat_name_safe}\n"
                 f"📅 Data: {txn.date.strftime('%d/%m/%Y')}\n\n"
                 f"Use /importar\\_transacoes para continuar\\.",
                 parse_mode="MarkdownV2"
@@ -2145,6 +2167,177 @@ Categoria escolhida:"""
             return categoria_outros
         
         return None
+    
+    # ==================== /categorizar - EXTINTOR DE INCÊNDIO 🧯 ====================
+    
+    async def categorizar_lancamentos(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        🧯 EXTINTOR DE INCÊNDIO - Categoriza automaticamente todos os lançamentos sem categoria
+        
+        Funciona para lançamentos vindos de:
+        - Open Finance (transações importadas)
+        - Lançamento Manual
+        - OCR (comprovantes escaneados)
+        
+        Utiliza o Gemini AI para categorização inteligente
+        """
+        user_id = update.effective_user.id
+        logger.info(f"🧯 Usuário {user_id} iniciou categorização automática")
+        
+        # Mensagem inicial
+        status_msg = await update.message.reply_text(
+            "🧯 *Extintor de Incêndio Ativado\\!*\n\n"
+            "🔍 Buscando lançamentos sem categoria\\.\\.\\.",
+            parse_mode="MarkdownV2"
+        )
+        
+        try:
+            from database.database import get_db
+            from models import Usuario, Lancamento, Categoria
+            import google.generativeai as genai
+            from config import GEMINI_API_KEY
+            
+            db = next(get_db())
+            
+            # Buscar usuário
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await status_msg.edit_text("❌ Usuário não encontrado\\.", parse_mode="MarkdownV2")
+                return
+            
+            # Buscar lançamentos sem categoria
+            lancamentos_sem_categoria = db.query(Lancamento).filter(
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.id_categoria.is_(None)
+            ).all()
+            
+            if not lancamentos_sem_categoria:
+                await status_msg.edit_text(
+                    "✅ *Tudo limpo\\!*\n\n"
+                    "🎉 Todos os seus lançamentos já estão categorizados\\.",
+                    parse_mode="MarkdownV2"
+                )
+                return
+            
+            # Configurar Gemini
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # Buscar categorias disponíveis
+            categorias = db.query(Categoria).all()
+            categorias_lista = [cat.nome for cat in categorias]
+            categorias_dict = {cat.nome.lower(): cat for cat in categorias}
+            
+            await status_msg.edit_text(
+                f"🔥 *Encontrados {len(lancamentos_sem_categoria)} lançamentos sem categoria\\!*\n\n"
+                f"🤖 Iniciando categorização com IA\\.\\.\\.\n"
+                f"⏱️ Isso pode levar alguns segundos\\.",
+                parse_mode="MarkdownV2"
+            )
+            
+            # Contadores
+            sucesso = 0
+            falha = 0
+            
+            # Categorizar cada lançamento
+            for idx, lancamento in enumerate(lancamentos_sem_categoria, 1):
+                try:
+                    # Atualizar progresso a cada 5 lançamentos
+                    if idx % 5 == 0:
+                        await status_msg.edit_text(
+                            f"🔥 *Categorizando\\.\\.\\.*\n\n"
+                            f"📊 Progresso: {idx}/{len(lancamentos_sem_categoria)}\n"
+                            f"✅ Sucesso: {sucesso}\n"
+                            f"❌ Falhas: {falha}",
+                            parse_mode="MarkdownV2"
+                        )
+                    
+                    # Preparar prompt para o Gemini
+                    prompt = f"""Você é um especialista em categorização de transações financeiras.
+
+Analise esta transação e escolha a categoria MAIS APROPRIADA:
+
+Descrição: "{lancamento.descricao}"
+Valor: R$ {abs(lancamento.valor)}
+Tipo: {"DESPESA" if lancamento.tipo == "despesa" else "RECEITA"}
+
+Categorias disponíveis:
+{', '.join(categorias_lista)}
+
+REGRAS IMPORTANTES:
+- Responda APENAS o nome exato da categoria (sem explicações, aspas ou pontuação)
+- Se não tiver certeza, escolha a categoria mais próxima
+- Para PIX/TED/Transferências → "Transferências"
+- Para supermercado/feira → "Alimentação"
+- Para Uber/99/combustível → "Transporte"
+- Para Netflix/Spotify → "Lazer"
+- Para farmácia/médico → "Saúde"
+
+Categoria:"""
+                    
+                    # Solicitar categorização ao Gemini
+                    response = model.generate_content(prompt)
+                    categoria_sugerida = response.text.strip().strip('"').strip("'")
+                    
+                    # Buscar categoria no banco (case-insensitive)
+                    categoria = categorias_dict.get(categoria_sugerida.lower())
+                    
+                    if not categoria:
+                        # Tentar match parcial
+                        for cat_nome, cat_obj in categorias_dict.items():
+                            if categoria_sugerida.lower() in cat_nome or cat_nome in categoria_sugerida.lower():
+                                categoria = cat_obj
+                                break
+                    
+                    if categoria:
+                        lancamento.id_categoria = categoria.id
+                        sucesso += 1
+                        logger.info(f"✅ '{lancamento.descricao}' → {categoria.nome}")
+                    else:
+                        # Fallback: categoria "Outros"
+                        categoria_outros = categorias_dict.get("outros")
+                        if categoria_outros:
+                            lancamento.id_categoria = categoria_outros.id
+                            sucesso += 1
+                            logger.warning(f"⚠️ '{lancamento.descricao}' → Outros (fallback)")
+                        else:
+                            falha += 1
+                            logger.error(f"❌ Não foi possível categorizar: {lancamento.descricao}")
+                    
+                except Exception as e:
+                    falha += 1
+                    logger.error(f"❌ Erro ao categorizar '{lancamento.descricao}': {e}")
+                    continue
+            
+            # Salvar alterações
+            db.commit()
+            
+            # Mensagem final
+            emoji_final = "🎉" if falha == 0 else "✅" if sucesso > 0 else "❌"
+            
+            message = f"{emoji_final} *Categorização Concluída\\!*\n\n"
+            message += f"📊 *Resultados:*\n"
+            message += f"✅ Sucesso: {sucesso}\n"
+            
+            if falha > 0:
+                message += f"❌ Falhas: {falha}\n\n"
+                message += f"💡 Dica: Lançamentos não categorizados podem ser editados manualmente\\."
+            else:
+                message += f"\n🎯 Todos os lançamentos foram categorizados com sucesso\\!"
+            
+            await status_msg.edit_text(message, parse_mode="MarkdownV2")
+            
+            logger.info(f"🧯 Categorização concluída para usuário {user_id}: {sucesso} sucesso, {falha} falhas")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro na categorização automática: {e}", exc_info=True)
+            await status_msg.edit_text(
+                "❌ *Erro ao categorizar lançamentos*\n\n"
+                "Tente novamente em alguns instantes\\.",
+                parse_mode="MarkdownV2"
+            )
+        finally:
+            db.close()
     
     # ==================== CONVERSATION HANDLER ====================
     

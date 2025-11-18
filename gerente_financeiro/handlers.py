@@ -441,6 +441,8 @@ HELP_TEXTS = {
         "Deixe o bot com a sua cara e gerencie suas preferências.\n\n"
         "👤  <code>/configurar</code>\n"
         "   • Gerencie suas <b>contas</b>, <b>cartões</b>, defina seu <b>perfil de investidor</b> para receber dicas personalizadas e altere o <b>horário dos lembretes</b>.\n\n"
+        "🧯  <code>/categorizar</code>\n"
+        "   • <b>EXTINTOR DE INCÊNDIO!</b> Categoriza automaticamente TODOS os lançamentos sem categoria usando IA. Perfeito para corrigir falhas de categorização do OCR, Open Finance ou lançamento manual.\n\n"
         "🚨  <code>/alerta [valor]</code>\n"
         "   • Defina um limite de gastos mensal (ex: <code>/alerta 1500</code>). Eu te avisarei se você ultrapassar esse valor.\n\n"
         "💬  <code>/contato</code>\n" 
@@ -484,6 +486,8 @@ HELP_TEXTS = {
         "   • Sincronize manualmente suas transações dos últimos 30 dias de todas as contas conectadas.\n\n"
         "📥  <code>/importar_transacoes</code>\n"
         "   • Veja as transações pendentes e importe com <b>1 clique</b>. A categorização é feita automaticamente de forma inteligente!\n\n"
+        "🧯  <code>/categorizar</code>\n"
+        "   • <b>Extintor de Incêndio!</b> Se alguma transação importada ficou sem categoria, use este comando para categorizar tudo automaticamente com IA.\n\n"
         "✨  <b>Benefícios:</b>\n"
         "   • 🤖 Sincronização automática a cada 1 hora\n"
         "   • 🧠 Categorização inteligente (Alimentação, Transporte, etc.)\n"
@@ -722,9 +726,19 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 contexto_conversa=historico_conversa_str
             )
             
-            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-            response = await model.generate_content_async(prompt_final)
-            resposta_ia = _limpar_resposta_ia(response.text)
+            # Tentar com o modelo configurado, se falhar usar fallback
+            try:
+                model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+                response = await model.generate_content_async(prompt_final)
+                resposta_ia = _limpar_resposta_ia(response.text)
+            except Exception as model_error:
+                logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
+                logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
+                
+                # Fallback para modelo mais estável
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = await model.generate_content_async(prompt_final)
+                resposta_ia = _limpar_resposta_ia(response.text)
             
             # Salva no cache
             _salvar_resposta_ia_cache(chave_cache_ia, resposta_ia)
@@ -1018,8 +1032,15 @@ async def handle_analise_geral(update, context, user_question, usuario_db, conte
 
 async def gerar_resposta_ia(update, context, prompt, user_question, usuario_db, contexto, tipo_interacao):
     try:
-        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        response = await model.generate_content_async(prompt)
+        # Tentar com o modelo configurado, se falhar usar fallback
+        try:
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            response = await model.generate_content_async(prompt)
+        except Exception as model_error:
+            logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
+            logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = await model.generate_content_async(prompt)
         
         # --- NOVA LÓGICA DE PROCESSAMENTO JSON (MAIS SEGURA) ---
         
@@ -1139,9 +1160,16 @@ async def handle_analise_impacto_callback(update: Update, context: ContextTypes.
         )
         
         # Chama a IA para gerar a análise
-        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        response = await model.generate_content_async(prompt_impacto)
-        resposta_bruta = response.text
+        try:
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            response = await model.generate_content_async(prompt_impacto)
+            resposta_bruta = response.text
+        except Exception as model_error:
+            logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
+            logger.info("🔄 Tentando fallback para 'gemini-1.5-flash'...")
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = await model.generate_content_async(prompt_impacto)
+            resposta_bruta = response.text
         resposta_limpa = _limpar_resposta_ia(resposta_bruta)
         
         
