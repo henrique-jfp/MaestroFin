@@ -60,6 +60,7 @@ except ImportError as e:
 
 from database.database import get_db
 from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio, limpar_cache_usuario
+from . import services as services_module
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +232,17 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     
     try:
-        # 1. Limpar cache do usuário e obter todos os dados necessários do backend
+        # 1. Desativar temporariamente o sistema de cache para garantir dados sempre frescos
+        old_cache_ttl = getattr(services_module, 'CACHE_TTL', None)
+        old_cache_max = getattr(services_module, 'CACHE_MAX_SIZE', None)
+        try:
+            services_module.CACHE_TTL = 0
+            services_module.CACHE_MAX_SIZE = 0
+            logger.debug("CACHE DESATIVADO temporariamente para geração do /relatorio")
+        except Exception:
+            logger.debug("Não foi possível desativar o cache (ignorando)")
+
+        # Limpa qualquer cache residual do usuário (defensivo)
         try:
             limpar_cache_usuario(user_id)
             logger.debug(f"Cache do usuário {user_id} limpo antes de gerar o relatório")
@@ -369,6 +380,15 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
 
     finally:
         db.close()
+        # Restaura os valores de cache originais (se existiam)
+        try:
+            if old_cache_ttl is not None:
+                services_module.CACHE_TTL = old_cache_ttl
+            if old_cache_max is not None:
+                services_module.CACHE_MAX_SIZE = old_cache_max
+            logger.debug("CACHE restaurado aos valores anteriores após geração do relatório")
+        except Exception:
+            logger.debug("Falha ao restaurar configuração de cache (não crítico)")
         
 
 # Cria o handler para ser importado no bot.py
