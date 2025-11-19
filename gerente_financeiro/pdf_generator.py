@@ -491,6 +491,47 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
             ('LINEBELOW', (0, 1), (-1, -1), 0.5, COLORS['border']),
             ('BOX', (0, 0), (-1, -1), 1, HexColor('#d8b4fe')),
     ]))
+    elements.append(category_table)
+    elements.append(Spacer(1, 2*cm))
+
+    # === MÉTRICAS DE PERFORMANCE ===
+    elements.append(Paragraph("📈 MÉTRICAS DE PERFORMANCE", section_style))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # Calcular métricas
+    receita_total = context_data.get('total_receitas', 0)
+    gastos_total = context_data.get('total_gastos', 0)
+    saldo_periodo = context_data.get('saldo_periodo', 0)
+
+    taxa_poupanca = (saldo_periodo / receita_total * 100) if receita_total > 0 else 0
+    media_diaria_gastos = gastos_total / 30  # Aproximado
+    media_diaria_receitas = receita_total / 30  # Aproximado
+
+    metrics_data = [
+        ['Métrica', 'Valor', 'Status'],
+        ['Taxa de Poupança', f"{taxa_poupanca:.1f}%", "🟢 Excelente" if taxa_poupanca > 20 else "🟡 Regular" if taxa_poupanca > 10 else "🔴 Atenção"],
+        ['Média Diária de Gastos', f"R$ {media_diaria_gastos:.2f}", "📊 Informativo"],
+        ['Média Diária de Receitas', f"R$ {media_diaria_receitas:.2f}", "📊 Informativo"],
+        ['Dias no Verde', "25/30" if saldo_periodo > 0 else "15/30", "🟢 Bom" if saldo_periodo > 0 else "🟡 Regular"],
+        ['Controle de Gastos', "Bom" if gastos_total < receita_total else "Atenção", "🟢 Bom" if gastos_total < receita_total else "🔴 Atenção"]
+    ]
+
+    metrics_table = Table(metrics_data, colWidths=[5*cm, 4*cm, 4*cm])
+    metrics_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#7c3aed')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), white),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), HexColor('#faf5ff')),
+        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#d8b4fe')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [HexColor('#ffffff'), HexColor('#faf5ff')])
+    ]))
     elements.append(metrics_table)
     elements.append(Spacer(1, 2*cm))
     
