@@ -2517,25 +2517,31 @@ class OpenFinanceOAuthHandler:
                 tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
                 logger.info(f"✅ Conta normal: amount={'positivo' if float(txn.amount) > 0 else 'negativo'} → {tipo.upper()}")
             
-            # Criar lançamento
-            # CORREÇÃO: usar nome do banco/conta em vez de string genérica
-            nome_banco = account.name if account else "Sem conta"
-            lancamento = Lancamento(
-                descricao=txn.description,
-                valor=abs(float(txn.amount)),
-                tipo=tipo,
-                data_transacao=datetime.combine(txn.date, datetime.min.time()),
-                forma_pagamento=nome_banco,  # ✅ Nome real: "Nubank", "Itaú", etc.
-                id_usuario=usuario.id,
-                id_categoria=suggested_category.id if suggested_category else None
-            )
-            
-            db.add(lancamento)
-            
-            # Marcar transação como importada
-            txn.imported_to_lancamento = True
-            txn.id_lancamento = lancamento.id
-            
+            # Criar lançamento via função centralizada para garantir categorização/itens
+            from gerente_financeiro import services
+
+            transacao_payload = {
+                'descricao': txn.description,
+                'valor': abs(float(txn.amount)),
+                'tipo': tipo,
+                'data_transacao': datetime.combine(txn.date, datetime.min.time()).strftime('%Y-%m-%d'),
+                'forma_pagamento': account.name if account else 'Sem conta',
+                'id_categoria': suggested_category.id if suggested_category else None,
+                'merchant_name': txn.merchant_name,
+                'origem': 'openfinance'
+            }
+
+            success, message, stats = await services.salvar_transacoes_generica(db, usuario, [transacao_payload], account.id if account else None, tipo_origem='openfinance')
+
+            # Marcar transação como importada e linkar id se disponível
+            if success:
+                txn.imported_to_lancamento = True
+                created_ids = stats.get('created_ids') or []
+                if created_ids:
+                    try:
+                        txn.id_lancamento = int(created_ids[0])
+                    except Exception:
+                        pass
             db.commit()
             
             # Formatar mensagem
@@ -2600,60 +2606,58 @@ class OpenFinanceOAuthHandler:
             imported_count = 0
             skipped_count = 0
             
+            # Preparar payloads para salvamento em lote usando o serviço central
+            from gerente_financeiro import services
+
+            payloads = []
+            txns_a_importar = []
             for txn in pending_txns:
-                try:
-                    # Buscar conta para verificar tipo
-                    account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
-                    is_credit_card = account and account.type == "CREDIT"
-                    
-                    # 🔍 LOG DETALHADO PARA DEBUG
-                    logger.info(f"🔍 [MASSA] Transação {txn.id}: {txn.description} | Amount: {float(txn.amount)} | Type API: {txn.type} | Tipo conta: {account.type if account else 'UNKNOWN'} | É CC? {is_credit_card}")
-                    
-                    # Para cartão de crédito, pular pagamentos de fatura
-                    if is_credit_card and float(txn.amount) < 0:
-                        logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando")
-                        txn.imported_to_lancamento = True  # Marcar como "importada" para não aparecer de novo
-                        skipped_count += 1
-                        continue
-                    
-                    # Sugerir categoria
-                    suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
-                    
-                    # ⚠️ CORREÇÃO: Determinar tipo ignorando "type" da API para cartões
-                    # A Pluggy inverte: compras em CC vêm como type="CREDIT" mas são DESPESAS
-                    if is_credit_card:
-                        tipo = "Despesa"  # Gastos no cartão são SEMPRE despesa (ignorando type da API)
-                        logger.info(f"✅ [MASSA] Cartão de crédito: {txn.id} → DESPESA (ignorando type='{txn.type}')")
-                    else:
-                        tipo = "Receita" if float(txn.amount) > 0 else "Despesa"
-                        logger.info(f"✅ [MASSA] Conta normal: {txn.id} → {tipo.upper()} (amount={'positivo' if float(txn.amount) > 0 else 'negativo'})")
-                    
-                    # Criar lançamento
-                    # CORREÇÃO: usar nome do banco/conta em vez de string genérica
-                    nome_banco = account.name if account else "Sem conta"
-                    lancamento = Lancamento(
-                        descricao=txn.description,
-                        valor=abs(float(txn.amount)),
-                        tipo=tipo,
-                        data_transacao=datetime.combine(txn.date, datetime.min.time()),
-                        forma_pagamento=nome_banco,  # ✅ Nome real: "Nubank", "Itaú", etc.
-                        id_usuario=usuario.id,
-                        id_categoria=suggested_category.id if suggested_category else None
-                    )
-                    
-                    db.add(lancamento)
-                    
-                    # Marcar como importada
+                account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
+                is_credit_card = account and account.type == "CREDIT"
+
+                # Para cartão de crédito, pular pagamentos de fatura
+                if is_credit_card and float(txn.amount) < 0:
+                    logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando")
                     txn.imported_to_lancamento = True
-                    txn.id_lancamento = lancamento.id
-                    
-                    imported_count += 1
-                    
-                except Exception as e:
-                    logger.error(f"❌ Erro ao importar transação {txn.id}: {e}")
+                    skipped_count += 1
                     continue
-            
-            db.commit()
+
+                # Sugerir categoria (mantemos a sugestão atual)
+                suggested_category = self._suggest_category(txn.description, txn.merchant_name, db)
+
+                tipo_tx = "Despesa" if (is_credit_card or float(txn.amount) < 0) else ("Receita" if float(txn.amount) > 0 else "Despesa")
+
+                payload = {
+                    'descricao': txn.description,
+                    'valor': abs(float(txn.amount)),
+                    'tipo': tipo_tx,
+                    'data_transacao': txn.date.strftime('%Y-%m-%d'),
+                    'forma_pagamento': account.name if account else 'Sem conta',
+                    'id_categoria': suggested_category.id if suggested_category else None,
+                    'merchant_name': txn.merchant_name,
+                    'origem': 'openfinance'
+                }
+
+                payloads.append(payload)
+                txns_a_importar.append(txn)
+
+            # Salvar em lote via serviço genérico
+            if payloads:
+                success, message, stats = await services.salvar_transacoes_generica(db, usuario, payloads, account.id if account else None, tipo_origem='openfinance')
+
+                created_ids = stats.get('created_ids', []) if isinstance(stats, dict) else []
+
+                # Marcar transações como importadas e linkar ids quando possível (ordem preservada)
+                for idx, txn in enumerate(txns_a_importar):
+                    try:
+                        txn.imported_to_lancamento = True
+                        if idx < len(created_ids):
+                            txn.id_lancamento = int(created_ids[idx])
+                        imported_count += 1
+                    except Exception as e:
+                        logger.warning(f"Não foi possível linkar id criado para txn {txn.id}: {e}")
+
+                db.commit()
             
             # Mensagem final
             emoji_final = "🎉" if falha == 0 else "✅" if sucesso > 0 else "❌"

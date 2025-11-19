@@ -26,6 +26,115 @@ from models import Usuario, Lancamento, Objetivo, Categoria, ConquistaUsuario
 
 logger = logging.getLogger(__name__)
 
+# ============================
+# Normalização e inferência
+# ============================
+import unicodedata
+from typing import Any
+
+
+def _normalize_text(s: Optional[str]) -> str:
+    """Remove acentos e normaliza texto para matching simples."""
+    if not s:
+        return ""
+    s = str(s)
+    s = unicodedata.normalize('NFKD', s)
+    s = s.encode('ASCII', 'ignore').decode('ascii')
+    return s.lower()
+
+
+_KEYWORD_CATEGORY_MAP = {
+    'mercado': 'Alimentação', 'supermercado': 'Alimentação', 'panific': 'Alimentação',
+    'padaria': 'Alimentação', 'ifood': 'Alimentação', 'rappi': 'Alimentação', 'ubereats': 'Alimentação',
+    'restaurante': 'Alimentação', 'uber': 'Transporte', '99': 'Transporte', 'posto': 'Transporte',
+    'gasolina': 'Transporte', 'farmacia': 'Saúde', 'cinema': 'Lazer', 'netflix': 'Assinaturas',
+    'spotify': 'Assinaturas', 'renner': 'Vestuário', 'rendimento': 'Investimentos', 'investimento': 'Investimentos',
+    'boleto': 'Pagamentos', 'pix': 'Pix', 'transferencia': 'Transferência'
+}
+
+
+def infer_category_from_description(description: Optional[str]) -> Optional[str]:
+    desc = _normalize_text(description)
+    if not desc:
+        return None
+    for kw, cat in _KEYWORD_CATEGORY_MAP.items():
+        if kw in desc:
+            return cat
+    # heurísticas adicionais
+    if 'mercad' in desc or 'mercato' in desc:
+        return 'Alimentação'
+    if 'formiguinha' in desc:
+        return 'Alimentação'
+    return None
+
+
+def infer_payment_method(origem: Optional[str], descricao: Optional[str]) -> str:
+    o_raw = origem or ''
+    d = _normalize_text(descricao)
+    o = _normalize_text(o_raw)
+
+    # Se a origem já veio formatada pelo serviço (ex: 'Cartão de Crédito • Nubank'), preserva
+    if o_raw and '•' in str(o_raw):
+        return str(o_raw)
+
+    # Detectores principais
+    if 'pix' in o or 'pix' in d:
+        return 'Pix'
+
+    # Cartões: detectar presença de palavras-chave e, se possível, manter o nome do emissor
+    if 'cartao' in o or 'credito' in o or 'debito' in o or 'visa' in d or 'master' in d or 'elo' in d or 'amex' in d:
+        # Se a origem textual contiver o nome do banco, tenta preservar
+        if o_raw and len(o_raw) > 3 and o_raw.lower() not in ('openfinance', 'open finance'):
+            # Normaliza capitalização mínima
+            return o_raw
+        # Caso contrário, decide entre crédito/débito por palavras-chave
+        if 'debito' in o:
+            return 'Cartão de Débito'
+        return 'Cartão de Crédito'
+
+    # Transferências e boletos
+    if 'transfer' in o or 'ted' in o or 'doc' in o or 'transferência' in d or 'transferencia' in d:
+        return 'Transferência'
+    if 'boleto' in d or 'boleto' in o:
+        return 'Boleto'
+
+    # Nunca retornar 'Open Finance' como forma de pagamento — é apenas origem
+    # Caso a origem contenha 'openfinance', preferir 'Conta' ou o nome da conta
+    if 'openfinance' in o or 'open finance' in d:
+        return o_raw if o_raw and o_raw.lower() not in ('openfinance', 'open finance') else 'Conta'
+
+    # Fallback: se a origem contém algo plausível, title-case; senão 'Desconhecido'
+    if o:
+        return o.title()
+    return 'Desconhecido'
+
+
+def derive_lancamento_meta(lanc: Any) -> Tuple[str, str, str]:
+    """Deriva (tipo, categoria, metodo_pagamento) a partir do objeto Lancamento."""
+    tipo_reg = getattr(lanc, 'tipo', None) or ''
+    tipo_norm = str(tipo_reg).title() if tipo_reg else ''
+    # categoria registrada
+    try:
+        cat_reg = lanc.categoria.nome if getattr(lanc, 'categoria', None) else None
+    except Exception:
+        cat_reg = None
+
+    cat_inferida = infer_category_from_description(getattr(lanc, 'descricao', None))
+    pay_method = infer_payment_method(getattr(lanc, 'meio_pagamento', None) or getattr(lanc, 'origem', None), getattr(lanc, 'descricao', None))
+
+    if cat_reg:
+        cat_reg_norm = _normalize_text(cat_reg)
+        if tipo_norm == 'Despesa' and ('receita' in cat_reg_norm or 'receitas' in cat_reg_norm):
+            categoria_effective = cat_inferida or 'Outros'
+        else:
+            categoria_effective = cat_reg
+    else:
+        categoria_effective = cat_inferida or 'Outros'
+
+    tipo_effective = tipo_norm or ('Receita' if (cat_inferida and cat_inferida == 'Investimentos') else 'Despesa')
+    return tipo_effective, categoria_effective, pay_method
+
+
 
 # ============================================================================
 # CÁLCULOS DE ESTATÍSTICAS ANUAIS
@@ -45,9 +154,19 @@ def calcular_resumo_financeiro(db, usuario_id: int, ano: int) -> Dict:
         ).all()
 
         # Calcular receitas e despesas apenas dos lançamentos financeiros
-        # CORREÇÃO: usar os tipos corretos que estão no banco ('Receita'/'Despesa' ao invés de 'Entrada'/'Saída')
-        receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
-        despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
+        # Usar meta derivada para corrigir categorias/tipos inconsistentes
+        receitas = 0.0
+        despesas = 0.0
+        for l in lancamentos_financeiros:
+            tipo_eff, _, _ = derive_lancamento_meta(l)
+            try:
+                val = float(l.valor)
+            except Exception:
+                val = 0.0
+            if tipo_eff == 'Receita':
+                receitas += val
+            else:
+                despesas += val
         
         economia = receitas - despesas
         taxa_poupanca = (economia / receitas * 100) if receitas > 0 else 0
@@ -69,19 +188,24 @@ def calcular_categorias_top(db, usuario_id: int, ano: int, limit: int = 5) -> Li
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Despesa',
                 extract('year', Lancamento.data_transacao) == ano,
                 func.lower(Categoria.nome) != 'transferência'
             )
         ).all()
 
-        # Agrupar por categoria
-        gastos_por_categoria = {}
+        # Agrupar por categoria efetiva usando heurísticas
+        gastos_por_categoria: Dict[str, Dict[str, object]] = {}
         for l in lancamentos_financeiros:
-            cat_nome = l.categoria.nome if l.categoria else "Sem Categoria"
+            tipo_eff, cat_eff, _ = derive_lancamento_meta(l)
+            if tipo_eff != 'Despesa':
+                continue
+            cat_nome = cat_eff or (l.categoria.nome if getattr(l, 'categoria', None) else 'Sem Categoria')
             if cat_nome not in gastos_por_categoria:
-                gastos_por_categoria[cat_nome] = {'total': 0, 'quantidade': 0}
-            gastos_por_categoria[cat_nome]['total'] += float(l.valor)
+                gastos_por_categoria[cat_nome] = {'total': 0.0, 'quantidade': 0}
+            try:
+                gastos_por_categoria[cat_nome]['total'] += float(l.valor)
+            except Exception:
+                pass
             gastos_por_categoria[cat_nome]['quantidade'] += 1
         
         # Ordenar e limitar
@@ -111,9 +235,19 @@ def calcular_evolucao_mensal(db, usuario_id: int, ano: int) -> Dict:
                 )
             ).all()
             
-            # Calcular receitas e despesas
-            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
-            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
+            # Calcular receitas e despesas usando tipo efetivo
+            receitas = 0.0
+            despesas = 0.0
+            for l in lancamentos_financeiros:
+                tipo_eff, _, _ = derive_lancamento_meta(l)
+                try:
+                    val = float(l.valor)
+                except Exception:
+                    val = 0.0
+                if tipo_eff == 'Receita':
+                    receitas += val
+                else:
+                    despesas += val
             
             mes_nome = calendar.month_name[mes]
             meses_dados[mes_nome] = {
@@ -144,9 +278,19 @@ def encontrar_melhor_mes(db, usuario_id: int, ano: int) -> Dict:
                 )
             ).all()
 
-            # Calcular economia
-            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
-            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
+            # Calcular economia usando tipo efetivo
+            receitas = 0.0
+            despesas = 0.0
+            for l in lancamentos_financeiros:
+                tipo_eff, _, _ = derive_lancamento_meta(l)
+                try:
+                    val = float(l.valor)
+                except Exception:
+                    val = 0.0
+                if tipo_eff == 'Receita':
+                    receitas += val
+                else:
+                    despesas += val
             economia = float(receitas) - float(despesas)
             
             if economia > maior_economia:
@@ -164,24 +308,33 @@ def encontrar_melhor_mes(db, usuario_id: int, ano: int) -> Dict:
 def encontrar_maior_gasto(db, usuario_id: int, ano: int) -> Dict:
     """Encontra a transação de maior valor do ano"""
     try:
-        # Usar INNER JOIN e filtrar 'Transferência' na query
+        # Usar INNER JOIN e filtrar 'Transferência' na query (traz todos e aplica filtro local)
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Despesa',
                 extract('year', Lancamento.data_transacao) == ano,
                 func.lower(Categoria.nome) != 'transferência'
             )
         ).all()
 
-        # Encontrar o maior gasto
-        if lancamentos_financeiros:
-            maior = max(lancamentos_financeiros, key=lambda l: l.valor)
+        # Encontrar o maior gasto considerando tipo efetivo
+        gastos = []
+        for l in lancamentos_financeiros:
+            tipo_eff, cat_eff, _ = derive_lancamento_meta(l)
+            if tipo_eff != 'Despesa':
+                continue
+            try:
+                gastos.append((float(l.valor), l, cat_eff))
+            except Exception:
+                continue
+
+        if gastos:
+            maior_val, maior_obj, maior_cat = max(gastos, key=lambda x: x[0])
             return {
-                'descricao': maior.descricao,
-                'valor': float(maior.valor),
-                'data': maior.data_transacao.strftime('%d/%m/%Y'),
-                'categoria': maior.categoria.nome if maior.categoria else 'Outros'
+                'descricao': getattr(maior_obj, 'descricao', None) or '',
+                'valor': float(maior_val),
+                'data': getattr(maior_obj, 'data_transacao').strftime('%d/%m/%Y') if getattr(maior_obj, 'data_transacao', None) else '',
+                'categoria': maior_cat or (maior_obj.categoria.nome if getattr(maior_obj, 'categoria', None) else 'Outros')
             }
         
         return None

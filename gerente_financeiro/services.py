@@ -14,6 +14,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, extract, text
 import asyncio
+import difflib
 import hashlib  # <-- Para gerar chaves de cache
 import json  # <-- Para serialização de dados
 from functools import lru_cache  # <-- Cache em memória
@@ -713,10 +714,20 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
                     continue
                 
                 # Prepara os dados da transação
-                lancamento_data = _preparar_dados_lancamento(transacao_data, usuario_db.id, conta_id)
+                lancamento_data = _preparar_dados_lancamento(transacao_data, usuario_db.id, conta_id, db)
                 
-                # Cria o lançamento
-                novo_lancamento = Lancamento(**lancamento_data)
+
+                # Filtra apenas campos válidos do modelo Lancamento antes de criar
+                try:
+                    valid_cols = {c.name for c in Lancamento.__table__.columns}
+                except Exception:
+                    # Fallback conservador: campos esperados
+                    valid_cols = {'descricao', 'valor', 'tipo', 'data_transacao', 'forma_pagamento', 'documento_fiscal', 'id_usuario', 'id_conta', 'id_categoria', 'id_subcategoria'}
+
+                lanc_kwargs = {k: v for k, v in lancamento_data.items() if k in valid_cols}
+
+                # Cria o lançamento usando apenas campos válidos
+                novo_lancamento = Lancamento(**lanc_kwargs)
 
                 # Se a preparação trouxe itens, anexa objetos ItemLancamento ao lançamento antes do commit
                 itens_payload = lancamento_data.get('itens') or []
@@ -819,7 +830,7 @@ def verificar_duplicidade_transacoes(db: Session, user_id: int, conta_id: int,
         return False
 
 
-def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int) -> dict:
+def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int, db: Session = None) -> dict:
     """
     Prepara dados da transação para criação do Lancamento.
     """
@@ -864,10 +875,14 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
                 if kw in texto_busca:
                     try:
                         from sqlalchemy import func
-                        from database.database import get_db
-                        db_tmp = next(get_db())
-                        categoria_obj = db_tmp.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_nome)).first()
-                        db_tmp.close()
+                        categoria_obj = None
+                        if db:
+                            categoria_obj = db.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_nome)).first()
+                        else:
+                            from database.database import get_db
+                            db_tmp = next(get_db())
+                            categoria_obj = db_tmp.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_nome)).first()
+                            db_tmp.close()
                     except Exception:
                         categoria_obj = None
 
@@ -879,6 +894,104 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
         # Se vier itens detalhados (algumas integrações podem trazer lista de itens), anexa ao dict
         if 'itens' in transacao_data and isinstance(transacao_data['itens'], list):
             dados['itens'] = transacao_data['itens']
+
+        # Se temos categoria ou conseguimos inferir uma, tentar selecionar subcategoria
+        try:
+            if dados.get('id_categoria'):
+                # obter subcategorias do DB para essa categoria
+                from sqlalchemy import func
+                if db:
+                    subs = db.query(Subcategoria).filter(Subcategoria.id_categoria == dados['id_categoria']).all()
+                else:
+                    from database.database import get_db
+                    db_tmp = next(get_db())
+                    subs = db_tmp.query(Subcategoria).filter(Subcategoria.id_categoria == dados['id_categoria']).all()
+                    db_tmp.close()
+
+                if subs:
+                    # Preparar possíveis tokens de busca
+                    descricao_tokens = re.findall(r"[A-Za-z0-9]+", (transacao_data.get('descricao') or '').lower())
+                    merchant = (transacao_data.get('merchant_name') or '').lower()
+                    candidates = descricao_tokens + merchant.split() if merchant else descricao_tokens
+
+                    # 1) matching por substring exato no nome da subcategoria
+                    chosen_sub = None
+                    for sub in subs:
+                        nome_sub = (sub.nome or '').lower()
+                        for tok in candidates:
+                            if tok and tok in nome_sub:
+                                chosen_sub = sub
+                                break
+                        if chosen_sub:
+                            break
+
+                    # 2) fallback: usar difflib para encontrar close match entre tokens e subcategoria
+                    if not chosen_sub:
+                        sub_names = [s.nome for s in subs]
+                        for tok in candidates:
+                            matches = difflib.get_close_matches(tok, sub_names, n=1, cutoff=0.8)
+                            if matches:
+                                match_name = matches[0]
+                                for s in subs:
+                                    if s.nome == match_name:
+                                        chosen_sub = s
+                                        break
+                            if chosen_sub:
+                                break
+
+                    if chosen_sub:
+                        dados['id_subcategoria'] = chosen_sub.id
+        except Exception:
+            # Não falhar todo o processamento por conta da subcategoria
+            pass
+
+        # --- HEURÍSTICA: Detectar forma de pagamento (Cartão Crédito/Débito, Pix, Transferência, Boleto, Conta) ---
+        try:
+            account_name = dados.get('forma_pagamento') or ''
+            tipo_conta = transacao_data.get('tipo_conta') or transacao_data.get('tipo_account') or transacao_data.get('tipo')
+            desc = (transacao_data.get('descricao') or '').lower()
+            merchant = (transacao_data.get('merchant_name') or '').lower()
+
+            metodo = None
+            # Prioridade: sinalizadores explícitos do conector
+            if tipo_conta:
+                tc = str(tipo_conta).lower()
+                if 'credit' in tc or 'card' in tc or 'cartao' in tc:
+                    metodo = 'Cartão de Crédito'
+                elif 'debit' in tc or 'debito' in tc:
+                    metodo = 'Cartão de Débito'
+                elif 'checking' in tc or 'current' in tc or 'bank' in tc or 'conta' in tc:
+                    metodo = 'Conta'
+                elif 'savings' in tc or 'poup' in tc:
+                    metodo = 'Conta Poupança'
+
+            # Detectar PIX explícito na descrição/merchant
+            if not metodo:
+                if 'pix' in desc or 'pix' in merchant:
+                    metodo = 'Pix'
+                elif any(k in desc for k in ['boleto', 'boleto bancario', 'boleto.']):
+                    metodo = 'Boleto'
+                elif any(k in desc for k in ['ted', 'doc', 'transferencia', 'transferência', 'transfer']):
+                    metodo = 'Transferência'
+                elif any(k in desc for k in ['visa', 'master', 'elo', 'amex', 'cartao', 'cartão']):
+                    # sem certeza entre crédito/débito; preferir crédito quando 'visa/master' aparece
+                    metodo = 'Cartão de Crédito'
+
+            # Fallback: se origem for 'openfinance' não usamos 'Open Finance' como método — preferir conta
+            if not metodo:
+                if dados.get('origem') == 'openfinance':
+                    metodo = 'Conta'
+                else:
+                    metodo = None
+
+            if metodo:
+                # Normaliza forma_pagamento para incluir o método detectado
+                if account_name:
+                    dados['forma_pagamento'] = f"{metodo} • {account_name}"
+                else:
+                    dados['forma_pagamento'] = metodo
+        except Exception as e:
+            logger.debug(f"Falha ao inferir forma de pagamento: {e}")
     except Exception as e:
         logger.debug(f"Heurística de categoria falhou: {e}")
 
