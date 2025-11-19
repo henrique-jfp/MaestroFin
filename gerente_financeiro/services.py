@@ -214,7 +214,8 @@ def gerar_grafico_para_relatorio(gastos_por_categoria: dict) -> io.BytesIO | Non
             outros_df = pd.DataFrame([{'Categoria': 'Outros', 'Valor': outros_valor}])
             df = pd.concat([top_5, outros_df], ignore_index=True)
 
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=100)
+    # aumentar dpi para melhorar qualidade ao inserir no PDF
+    fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
         
         colors = sns.color_palette("viridis_r", len(df))
         
@@ -234,9 +235,9 @@ def gerar_grafico_para_relatorio(gastos_por_categoria: dict) -> io.BytesIO | Non
         ax.set_title('Distribuição de Despesas', fontsize=16, pad=15, weight='bold')
         ax.axis('equal')
 
-        plt.tight_layout()
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight')
+    plt.tight_layout()
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
         buffer.seek(0)
         return buffer
     except Exception as e:
@@ -396,7 +397,8 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
         
         df_agrupado.index = df_agrupado.index.strftime('%b/%y')
 
-        fig, ax = plt.subplots(figsize=(10, 5), dpi=100)
+    # aumentar dpi para maior nitidez nos PDFs
+    fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
         
         ax.plot(df_agrupado.index, df_agrupado['Receita'], marker='o', linestyle='-', color='#2ecc71', label='Receitas')
         ax.plot(df_agrupado.index, df_agrupado['Despesa'], marker='o', linestyle='-', color='#e74c3c', label='Despesas')
@@ -406,9 +408,9 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
         ax.grid(True, which='both', linestyle='--', linewidth=0.5)
         ax.legend()
         
-        plt.tight_layout()
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight')
+    plt.tight_layout()
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
         buffer.seek(0)
         return buffer
     except Exception as e:
@@ -1035,7 +1037,8 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
         if not tem_dados_suficientes:
             return None
             
-        fig, ax = plt.subplots(figsize=(12, 7))
+    # DPI alto para imagens mais nítidas no PDF
+    fig, ax = plt.subplots(figsize=(12, 7), dpi=200)
 
         # --- GRÁFICOS DE CATEGORIA E FORMA DE PAGAMENTO ---
         if agrupar_por in ['categoria', 'forma_pagamento']:
@@ -1317,9 +1320,9 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
         else:
             return None
         
-        plt.tight_layout(pad=1.5)
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight')
+    plt.tight_layout(pad=1.5)
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
         buffer.seek(0)
         plt.close(fig) # Garante que a figura seja fechada para liberar memória
         return buffer
