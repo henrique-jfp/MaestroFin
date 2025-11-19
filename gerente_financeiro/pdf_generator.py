@@ -23,6 +23,12 @@ from reportlab.graphics.charts.barcharts import VerticalBarChart
 
 logger = logging.getLogger(__name__)
 import subprocess
+try:
+    # WeasyPrint é a opção mais simples para converter HTML/CSS -> PDF
+    from weasyprint import HTML as WP_HTML
+    WEASYPRINT_AVAILABLE = True
+except Exception:
+    WEASYPRINT_AVAILABLE = False
 
 
 def _get_short_git_commit() -> str:
@@ -355,6 +361,23 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
     """
     Gera PDF de relatório financeiro com design premium
     """
+    # Log curto para ajudar debugging: quais chaves foram passadas e commit usado
+    try:
+        logger.info(f"generate_financial_pdf called - keys: {list(context_data.keys())}")
+        logger.info(f"commit (short): {_get_short_git_commit()}")
+    except Exception:
+        pass
+
+    # Se veio HTML renderizado e WeasyPrint está disponível, usa ele (mais fiel ao CSS)
+    if WEASYPRINT_AVAILABLE and context_data.get('html_renderizado'):
+        try:
+            logger.info("WeasyPrint disponível: convertendo HTML renderizado para PDF")
+            html_str = context_data.get('html_renderizado')
+            wp_pdf = WP_HTML(string=html_str).write_pdf()
+            return wp_pdf
+        except Exception as e:
+            logger.warning(f"Falha ao gerar PDF via WeasyPrint: {e} — fallback para ReportLab")
+
     buffer = io.BytesIO()
     
     # Configuração do documento

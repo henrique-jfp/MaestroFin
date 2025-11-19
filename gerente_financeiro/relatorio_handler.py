@@ -328,6 +328,8 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                 'saldo_periodo': contexto_dados.get('saldo_mes', 0),
                 'gastos_por_categoria': contexto_dados.get('gastos_por_categoria', []),
                 'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
+                # Inclui o HTML renderizado opcionalmente para permitir HTML->PDF se disponível
+                'html_renderizado': html_renderizado,
                 'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
                 'insights': contexto_dados.get('insights', [])
             }
