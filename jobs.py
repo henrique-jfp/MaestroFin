@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def sync_all_users_transactions(context: ContextTypes.DEFAULT_TYPE):
     """Job que sincroniza transações de todos os usuários ativos"""
+    db = None
     try:
         logger.info("🔄 Iniciando sincronização automática de transações...")
         
@@ -73,7 +74,8 @@ async def sync_all_users_transactions(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"❌ Erro no job de sincronização: {e}", exc_info=True)
     finally:
-        db.close()
+        if db:
+            db.close()
 
 
 def configurar_jobs(job_queue):
