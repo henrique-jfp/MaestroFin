@@ -4,16 +4,21 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libcairo2 \
-    libpango-1.0-0 \
-    libgdk-pixbuf2.0-0 \
-    libffi-dev \
-    shared-mime-info \
-    fonts-dejavu-core \
-    git \
-  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends --allow-downgrades --allow-remove-essential --allow-change-held-packages \
+   build-essential \
+   libcairo2 \
+   libpango-1.0-0 \
+   pango1.0-tools \
+   libpangocairo-1.0-0 \
+   libgdk-pixbuf-2.0-0 \
+   libgdk-pixbuf-xlib-2.0-0 || true \
+ && apt-get install -y --no-install-recommends \
+   libffi-dev \
+   shared-mime-info \
+   fonts-dejavu-core \
+   git \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
