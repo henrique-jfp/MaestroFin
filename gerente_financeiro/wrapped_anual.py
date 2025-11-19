@@ -17,6 +17,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from sqlalchemy import func, and_, extract, desc
+from sqlalchemy.orm import joinedload
 from decimal import Decimal
 import calendar
 
@@ -34,28 +35,24 @@ def calcular_resumo_financeiro(usuario_id: int, ano: int) -> Dict:
     """Calcula resumo geral de receitas e despesas do ano"""
     db = next(get_db())
     try:
-        # Receitas totais
-        receitas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
+        # Buscar todos os lançamentos do ano (igual ao relatório mensal)
+        lancamentos_ano = db.query(Lancamento).options(joinedload(Lancamento.categoria)).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Entrada',
-                extract('year', Lancamento.data_transacao) == ano,
-                Categoria.nome != 'Transferência'
+                extract('year', Lancamento.data_transacao) == ano
             )
-        ).scalar() or 0
-
-        # Despesas totais
-        despesas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
-            and_(
-                Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
-                extract('year', Lancamento.data_transacao) == ano,
-                Categoria.nome != 'Transferência'
-            )
-        ).scalar() or 0
+        ).all()
         
-        receitas = float(receitas)
-        despesas = float(despesas)
+        # Filtrar lançamentos financeiros (ignorar Transferência), igual ao relatório mensal
+        lancamentos_financeiros = [
+            l for l in lancamentos_ano 
+            if not (l.categoria and l.categoria.nome.lower() == 'transferência')
+        ]
+        
+        # Calcular receitas e despesas apenas dos lançamentos financeiros
+        receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
+        despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
+        
         economia = receitas - despesas
         taxa_poupanca = (economia / receitas * 100) if receitas > 0 else 0
         
@@ -73,32 +70,38 @@ def calcular_categorias_top(usuario_id: int, ano: int, limit: int = 5) -> List[D
     """Retorna as categorias com maiores gastos do ano"""
     db = next(get_db())
     try:
-        categorias = db.query(
-            Categoria.nome,
-            func.sum(Lancamento.valor).label('total'),
-            func.count(Lancamento.id).label('quantidade')
-        ).join(
-            Lancamento, Lancamento.id_categoria == Categoria.id
-        ).filter(
+        # Buscar todos os lançamentos de saída do ano
+        lancamentos_saida = db.query(Lancamento).options(joinedload(Lancamento.categoria)).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
                 Lancamento.tipo == 'Saída',
                 extract('year', Lancamento.data_transacao) == ano
             )
-        ).group_by(
-            Categoria.nome
-        ).order_by(
-            desc('total')
-        ).limit(limit).all()
+        ).all()
         
-        return [
-            {
-                'categoria': cat.nome,
-                'total': float(cat.total),
-                'quantidade': cat.quantidade
-            }
-            for cat in categorias
+        # Filtrar lançamentos financeiros (ignorar Transferência)
+        lancamentos_financeiros = [
+            l for l in lancamentos_saida 
+            if not (l.categoria and l.categoria.nome.lower() == 'transferência')
         ]
+        
+        # Agrupar por categoria
+        gastos_por_categoria = {}
+        for l in lancamentos_financeiros:
+            cat_nome = l.categoria.nome if l.categoria else "Sem Categoria"
+            if cat_nome not in gastos_por_categoria:
+                gastos_por_categoria[cat_nome] = {'total': 0, 'quantidade': 0}
+            gastos_por_categoria[cat_nome]['total'] += float(l.valor)
+            gastos_por_categoria[cat_nome]['quantidade'] += 1
+        
+        # Ordenar e limitar
+        categorias_ordenadas = sorted(
+            [{'categoria': cat, **dados} for cat, dados in gastos_por_categoria.items()],
+            key=lambda x: x['total'],
+            reverse=True
+        )[:limit]
+        
+        return categorias_ordenadas
     finally:
         db.close()
 
@@ -110,25 +113,24 @@ def calcular_evolucao_mensal(usuario_id: int, ano: int) -> Dict:
         meses_dados = {}
         
         for mes in range(1, 13):
-            receitas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
+            # Buscar lançamentos do mês
+            lancamentos_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria)).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Entrada',
                     extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes,
-                    Categoria.nome != 'Transferência'
+                    extract('month', Lancamento.data_transacao) == mes
                 )
-            ).scalar() or 0
-
-            despesas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
-                and_(
-                    Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Saída',
-                    extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes,
-                    Categoria.nome != 'Transferência'
-                )
-            ).scalar() or 0
+            ).all()
+            
+            # Filtrar lançamentos financeiros (ignorar Transferência)
+            lancamentos_financeiros = [
+                l for l in lancamentos_mes 
+                if not (l.categoria and l.categoria.nome.lower() == 'transferência')
+            ]
+            
+            # Calcular receitas e despesas
+            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
+            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
             
             mes_nome = calendar.month_name[mes]
             meses_dados[mes_nome] = {
@@ -140,8 +142,6 @@ def calcular_evolucao_mensal(usuario_id: int, ano: int) -> Dict:
         return meses_dados
     finally:
         db.close()
-
-
 def encontrar_melhor_mes(usuario_id: int, ano: int) -> Dict:
     """Encontra o mês com maior economia"""
     db = next(get_db())
@@ -150,26 +150,24 @@ def encontrar_melhor_mes(usuario_id: int, ano: int) -> Dict:
         maior_economia = float('-inf')
         
         for mes in range(1, 13):
-            receitas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
+            # Buscar lançamentos do mês
+            lancamentos_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria)).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Entrada',
                     extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes,
-                    Categoria.nome != 'Transferência'
+                    extract('month', Lancamento.data_transacao) == mes
                 )
-            ).scalar() or 0
-
-            despesas = db.query(func.sum(Lancamento.valor)).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
-                and_(
-                    Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Saída',
-                    extract('year', Lancamento.data_transacao) == ano,
-                    extract('month', Lancamento.data_transacao) == mes,
-                    Categoria.nome != 'Transferência'
-                )
-            ).scalar() or 0
+            ).all()
             
+            # Filtrar lançamentos financeiros (ignorar Transferência)
+            lancamentos_financeiros = [
+                l for l in lancamentos_mes 
+                if not (l.categoria and l.categoria.nome.lower() == 'transferência')
+            ]
+            
+            # Calcular economia
+            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
+            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
             economia = float(receitas) - float(despesas)
             
             if economia > maior_economia:
@@ -182,22 +180,28 @@ def encontrar_melhor_mes(usuario_id: int, ano: int) -> Dict:
         }
     finally:
         db.close()
-
-
 def encontrar_maior_gasto(usuario_id: int, ano: int) -> Dict:
     """Encontra a transação de maior valor do ano"""
     db = next(get_db())
     try:
-        maior = db.query(Lancamento).join(Categoria, Lancamento.id_categoria == Categoria.id).filter(
+        # Buscar todos os lançamentos de saída do ano
+        lancamentos_saida = db.query(Lancamento).options(joinedload(Lancamento.categoria)).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
                 Lancamento.tipo == 'Saída',
-                extract('year', Lancamento.data_transacao) == ano,
-                Categoria.nome != 'Transferência'
+                extract('year', Lancamento.data_transacao) == ano
             )
-        ).order_by(desc(Lancamento.valor)).first()
+        ).all()
         
-        if maior:
+        # Filtrar lançamentos financeiros (ignorar Transferência)
+        lancamentos_financeiros = [
+            l for l in lancamentos_saida 
+            if not (l.categoria and l.categoria.nome.lower() == 'transferência')
+        ]
+        
+        # Encontrar o maior gasto
+        if lancamentos_financeiros:
+            maior = max(lancamentos_financeiros, key=lambda l: l.valor)
             return {
                 'descricao': maior.descricao,
                 'valor': float(maior.valor),
