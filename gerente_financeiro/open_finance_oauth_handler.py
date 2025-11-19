@@ -31,11 +31,35 @@ SELECTING_BANK, AWAITING_CPF, WAITING_AUTH = range(3)
 # --- Funções Auxiliares de UI ---
 
 def _build_banks_keyboard(connectors: list) -> InlineKeyboardMarkup:
-    """Constrói o teclado de seleção de bancos."""
-    # ... (lógica para criar o teclado de bancos, como antes)
+    """Constrói o teclado de seleção de bancos de forma curada e ordenada."""
+    
+    # Lista de bancos prioritários com seus nomes-chave e emojis
+    PRIORITY_BANKS = {
+        "Itaú": ("Itaú", "🟧"),
+        "Bradesco": ("Bradesco", "🔴"),
+        "Inter": ("Inter", "🟠"),
+        "Nubank": ("Nubank", "🟣"),
+        "Santander": ("Santander", "🔺"),
+        "Caixa": ("Caixa", "🟦"),
+        "Banco do Brasil": ("Banco do Brasil", "🟨"),
+        "XP": ("XP", "⬛"),
+    }
+    
+    # Filtra e monta a lista de bancos prioritários encontrados
+    filtered_banks = []
+    for bank_key, (display_name, emoji) in PRIORITY_BANKS.items():
+        for conn in connectors:
+            if bank_key.lower() in conn['name'].lower():
+                filtered_banks.append({
+                    "name": f"{emoji} {display_name}",
+                    "id": conn['id']
+                })
+                break # Evita adicionar o mesmo banco duas vezes (ex: "Itaú" e "Itaucard")
+
     keyboard = []
-    for conn in connectors[:20]: # Limita para não sobrecarregar
-        keyboard.append([InlineKeyboardButton(conn['name'], callback_data=f"of_bank_{conn['id']}")])
+    for bank in filtered_banks:
+        keyboard.append([InlineKeyboardButton(bank['name'], callback_data=f"of_bank_{bank['id']}")])
+    
     keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="of_cancel")])
     return InlineKeyboardMarkup(keyboard)
 
