@@ -301,15 +301,15 @@ def gerar_contexto_relatorio(db: Session, telegram_id: int, mes: int, ano: int):
     ]
 
     # Todos os cálculos de receita, despesa e saldo agora usam a lista filtrada
-    receitas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
-    despesas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
+    receitas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
+    despesas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
     saldo_atual = receitas_atual - despesas_atual
     taxa_poupanca_atual = (saldo_atual / receitas_atual) * 100 if receitas_atual > 0 else 0
 
     # O agrupamento de gastos também usa a lista filtrada
     gastos_por_categoria_atual = {}
     for l in lancamentos_financeiros:
-        if l.tipo == 'Saída' and l.valor > 0:
+        if l.tipo == 'Despesa' and l.valor > 0:
             cat_nome = l.categoria.nome if l.categoria else "Sem Categoria"
             gastos_por_categoria_atual[cat_nome] = gastos_por_categoria_atual.get(cat_nome, 0) + float(l.valor)
     
@@ -328,18 +328,18 @@ def gerar_contexto_relatorio(db: Session, telegram_id: int, mes: int, ano: int):
     else:
         dados_mensais = pd.DataFrame()
         
-    if 'Entrada' not in dados_mensais.columns: dados_mensais['Entrada'] = 0
-    if 'Saída' not in dados_mensais.columns: dados_mensais['Saída'] = 0
+    if 'Receita' not in dados_mensais.columns: dados_mensais['Receita'] = 0
+    if 'Despesa' not in dados_mensais.columns: dados_mensais['Despesa'] = 0
 
     periodo_3m = dados_mensais.index[dados_mensais.index < periodo_alvo][-3:]
     media_3m = dados_mensais.loc[periodo_3m].mean() if not periodo_3m.empty else pd.Series(dtype=float)
-    media_receitas_3m = media_3m.get('Entrada', 0.0)
-    media_despesas_3m = media_3m.get('Saída', 0.0)
+    media_receitas_3m = media_3m.get('Receita', 0.0)
+    media_despesas_3m = media_3m.get('Despesa', 0.0)
 
     periodo_anterior = periodo_alvo - 1
     if periodo_anterior in dados_mensais.index:
-        receitas_anterior = dados_mensais.loc[periodo_anterior, 'Entrada']
-        despesas_anterior = dados_mensais.loc[periodo_anterior, 'Saída']
+        receitas_anterior = dados_mensais.loc[periodo_anterior, 'Receita']
+        despesas_anterior = dados_mensais.loc[periodo_anterior, 'Despesa']
         tendencia_receita_percent = ((receitas_atual - receitas_anterior) / receitas_anterior * 100) if receitas_anterior > 0 else 0
         tendencia_despesa_percent = ((despesas_atual - despesas_anterior) / despesas_anterior * 100) if despesas_anterior > 0 else 0
     else:
@@ -389,8 +389,8 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
 
         df_agrupado = df.groupby(['mes_ano', 'tipo'])['valor'].sum().unstack(fill_value=0)
         
-        if 'Entrada' not in df_agrupado.columns: df_agrupado['Entrada'] = 0
-        if 'Saída' not in df_agrupado.columns: df_agrupado['Saída'] = 0
+        if 'Receita' not in df_agrupado.columns: df_agrupado['Receita'] = 0
+        if 'Despesa' not in df_agrupado.columns: df_agrupado['Despesa'] = 0
         
         df_agrupado = df_agrupado.sort_index()
         
@@ -398,8 +398,8 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
 
         fig, ax = plt.subplots(figsize=(10, 5), dpi=100)
         
-        ax.plot(df_agrupado.index, df_agrupado['Entrada'], marker='o', linestyle='-', color='#2ecc71', label='Receitas')
-        ax.plot(df_agrupado.index, df_agrupado['Saída'], marker='o', linestyle='-', color='#e74c3c', label='Despesas')
+        ax.plot(df_agrupado.index, df_agrupado['Receita'], marker='o', linestyle='-', color='#2ecc71', label='Receitas')
+        ax.plot(df_agrupado.index, df_agrupado['Despesa'], marker='o', linestyle='-', color='#e74c3c', label='Despesas')
 
         ax.set_title('Receitas vs. Despesas (Últimos 6 Meses)', fontsize=16, weight='bold')
         ax.set_ylabel('Valor (R$)')
@@ -549,8 +549,8 @@ def analisar_comportamento_financeiro(lancamentos: List[Lancamento]) -> Dict[str
     df = pd.DataFrame(dados_lancamentos)
     df['data_transacao'] = pd.to_datetime(df['data_transacao']).dt.tz_localize(None)
     
-    despesas_df = df[df['tipo'] == 'Saída'].copy()
-    receitas_df = df[df['tipo'] == 'Entrada'].copy()
+    despesas_df = df[df['tipo'] == 'Despesa'].copy()
+    receitas_df = df[df['tipo'] == 'Receita'].copy()
     
     if despesas_df.empty:
         return {"has_data": False, "total_receitas_90d": float(receitas_df['valor'].sum())}
@@ -809,7 +809,7 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
         'valor': float(transacao_data.get('valor', 0)),
         'descricao': transacao_data.get('descricao', '').strip(),
         'data_transacao': transacao_data.get('data_transacao'),
-        'tipo': transacao_data.get('tipo', 'Saída'),
+        'tipo': transacao_data.get('tipo', 'Despesa'),
         'forma_pagamento': transacao_data.get('forma_pagamento', 'Não informado'),
         'id_categoria': transacao_data.get('id_categoria'),
         'id_subcategoria': transacao_data.get('id_subcategoria'),
@@ -1186,7 +1186,7 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
                     l for l in lancamentos 
                     if l.data_transacao >= start_of_month 
                     and l.data_transacao <= today
-                    and l.tipo == 'Saída'
+                    and l.tipo == 'Despesa'
                 ]
                 
                 if not despesas_mes_atual:
@@ -1344,7 +1344,7 @@ def _gerar_insights_automaticos(lancamentos: List[Lancamento]) -> List[Dict[str,
         # Insight 1: Maior categoria de gasto
         gastos_por_categoria = {}
         for l in ultimos_30_dias:
-            if l.tipo == 'Saída' and l.categoria:
+            if l.tipo == 'Despesa' and l.categoria:
                 cat = l.categoria.nome
                 gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + float(l.valor)
         
@@ -1369,9 +1369,9 @@ def _gerar_insights_automaticos(lancamentos: List[Lancamento]) -> List[Dict[str,
             })
         
         # Insight 3: Padrão de fins de semana
-        gastos_weekend = [l for l in ultimos_30_dias if l.data_transacao.weekday() >= 5 and l.tipo == 'Saída']
+        gastos_weekend = [l for l in ultimos_30_dias if l.data_transacao.weekday() >= 5 and l.tipo == 'Despesa']
         total_weekend = sum(float(l.valor) for l in gastos_weekend)
-        total_geral = sum(float(l.valor) for l in ultimos_30_dias if l.tipo == 'Saída')
+        total_geral = sum(float(l.valor) for l in ultimos_30_dias if l.tipo == 'Despesa')
         
         if total_geral > 0:
             percentual_weekend = (total_weekend / total_geral) * 100
@@ -1395,7 +1395,7 @@ def _detectar_padroes_comportamentais(lancamentos: List[Lancamento]) -> List[Dic
     # Agrupa por mês para análise temporal
     gastos_mensais = {}
     for l in lancamentos:
-        if l.tipo == 'Saída':
+        if l.tipo == 'Despesa':
             mes_ano = l.data_transacao.strftime('%Y-%m')
             gastos_mensais[mes_ano] = gastos_mensais.get(mes_ano, 0) + float(l.valor)
     
@@ -1552,7 +1552,7 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
         mes_ano = l.data_transacao.strftime('%Y-%m')
         if mes_ano not in resumo_mensal:
             resumo_mensal[mes_ano] = {'receitas': 0.0, 'despesas': 0.0}
-        if l.tipo == 'Entrada':
+        if l.tipo == 'Receita':
             resumo_mensal[mes_ano]['receitas'] += float(l.valor)
         else:
             resumo_mensal[mes_ano]['despesas'] += float(l.valor)
@@ -1790,7 +1790,7 @@ def _buscar_transacoes_open_finance(db: Session, user_id: int) -> List[Dict]:
                 "data": row[3].strftime('%Y-%m-%d') if row[3] else None,
                 "descricao": row[1] or row[6] or "Transação bancária",  # description ou merchant_name
                 "valor": float(row[2]) if row[2] else 0.0,
-                "tipo": "Entrada" if row[2] > 0 else "Saída",
+                "tipo": "Receita" if row[2] > 0 else "Despesa",
                 "categoria": row[5] or "Open Finance",
                 "conta": row[7] or "Banco conectado",  # account_name
                 "tipo_conta": row[8],  # CREDIT_CARD, CHECKING, SAVINGS
