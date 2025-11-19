@@ -68,8 +68,9 @@ def calcular_resumo_financeiro(db, usuario_id: int, ano: int) -> Dict:
         logger.info(f"DEBUG: Tipos encontrados nos lançamentos financeiros: {tipos_encontrados}")
 
         # Calcular receitas e despesas apenas dos lançamentos financeiros
-        receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
-        despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
+        # CORREÇÃO: usar os tipos corretos que estão no banco ('Receita'/'Despesa' ao invés de 'Entrada'/'Saída')
+        receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
+        despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
         
         logger.info(f"DEBUG: Receitas calculadas: R$ {receitas:.2f}")
         logger.info(f"DEBUG: Despesas calculadas: R$ {despesas:.2f}")
@@ -94,7 +95,7 @@ def calcular_categorias_top(db, usuario_id: int, ano: int, limit: int = 5) -> Li
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
+                Lancamento.tipo == 'Despesa',
                 extract('year', Lancamento.data_transacao) == ano,
                 func.lower(Categoria.nome) != 'transferência'
             )
@@ -137,8 +138,8 @@ def calcular_evolucao_mensal(db, usuario_id: int, ano: int) -> Dict:
             ).all()
             
             # Calcular receitas e despesas
-            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
-            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
+            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
+            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
             
             mes_nome = calendar.month_name[mes]
             meses_dados[mes_nome] = {
@@ -170,8 +171,8 @@ def encontrar_melhor_mes(db, usuario_id: int, ano: int) -> Dict:
             ).all()
 
             # Calcular economia
-            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
-            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
+            receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
+            despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
             economia = float(receitas) - float(despesas)
             
             if economia > maior_economia:
@@ -193,7 +194,7 @@ def encontrar_maior_gasto(db, usuario_id: int, ano: int) -> Dict:
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
+                Lancamento.tipo == 'Despesa',
                 extract('year', Lancamento.data_transacao) == ano,
                 func.lower(Categoria.nome) != 'transferência'
             )
@@ -323,7 +324,7 @@ def gerar_curiosidades(db, usuario_id: int, ano: int) -> List[str]:
             count = db.query(func.count(Lancamento.id)).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Saída',
+                    Lancamento.tipo == 'Despesa',
                     extract('year', Lancamento.data_transacao) == ano,
                     Lancamento.descricao.ilike(f'%{palavra}%')
                 )
@@ -348,7 +349,7 @@ def gerar_curiosidades(db, usuario_id: int, ano: int) -> List[str]:
         ).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
+                Lancamento.tipo == 'Despesa',
                 extract('year', Lancamento.data_transacao) == ano
             )
         ).group_by(Categoria.nome).order_by(desc('vezes')).first()
