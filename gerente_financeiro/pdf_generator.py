@@ -6,10 +6,11 @@ Melhorias: Design moderno, gradientes, gráficos aprimorados, layout responsivo
 """
 import io
 from datetime import datetime
+import logging
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether, Image as RLImage
 from reportlab.lib.colors import HexColor, white, black, Color
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -19,6 +20,8 @@ from reportlab.pdfgen import canvas
 from reportlab.graphics.shapes import Drawing, Rect, String, Circle, Line
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.charts.barcharts import VerticalBarChart
+
+logger = logging.getLogger(__name__)
 
 # ===========================
 # CONFIGURAÇÕES DE CORES
@@ -457,9 +460,28 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         valores = [cat.get('total', 0) for cat in categorias]
         labels = [f"{cat.get('nome', 'N/A')[:12]}\n{cat.get('percentual', 0):.1f}%" 
                  for cat in categorias]
-        
-        donut = create_donut_chart(valores, labels, "Distribuição por Categoria")
-        elements.append(donut)
+        # Prefer PNG gerado externamente (Matplotlib) se disponível no contexto
+        grafico_png = context_data.get('grafico_pizza_png') or context_data.get('grafico_pizza_png_bytes')
+        if grafico_png:
+            try:
+                # grafico_png pode ser bytes ou base64-encoded string
+                import base64
+                if isinstance(grafico_png, str):
+                    # assume base64
+                    png_bytes = base64.b64decode(grafico_png)
+                else:
+                    png_bytes = grafico_png
+
+                img_buf = io.BytesIO(png_bytes)
+                img = RLImage(img_buf, width=9*cm, height=7*cm)
+                elements.append(img)
+            except Exception as e:
+                logger.warning(f"Falha ao inserir PNG do gráfico no PDF: {e}. Usando gráfico embutido.")
+                donut = create_donut_chart(valores, labels, "Distribuição por Categoria")
+                elements.append(donut)
+        else:
+            donut = create_donut_chart(valores, labels, "Distribuição por Categoria")
+            elements.append(donut)
         elements.append(Spacer(1, 1*cm))
         
         # Tabela detalhada com design moderno

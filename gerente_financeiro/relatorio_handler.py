@@ -59,7 +59,7 @@ except ImportError as e:
     generate_financial_pdf = None
 
 from database.database import get_db
-from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio
+from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio, limpar_cache_usuario
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +231,14 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     
     try:
-        # 1. Obter todos os dados necessários do backend
+        # 1. Limpar cache do usuário e obter todos os dados necessários do backend
+        try:
+            limpar_cache_usuario(user_id)
+            logger.debug(f"Cache do usuário {user_id} limpo antes de gerar o relatório")
+        except Exception:
+            logger.debug("Falha ao limpar cache do usuário (não crítico)")
+
+        
         logger.info(f"Iniciando geração de relatório para usuário {user_id}, mês {mes_alvo}, ano {ano_alvo}")
         contexto_dados = gerar_contexto_relatorio(db, user_id, mes_alvo, ano_alvo)
         
@@ -255,8 +262,11 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             grafico_buffer = gerar_grafico_para_relatorio(contexto_dados.get("gastos_por_categoria_dict", {}))
             
             if grafico_buffer:
-                grafico_base64 = base64.b64encode(grafico_buffer.getvalue()).decode('utf-8')
+                grafico_bytes = grafico_buffer.getvalue()
+                grafico_base64 = base64.b64encode(grafico_bytes).decode('utf-8')
                 contexto_dados["grafico_pizza_base64"] = grafico_base64
+                # Também disponibiliza os bytes do PNG diretamente para o gerador de PDF
+                contexto_dados["grafico_pizza_png_bytes"] = grafico_bytes
                 logger.info("Gráfico gerado com sucesso")
             else:
                 contexto_dados["grafico_pizza_base64"] = None
@@ -306,6 +316,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                 'total_gastos': contexto_dados.get('despesa_total', 0),
                 'saldo_periodo': contexto_dados.get('saldo_mes', 0),
                 'gastos_por_categoria': contexto_dados.get('gastos_por_categoria', []),
+                'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
                 'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
                 'insights': contexto_dados.get('insights', [])
             }
