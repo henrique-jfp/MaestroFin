@@ -2,34 +2,33 @@
 
 import io
 import os
-from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm, cm
-from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
+from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image, Flowable
-from reportlab.graphics.shapes import Drawing, Rect, String, Group, Circle, Line
+from reportlab.platypus import (
+    BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer, 
+    Table, TableStyle, PageBreak, NextPageTemplate, Flowable
+)
+from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 
-# --- CONFIGURAÇÃO DE CORES PREMIUM (Paleta Private Bank) ---
-COLOR_PRIMARY = HexColor('#0F172A')    # Navy Blue Profundo
-COLOR_ACCENT = HexColor('#F59E0B')     # Gold/Amber
-COLOR_BG_LIGHT = HexColor('#F8FAFC')   # Slate 50
-COLOR_TEXT_MAIN = HexColor('#1E293B')  # Slate 800
-COLOR_TEXT_LIGHT = HexColor('#64748B') # Slate 500
-COLOR_SUCCESS = HexColor('#10B981')    # Emerald
-COLOR_DANGER = HexColor('#EF4444')     # Red
+# --- CONFIGURAÇÃO DE CORES (Paleta Private Bank) ---
+COLOR_PRIMARY = HexColor('#0F172A')    # Azul Marinho Profundo
+COLOR_ACCENT = HexColor('#F59E0B')     # Dourado/Amber
+COLOR_BG_LIGHT = HexColor('#F8FAFC')   # Cinza muito claro
+COLOR_TEXT_MAIN = HexColor('#1E293B')  # Cinza escuro
+COLOR_TEXT_LIGHT = HexColor('#64748B') # Cinza médio
+COLOR_SUCCESS = HexColor('#10B981')    # Verde Esmeralda
+COLOR_DANGER = HexColor('#EF4444')     # Vermelho
 COLOR_WHITE = colors.white
 
 # --- REGISTRO DE FONTES ---
 def register_fonts():
-    """Tenta registrar fontes premium (Inter), fallback para Helvetica"""
+    """Tenta registrar fontes Inter, fallback para Helvetica se não encontrar"""
     font_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts')
     try:
         pdfmetrics.registerFont(TTFont('Inter-Bold', os.path.join(font_dir, 'Inter-Bold.ttf')))
@@ -41,7 +40,9 @@ def register_fonts():
 FONT_REG, FONT_BOLD = register_fonts()
 
 class GradientCover(Flowable):
-    """Gera a capa com gradiente e tipografia impactante"""
+    """
+    Desenha a capa ocupando 100% da página (sem margens).
+    """
     def __init__(self, width, height, user_name, period_str):
         Flowable.__init__(self)
         self.width = width
@@ -52,50 +53,50 @@ class GradientCover(Flowable):
     def draw(self):
         c = self.canv
         
-        # Fundo Gradiente (Simulado com linhas para compatibilidade)
-        # Na prática, um rect sólido escuro fica mais elegante em PDFs gerados via código
+        # 1. Fundo Azul Profundo (Ocupa tudo)
         c.setFillColor(COLOR_PRIMARY)
         c.rect(0, 0, self.width, self.height, fill=True, stroke=False)
         
-        # Elemento Decorativo (Círculo Dourado)
+        # 2. Elemento Decorativo (Círculo Dourado Transparente)
         c.setFillColor(COLOR_ACCENT)
-        c.setFillAlpha(0.1)
-        c.circle(self.width, self.height, 300, fill=True, stroke=False)
+        c.setFillAlpha(0.05) # Bem sutil
+        c.circle(self.width, self.height, 350, fill=True, stroke=False)
         c.setFillAlpha(1)
 
-        # Logo / Nome do Bot
+        # 3. Cabeçalho da Capa
         c.setFillColor(COLOR_WHITE)
         c.setFont(FONT_BOLD, 14)
         c.drawString(20*mm, self.height - 30*mm, "MAESTROFIN PRIVATE")
         
-        # Título Gigante
+        # 4. Título Gigante
         c.setFont(FONT_BOLD, 42)
         c.drawString(20*mm, self.height - 80*mm, "Relatório")
         c.drawString(20*mm, self.height - 95*mm, "Financeiro")
         
-        # Linha divisória
+        # 5. Linha de destaque
         c.setStrokeColor(COLOR_ACCENT)
         c.setLineWidth(2)
         c.line(20*mm, self.height - 110*mm, 60*mm, self.height - 110*mm)
         
-        # Período
+        # 6. Período
         c.setFont(FONT_REG, 16)
-        c.setFillColor(colors.white)
         c.drawString(20*mm, self.height - 125*mm, self.period_str)
         
-        # Badge do Usuário
-        c.setFillColor(HexColor('#1E293B')) # Lighter blue
-        c.roundRect(20*mm, self.height - 160*mm, 120*mm, 14*mm, 7*mm, fill=True, stroke=False)
+        # 7. Badge do Usuário (Retângulo arredondado simulado)
+        c.setFillColor(HexColor('#1E293B')) # Azul um pouco mais claro que o fundo
+        c.roundRect(20*mm, self.height - 160*mm, 140*mm, 16*mm, 4*mm, fill=True, stroke=False)
+        
         c.setFillColor(COLOR_ACCENT)
-        c.setFont(FONT_BOLD, 10)
-        c.drawString(25*mm, self.height - 156*mm, "PREPARADO EXCLUSIVAMENTE PARA")
+        c.setFont(FONT_BOLD, 9)
+        c.drawString(25*mm, self.height - 150*mm, "PREPARADO EXCLUSIVAMENTE PARA")
+        
         c.setFillColor(COLOR_WHITE)
         c.setFont(FONT_BOLD, 14)
-        c.drawString(25*mm, self.height - 151*mm, self.user_name.upper())
+        c.drawString(25*mm, self.height - 156*mm, self.user_name.upper())
 
 class KPICard(Flowable):
-    """Card de KPI estilo Banco"""
-    def __init__(self, title, value, subtitle, trend="neutral", width=80*mm, height=40*mm):
+    """Card de KPI com sombra simulada e borda fina"""
+    def __init__(self, title, value, subtitle, trend="neutral", width=80*mm, height=35*mm):
         Flowable.__init__(self)
         self.width = width
         self.height = height
@@ -108,26 +109,29 @@ class KPICard(Flowable):
         c = self.canv
         x, y = 0, 0
         
-        # Sombra (Simulada)
-        c.setFillColor(colors.Color(0,0,0,0.1))
+        # Sombra (Retângulo cinza deslocado)
+        c.setFillColor(colors.Color(0,0,0,0.05))
         c.roundRect(x+2, y-2, self.width, self.height, 6, fill=True, stroke=False)
         
-        # Fundo Card
+        # Fundo do Card
         c.setFillColor(COLOR_WHITE)
-        c.setStrokeColor(HexColor('#E2E8F0'))
+        c.setStrokeColor(HexColor('#E2E8F0')) # Borda cinza clara
         c.roundRect(x, y, self.width, self.height, 6, fill=True, stroke=True)
         
-        # Título
+        # Título (Label)
         c.setFillColor(COLOR_TEXT_LIGHT)
         c.setFont(FONT_REG, 9)
         c.drawString(x + 5*mm, y + self.height - 8*mm, self.title.upper())
         
-        # Valor
+        # Valor Principal
         c.setFillColor(COLOR_PRIMARY)
-        c.setFont(FONT_BOLD, 18)
-        c.drawString(x + 5*mm, y + self.height - 18*mm, self.value)
+        c.setFont(FONT_BOLD, 16)
+        # Ajusta tamanho da fonte se o valor for muito longo
+        if len(str(self.value)) > 15:
+             c.setFont(FONT_BOLD, 12)
+        c.drawString(x + 5*mm, y + self.height - 18*mm, str(self.value))
         
-        # Subtítulo / Trend
+        # Ícone e Subtítulo
         c.setFont(FONT_REG, 8)
         if self.trend == "up":
             c.setFillColor(COLOR_SUCCESS)
@@ -141,77 +145,127 @@ class KPICard(Flowable):
             
         c.drawString(x + 5*mm, y + 5*mm, f"{icon} {self.subtitle}")
 
-def create_header_footer(canvas, doc):
-    """Desenha cabeçalho e rodapé em todas as páginas exceto capa"""
+def footer_canvas(canvas, doc):
+    """Desenha rodapé nas páginas de conteúdo (não na capa)"""
     canvas.saveState()
-    
-    # Rodapé
     canvas.setFont(FONT_REG, 8)
     canvas.setFillColor(COLOR_TEXT_LIGHT)
+    
+    # Texto Esquerda
     canvas.drawString(20*mm, 10*mm, "MaestroFin • Relatório Confidencial")
+    
+    # Texto Direita (Número da página)
     canvas.drawRightString(A4[0] - 20*mm, 10*mm, f"Página {doc.page}")
     
-    # Linha decorativa rodapé
+    # Linha decorativa
     canvas.setStrokeColor(COLOR_ACCENT)
     canvas.setLineWidth(1)
     canvas.line(20*mm, 14*mm, A4[0]-20*mm, 14*mm)
     
     canvas.restoreState()
 
+def validate_flowable_size(flowable, max_width, max_height):
+    """
+    Valida se o tamanho do Flowable está dentro dos limites permitidos.
+    Se exceder, ajusta o tamanho proporcionalmente.
+    """
+    if flowable.width > max_width or flowable.height > max_height:
+        scale_factor = min(max_width / flowable.width, max_height / flowable.height)
+        flowable.width *= scale_factor
+        flowable.height *= scale_factor
+        if hasattr(flowable, 'x') and hasattr(flowable, 'y'):
+            flowable.x *= scale_factor
+            flowable.y *= scale_factor
+
 def generate_financial_pdf(context):
-    """Função principal de geração"""
+    """
+    Gera o PDF usando BaseDocTemplate para permitir layouts diferentes (Capa vs Conteúdo).
+    """
     buffer = io.BytesIO()
     
-    # Margens estilo editorial
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=20*mm,
-        leftMargin=20*mm,
-        topMargin=20*mm,
-        bottomMargin=20*mm
+    # 1. DEFINIÇÃO DOS FRAMES E TEMPLATES
+    
+    # Frame da Capa: Margem Zero, ocupa a folha toda
+    frame_cover = Frame(
+        0, 0, A4[0], A4[1], 
+        id='cover', 
+        leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0
     )
+    template_cover = PageTemplate(id='Cover', frames=[frame_cover])
+    
+    # Frame do Conteúdo: Margens de 20mm
+    frame_content = Frame(
+        20*mm, 20*mm, A4[0]-40*mm, A4[1]-40*mm, 
+        id='content'
+    )
+    template_content = PageTemplate(id='Normal', frames=[frame_content], onPage=footer_canvas)
+    
+    # Inicializa o Documento Base
+    doc = BaseDocTemplate(buffer, pagesize=A4)
+    doc.addPageTemplates([template_cover, template_content])
     
     elements = []
     styles = getSampleStyleSheet()
     
-    # Estilos Customizados
-    style_h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontName=FONT_BOLD, fontSize=16, textColor=COLOR_PRIMARY, spaceAfter=10, spaceBefore=20)
-    style_normal = ParagraphStyle('Normal', parent=styles['Normal'], fontName=FONT_REG, fontSize=10, textColor=COLOR_TEXT_MAIN, leading=14)
-    style_insight = ParagraphStyle('Insight', parent=styles['Normal'], fontName=FONT_REG, fontSize=10, textColor=HexColor('#065F46'), backColor=HexColor('#ECFDF5'), padding=10, borderColor=HexColor('#10B981'), borderWidth=0.5, borderRadius=5, spaceAfter=5)
+    # Estilos Personalizados
+    style_h2 = ParagraphStyle(
+        'H2', parent=styles['Heading2'], 
+        fontName=FONT_BOLD, fontSize=16, 
+        textColor=COLOR_PRIMARY, 
+        spaceAfter=10, spaceBefore=20
+    )
+    style_normal = ParagraphStyle(
+        'Normal', parent=styles['Normal'], 
+        fontName=FONT_REG, fontSize=10, 
+        textColor=COLOR_TEXT_MAIN, leading=14
+    )
+    style_insight = ParagraphStyle(
+        'Insight', parent=styles['Normal'], 
+        fontName=FONT_REG, fontSize=10, 
+        textColor=HexColor('#065F46'), 
+        backColor=HexColor('#ECFDF5'), 
+        padding=10, 
+        borderColor=HexColor('#10B981'), 
+        borderWidth=0.5, 
+        borderRadius=5, 
+        spaceAfter=5
+    )
 
-    # --- 1. CAPA ---
-    # Remove margens para a capa preencher tudo
+    # --- CONSTRUÇÃO DO CONTEÚDO ---
+
+    # 1. CAPA (Usa o template 'Cover' implicitamente por ser o primeiro)
     elements.append(GradientCover(
-        width=A4[0], 
-        height=A4[1], 
-        user_name=context.get('usuario_nome', 'Investidor'),
-        period_str=context.get('periodo_extenso', 'Mês Atual')
+        A4[0], A4[1], 
+        context.get('usuario_nome', 'Investidor'), 
+        context.get('periodo_extenso', 'Mês Atual')
     ))
+    
+    # Comando para mudar para o template 'Normal' na próxima página
+    elements.append(NextPageTemplate('Normal'))
     elements.append(PageBreak())
 
-    # --- 2. RESUMO EXECUTIVO (KPIs) ---
+    # 2. RESUMO EXECUTIVO (KPIs)
     elements.append(Paragraph("Resumo Executivo", style_h2))
     elements.append(Spacer(1, 5*mm))
     
-    # Preparar dados dos cards
+    # Dados
     rec = context.get('receita_total', 0)
     desp = context.get('despesa_total', 0)
     saldo = context.get('saldo_mes', 0)
     poup = context.get('taxa_poupanca', 0)
     
-    # Grid 2x2 de Cards
+    # Grid de Cards
     card_w = 82*mm
     card_h = 35*mm
     
     kpi_data = [
         [
-            KPICard("Receitas", f"R$ {rec:,.2f}", "Entradas confirmadas", "up", card_w, card_h),
-            KPICard("Despesas", f"R$ {desp:,.2f}", "Saídas totais", "down", card_w, card_h)
+            KPICard("Receitas", f"R$ {rec:,.2f}", "Entradas", "up", card_w, card_h),
+            KPICard("Despesas", f"R$ {desp:,.2f}", "Saídas", "down", card_w, card_h)
         ],
         [
-            KPICard("Saldo Líquido", f"R$ {saldo:,.2f}", "Disponível em caixa", "neutral", card_w, card_h),
-            KPICard("Taxa de Poupança", f"{poup:.1f}%", "Meta: 20%", "up" if poup > 20 else "down", card_w, card_h)
+            KPICard("Saldo Líquido", f"R$ {saldo:,.2f}", "Caixa", "neutral", card_w, card_h),
+            KPICard("Taxa Poupança", f"{poup:.1f}%", "Meta: 20%", "up" if poup > 20 else "down", card_w, card_h)
         ]
     ]
     
@@ -222,34 +276,43 @@ def generate_financial_pdf(context):
     ]))
     elements.append(t_kpi)
     
-    elements.append(Spacer(1, 10*mm))
-
-    # --- 3. GRÁFICO E CATEGORIAS ---
+    # 3. GRÁFICO E TABELA
+    elements.append(Spacer(1, 5*mm))
     elements.append(Paragraph("Distribuição de Gastos", style_h2))
     
-    # Gráfico de Pizza (ReportLab nativo para qualidade vetorial)
-    d = Drawing(400, 200)
+    # Gráfico de Pizza
+    d = Drawing(400, 170)
     pc = Pie()
-    pc.x = 100
-    pc.y = 25
+    pc.x = 125
+    pc.y = 10
     pc.width = 150
     pc.height = 150
     
-    # Dados do gráfico
-    cats = context.get('gastos_agrupados', [])[:6] # Top 6
+    # Processamento dos dados do gráfico
+    # O handler pode mandar 'gastos_agrupados' (lista de tuplas) ou 'gastos_por_categoria' (lista de dicts)
+    raw_cats = context.get('gastos_agrupados', [])
+    if not raw_cats and context.get('gastos_por_categoria'):
+        # Converte dict para tupla se necessário
+        raw_cats = [(c.get('nome', 'N/A'), c.get('total', 0)) for c in context.get('gastos_por_categoria', [])]
+    
+    cats = raw_cats[:6] # Pega apenas os top 6
+
     if cats:
-        pc.data = [x[1] for x in cats]
+        pc.data = [float(x[1]) for x in cats]
         pc.labels = [f"{x[0]}" for x in cats]
-        # Cores Premium
-        pc.slices.strokeWidth = 0.5
-        pc.slices.strokeColor = colors.white
+        
+        # Cores personalizadas para as fatias
         colors_list = [COLOR_PRIMARY, COLOR_ACCENT, COLOR_SUCCESS, COLOR_DANGER, HexColor('#6366F1'), HexColor('#8B5CF6')]
         for i, color in enumerate(colors_list):
             if i < len(pc.data):
                 pc.slices[i].fillColor = color
+                pc.slices[i].strokeColor = COLOR_WHITE
+                pc.slices[i].strokeWidth = 1
     else:
+        # Gráfico vazio placeholder
         pc.data = [1]
         pc.labels = ["Sem dados"]
+        pc.slices[0].fillColor = HexColor('#E2E8F0')
 
     d.add(pc)
     elements.append(d)
@@ -257,79 +320,57 @@ def generate_financial_pdf(context):
     # Tabela de Categorias
     elements.append(Spacer(1, 5*mm))
     
-    table_data = [['Categoria', 'Valor', '% Total']]
-    for cat, val in cats:
-        perc = (val / desp * 100) if desp > 0 else 0
-        table_data.append([cat, f"R$ {val:,.2f}", f"{perc:.1f}%"])
-        
-    t_cat = Table(table_data, colWidths=[90*mm, 40*mm, 30*mm])
-    t_cat.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
-        ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
-        ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
-        ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-        ('FONTNAME', (0,1), (-1,-1), FONT_REG),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-        ('TOPPADDING', (0,0), (-1,-1), 8),
-        ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
-        ('ROUNDEDCORNERS', [10, 10, 10, 10]), # Se suportado pela versão, senão ignora
-    ]))
-    elements.append(t_cat)
-    
-    elements.append(PageBreak())
+    if cats:
+        table_data = [['Categoria', 'Valor', '%']]
+        for cat, val in cats:
+            val_float = float(val)
+            perc = (val_float / float(desp) * 100) if desp > 0 else 0
+            table_data.append([cat, f"R$ {val_float:,.2f}", f"{perc:.1f}%"])
+            
+        t_cat = Table(table_data, colWidths=[90*mm, 40*mm, 30*mm])
+        t_cat.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
+            ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
+            ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
+            ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
+            ('FONTNAME', (0,1), (-1,-1), FONT_REG),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
+            ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+        ]))
+        elements.append(t_cat)
+    else:
+        elements.append(Paragraph("Nenhum gasto registrado neste período.", style_normal))
 
-    # --- 4. INSIGHTS E RECOMENDAÇÕES ---
+    # 4. INSIGHTS
+    elements.append(Spacer(1, 10*mm))
     elements.append(Paragraph("Insights Inteligentes", style_h2))
     
     insights = context.get('insights', [])
     if not insights:
-        insights = [
-            "Mantenha seus gastos essenciais abaixo de 50% da receita.",
-            "Tente aumentar sua taxa de poupança em 1% no próximo mês.",
-            "Revise assinaturas mensais que não está utilizando."
-        ]
+        insights = ["Continue registrando seus gastos para receber análises personalizadas."]
         
     for insight in insights:
-        # Adiciona ícone de lâmpada (texto unicode)
-        text = f"💡 {insight}"
-        elements.append(Paragraph(text, style_insight))
+        elements.append(Paragraph(f"💡 {insight}", style_insight))
         elements.append(Spacer(1, 2*mm))
 
-    # --- 5. TOP TRANSAÇÕES ---
-    elements.append(Paragraph("Maiores Movimentações", style_h2))
-    
-    top_transacoes = context.get('top_transacoes', [])
-    if top_transacoes:
-        t_data = [['Data', 'Descrição', 'Valor']]
-        for t in top_transacoes:
-            # Formatação segura
-            val_fmt = f"R$ {float(t.get('valor', 0)):,.2f}"
-            data_fmt = t.get('data', '').strftime('%d/%m') if hasattr(t.get('data'), 'strftime') else str(t.get('data'))[:5]
-            t_data.append([data_fmt, t.get('descricao', 'N/A')[:30], val_fmt])
-            
-        t_top = Table(t_data, colWidths=[30*mm, 90*mm, 40*mm])
-        t_top.setStyle(TableStyle([
-            ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
-            ('TEXTCOLOR', (0,0), (-1,0), COLOR_PRIMARY),
-            ('LINEBELOW', (0,0), (-1,0), 1, COLOR_ACCENT),
-            ('ALIGN', (2,0), (-1,-1), 'RIGHT'),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_WHITE, COLOR_BG_LIGHT]),
-            ('FONTSIZE', (0,0), (-1,-1), 9),
-        ]))
-        elements.append(t_top)
-    else:
-        elements.append(Paragraph("Nenhuma transação relevante encontrada.", style_normal))
-
-    # --- 6. CALL TO ACTION FINAL ---
-    elements.append(Spacer(1, 20*mm))
-    
-    # Caixa de conclusão
-    elements.append(Paragraph("Próximos Passos", style_h2))
-    elements.append(Paragraph("Para detalhar estes lançamentos ou criar novas metas de economia, acesse o menu principal do bot.", style_normal))
-    
-    # Build
-    doc.build(elements, onFirstPage=lambda c, d: None, onLaterPages=create_header_footer)
+    # 5. GERAR PDF
+    try:
+        # Adiciona validação antes de incluir elementos no PDF
+        for element in elements:
+            if isinstance(element, GradientCover):
+                validate_flowable_size(element, frame_content._width, frame_content._height)
+            elif isinstance(element, Drawing):
+                for sub_element in element.contents:
+                    if hasattr(sub_element, 'width') and hasattr(sub_element, 'height'):
+                        validate_flowable_size(sub_element, frame_content._width, frame_content._height)
+        
+        doc.build(elements)
+    except Exception as e:
+        print(f"Erro crítico ao construir PDF: {e}")
+        # Retorna um PDF vazio ou lança erro dependendo da necessidade
+        raise e
     
     buffer.seek(0)
     return buffer.getvalue()
