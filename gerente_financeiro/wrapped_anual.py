@@ -39,6 +39,15 @@ def calcular_resumo_financeiro(usuario_id: int, ano: int) -> Dict:
     """Calcula resumo geral de receitas e despesas do ano"""
     db = next(get_db())
     try:
+        # DEBUG: Verificar total de lançamentos (incluindo Transferência)
+        total_lancamentos = db.query(Lancamento).filter(
+            and_(
+                Lancamento.id_usuario == usuario_id,
+                extract('year', Lancamento.data_transacao) == ano
+            )
+        ).count()
+        logger.info(f"DEBUG: Total de lançamentos (incluindo Transferência) para {ano}: {total_lancamentos}")
+
         # Usar INNER JOIN para garantir que apenas lançamentos com categoria sejam considerados
         # e filtrar 'Transferência' diretamente na query para eficiência.
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
@@ -49,9 +58,22 @@ def calcular_resumo_financeiro(usuario_id: int, ano: int) -> Dict:
             )
         ).all()
 
+        logger.info(f"DEBUG: Total de lançamentos financeiros (sem Transferência) para {ano}: {len(lancamentos_financeiros)}")
+        
+        # Debug: mostrar tipos encontrados
+        tipos_encontrados = {}
+        for l in lancamentos_financeiros:
+            tipo = l.tipo
+            tipos_encontrados[tipo] = tipos_encontrados.get(tipo, 0) + 1
+        
+        logger.info(f"DEBUG: Tipos encontrados nos lançamentos financeiros: {tipos_encontrados}")
+
         # Calcular receitas e despesas apenas dos lançamentos financeiros
         receitas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Entrada')
         despesas = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Saída')
+        
+        logger.info(f"DEBUG: Receitas calculadas: R$ {receitas:.2f}")
+        logger.info(f"DEBUG: Despesas calculadas: R$ {despesas:.2f}")
         
         economia = receitas - despesas
         taxa_poupanca = (economia / receitas * 100) if receitas > 0 else 0
