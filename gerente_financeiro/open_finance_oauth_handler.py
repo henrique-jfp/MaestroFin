@@ -267,7 +267,7 @@ async def list_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     available_limit = f"R$ {available_limit_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if acc.credit_limit is not None else "N/A"
 
                     response_text += (
-                        f"  - `{acc.name}` ({acc.credit_brand}):\n"
+                        f"  - `{acc.name}` ({acc.credit_brand or 'N/A'}):\n"
                         f"    - Fatura Atual: *{invoice}*\n"
                         f"    - Limite Disponível: *{available_limit}* (de {limit})\n"
                     )

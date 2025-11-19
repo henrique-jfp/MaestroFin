@@ -146,8 +146,33 @@ class PluggyClient:
         return response.json()
 
     def list_transactions(self, account_id: str, from_date: str) -> List[Dict]:
-        """Lista as transações de uma conta a partir de uma data."""
+        """Lista TODAS as transações de uma conta a partir de uma data, tratando paginação."""
         logger.info(f"Listando transações da conta {account_id} a partir de {from_date}...")
-        params = {"accountId": account_id, "from": from_date, "pageSize": 500}
-        response = self._request("GET", "/transactions", params=params)
-        return response.json().get("results", [])
+        
+        all_transactions = []
+        page = 1
+        
+        while True:
+            params = {
+                "accountId": account_id, 
+                "from": from_date, 
+                "pageSize": 500,
+                "page": page
+            }
+            response = self._request("GET", "/transactions", params=params)
+            data = response.json()
+            results = data.get("results", [])
+            
+            if not results:
+                break # Sai do loop se não houver mais resultados
+                
+            all_transactions.extend(results)
+            
+            # Verifica se há mais páginas
+            if data.get("totalPages", 1) > page:
+                page += 1
+            else:
+                break
+
+        logger.info(f"Total de {len(all_transactions)} transações encontradas para a conta {account_id}.")
+        return all_transactions
