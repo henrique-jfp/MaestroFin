@@ -10,7 +10,7 @@ from reportlab.platypus import (
     BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer, 
     Table, TableStyle, PageBreak, NextPageTemplate, Flowable
 )
-from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.shapes import Drawing, Rect, String, Line
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -355,7 +355,55 @@ def generate_financial_pdf(context):
         elements.append(Paragraph(f"💡 {insight}", style_insight))
         elements.append(Spacer(1, 2*mm))
 
-    # 5. GERAR PDF
+    # 5. ELEMENTOS PREMIUM (EXCLUSIVOS)
+    elements.append(PageBreak())
+    elements.append(Paragraph("Elementos Premium", style_h2))
+    elements.append(Spacer(1, 5*mm))
+    
+    # QR Code (placeholder)
+    qr_placeholder = Drawing(50, 50)
+    qr_placeholder.add(Rect(0, 0, 50, 50, fillColor=COLOR_BG_LIGHT, strokeColor=COLOR_PRIMARY, strokeWidth=2))
+    qr_placeholder.add(String(5, 35, "QR Code", fontSize=10, fillColor=COLOR_PRIMARY))
+    elements.append(qr_placeholder)
+    
+    # Selo Premium
+    selo = Drawing(60, 20)
+    selo.add(Rect(0, 0, 60, 20, fillColor=COLOR_ACCENT, strokeColor=COLOR_PRIMARY, strokeWidth=2))
+    selo.add(String(5, 15, "SELO PREMIUM", fontSize=12, fillColor=COLOR_PRIMARY))
+    elements.append(selo)
+    
+    # Projeções Futuras
+    elements.append(Spacer(1, 10*mm))
+    elements.append(Paragraph("Projeções Futuras", style_h2))
+    
+    # Gráfico de Linhas (placeholder)
+    d_line = Drawing(400, 150)
+    line_placeholder = Drawing(100, 1)
+    line_placeholder.add(Line(0, 0, 100, 0, strokeColor=COLOR_PRIMARY, strokeWidth=2))
+    d_line.add(line_placeholder)
+    elements.append(d_line)
+    
+    # Tabela de Projeções (placeholder)
+    elements.append(Spacer(1, 5*mm))
+    table_proj_data = [['Mês', 'Receita Prevista', 'Despesa Prevista']]
+    for i in range(1, 7):
+        table_proj_data.append([f"Mês {i}", f"R$ {rec*i:,.2f}", f"R$ {desp*i:,.2f}"])
+        
+    t_proj = Table(table_proj_data, colWidths=[60*mm, 60*mm, 60*mm])
+    t_proj.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
+        ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
+        ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
+        ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
+        ('FONTNAME', (0,1), (-1,-1), FONT_REG),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
+        ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+    ]))
+    elements.append(t_proj)
+
+    # 6. GERAR PDF
     try:
         # Adiciona validação antes de incluir elementos no PDF
         for element in elements:
