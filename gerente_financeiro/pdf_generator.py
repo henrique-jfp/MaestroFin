@@ -10,7 +10,10 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
-from reportlab.lib.colors import HexColor, white, black
+from reportlab.lib.colors import HexColor, white, black, Color
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import os
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
 from reportlab.pdfgen import canvas
 from reportlab.graphics.shapes import Drawing, Rect, String, Circle, Line
@@ -47,12 +50,10 @@ def create_modern_header(canvas_obj, doc):
     canvas_obj.setFillColor(COLORS['primary'])
     canvas_obj.rect(0, A4[1] - 2.5*cm, A4[0], 2.5*cm, fill=1, stroke=0)
     
-    # Linha de destaque superior (gradiente simulado com múltiplas linhas)
-    for i in range(5):
-        opacity = 1 - (i * 0.15)
-        canvas_obj.setStrokeColor(COLORS['accent'])
-        canvas_obj.setLineWidth(2 - (i * 0.3))
-        canvas_obj.line(0, A4[1] - (0.2 + i*0.05)*cm, A4[0], A4[1] - (0.2 + i*0.05)*cm)
+    # Linha de destaque superior (linha sutil)
+    canvas_obj.setStrokeColor(COLORS['accent'])
+    canvas_obj.setLineWidth(1)
+    canvas_obj.line(0, A4[1] - 0.4*cm, A4[0], A4[1] - 0.4*cm)
     
     # Logo/Ícone decorativo (círculo)
     canvas_obj.setFillColor(COLORS['accent'])
@@ -114,6 +115,26 @@ def create_elegant_footer(canvas_obj, doc):
     
     canvas_obj.restoreState()
 
+
+# Registrar fontes alternativas se disponíveis (DejaVu como fallback elegante)
+def register_fonts_if_available():
+    try:
+        # Caminhos comuns no Linux para DejaVu
+        possible_paths = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+        ]
+        if os.path.exists(possible_paths[0]):
+            pdfmetrics.registerFont(TTFont('DejaVuSans', possible_paths[0]))
+        if os.path.exists(possible_paths[1]):
+            pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', possible_paths[1]))
+    except Exception:
+        # Falha não é crítica; fallback para Helvetica
+        pass
+
+
+register_fonts_if_available()
+
 # ===========================
 # COMPONENTES VISUAIS
 # ===========================
@@ -122,8 +143,9 @@ def create_premium_kpi_card(title, value, subtitle, color, trend=None, icon=""):
     drawing = Drawing(4.5*cm, 3.5*cm)
     
     # Sombra suave (efeito de profundidade)
-    shadow = Rect(0.1*cm, -0.1*cm, 4.5*cm, 3.5*cm, 
-                  fillColor=HexColor('#00000015'), 
+    # Sombra suave usando Color com alpha
+    shadow = Rect(0.1*cm, -0.1*cm, 4.5*cm, 3.5*cm,
+                  fillColor=Color(0, 0, 0, alpha=0.08),
                   strokeColor=None)
     drawing.add(shadow)
     
@@ -135,8 +157,9 @@ def create_premium_kpi_card(title, value, subtitle, color, trend=None, icon=""):
     drawing.add(main_rect)
     
     # Ornamento superior (linha de destaque)
-    accent_line = Rect(0, 3.2*cm, 4.5*cm, 0.3*cm, 
-                       fillColor=HexColor('#ffffff20'), 
+    # Ornamento superior sutil (ligeira sobreposição branca com alpha)
+    accent_line = Rect(0, 3.2*cm, 4.5*cm, 0.3*cm,
+                       fillColor=Color(1, 1, 1, alpha=0.12),
                        strokeColor=None)
     drawing.add(accent_line)
     
@@ -145,14 +168,14 @@ def create_premium_kpi_card(title, value, subtitle, color, trend=None, icon=""):
         icon_text = String(0.4*cm, 2.7*cm, icon, 
                           fontSize=16, 
                           fillColor=white, 
-                          fontName="Helvetica")
+                          fontName=("DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica"))
         drawing.add(icon_text)
     
     # Título
     title_text = String(0.4*cm, 2.3*cm, title, 
                        fontSize=9, 
-                       fillColor=HexColor('#ffffffcc'), 
-                       fontName="Helvetica-Bold")
+                       fillColor=Color(1, 1, 1, alpha=0.85), 
+                       fontName="DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
     drawing.add(title_text)
     
     # Valor principal (formatado)
@@ -164,14 +187,14 @@ def create_premium_kpi_card(title, value, subtitle, color, trend=None, icon=""):
     value_text = String(0.4*cm, 1.4*cm, valor_formatado, 
                        fontSize=15, 
                        fillColor=white, 
-                       fontName="Helvetica-Bold")
+                       fontName="DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
     drawing.add(value_text)
     
     # Subtítulo
     subtitle_text = String(0.4*cm, 0.9*cm, subtitle, 
                           fontSize=7, 
-                          fillColor=HexColor('#ffffffaa'), 
-                          fontName="Helvetica")
+                          fillColor=Color(1, 1, 1, alpha=0.68), 
+                          fontName="DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica")
     drawing.add(subtitle_text)
     
     # Indicador de tendência com estilo
@@ -182,7 +205,7 @@ def create_premium_kpi_card(title, value, subtitle, color, trend=None, icon=""):
                            f"{trend_symbol} {abs(trend):.1f}%", 
                            fontSize=8, 
                            fillColor=trend_color, 
-                           fontName="Helvetica-Bold",
+                           fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
                            textAnchor='end')
         drawing.add(trend_text)
     
@@ -209,8 +232,13 @@ def create_donut_chart(data, labels, title, colors=None):
             HexColor('#ec4899'), HexColor('#06b6d4')
         ]
     
-    pie.slices.strokeWidth = 2
-    pie.slices.strokeColor = white
+    # definir stroke por fatia
+    for s in range(len(data)):
+        try:
+            pie.slices[s].strokeWidth = 1
+            pie.slices[s].strokeColor = white
+        except Exception:
+            pass
     
     for i, color in enumerate(colors[:len(data)]):
         pie.slices[i].fillColor = color
@@ -222,7 +250,7 @@ def create_donut_chart(data, labels, title, colors=None):
     title_text = String(4.5*cm, 6.2*cm, title, 
                        fontSize=13, 
                        fillColor=COLORS['text_dark'], 
-                       fontName="Helvetica-Bold",
+                       fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
                        textAnchor='middle')
     drawing.add(title_text)
     
@@ -279,7 +307,7 @@ def create_section_divider(title, icon=""):
     title_text = String(8.5*cm, 0.35*cm, title_str, 
                        fontSize=14, 
                        fillColor=COLORS['text_dark'], 
-                       fontName="Helvetica-Bold",
+                       fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
                        textAnchor='middle')
     drawing.add(title_text)
     
@@ -317,7 +345,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         alignment=TA_CENTER,
         spaceAfter=12,
         spaceBefore=20,
-        fontName="Helvetica-Bold",
+        fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
         leading=34
     )
     
@@ -328,7 +356,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         textColor=COLORS['text_light'],
         alignment=TA_CENTER,
         spaceAfter=30,
-        fontName="Helvetica"
+        fontName=("DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica")
     )
     
     section_style = ParagraphStyle(
@@ -338,7 +366,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         textColor=COLORS['secondary'],
         spaceAfter=20,
         spaceBefore=10,
-        fontName="Helvetica-Bold"
+        fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
     )
     
     normal_text = ParagraphStyle(
@@ -348,7 +376,8 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         textColor=COLORS['text_dark'],
         spaceAfter=10,
         leading=14,
-        alignment=TA_JUSTIFY
+        alignment=TA_JUSTIFY,
+        fontName=("DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica")
     )
     
     insight_style = ParagraphStyle(
@@ -359,7 +388,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         spaceAfter=8,
         leftIndent=25,
         bulletIndent=10,
-        fontName="Helvetica-Bold"
+        fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
     )
     
     # ===========================
@@ -368,7 +397,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
     elements = []
     
     # === CAPA ===
-    elements.append(Spacer(1, 1*cm))
+    elements.append(Spacer(1, 0.6*cm))
     elements.append(Paragraph("RELATÓRIO EXECUTIVO", title_style))
     elements.append(Paragraph("FINANCEIRO", title_style))
     
@@ -379,7 +408,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
     </para>
     """
     elements.append(Paragraph(periodo_info, subtitle_style))
-    elements.append(Spacer(1, 2*cm))
+    elements.append(Spacer(1, 1.2*cm))
     
     # === KPIs PRINCIPAIS ===
     elements.append(create_section_divider("INDICADORES PRINCIPAIS", "📊"))
@@ -410,13 +439,13 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
     kpi_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 15),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 15),
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
     ]))
     elements.append(kpi_table)
-    elements.append(Spacer(1, 1*cm))
+    elements.append(Spacer(1, 0.8*cm))
     
     # === ANÁLISE DE GASTOS ===
     elements.append(PageBreak())
@@ -483,10 +512,10 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
             # Alternância de cores
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, COLORS['bg_light']]),
             
-            # Bordas
-            ('LINEBELOW', (0, 0), (-1, 0), 2, COLORS['secondary']),
+            # Bordas sutis
+            ('LINEBELOW', (0, 0), (-1, 0), 1, COLORS['secondary']),
             ('LINEBELOW', (0, 1), (-1, -1), 0.5, COLORS['border']),
-            ('BOX', (0, 0), (-1, -1), 1, HexColor('#d8b4fe')),
+            ('BOX', (0, 0), (-1, -1), 0.5, COLORS['border']),
         ]))
         elements.append(category_table)
         elements.append(Spacer(1, 2*cm))
@@ -515,7 +544,7 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
 
     metrics_table = Table(metrics_data, colWidths=[5*cm, 4*cm, 4*cm])
     metrics_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor('#7c3aed')),
+        ('BACKGROUND', (0, 0), (-1, 0), COLORS['purple']),
         ('TEXTCOLOR', (0, 0), (-1, 0), white),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
@@ -525,9 +554,9 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -1), HexColor('#faf5ff')),
-        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#d8b4fe')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [HexColor('#ffffff'), HexColor('#faf5ff')])
+        ('BACKGROUND', (0, 1), (-1, -1), COLORS['bg_white']),
+        ('GRID', (0, 0), (-1, -1), 0.5, COLORS['border']),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [COLORS['bg_white'], COLORS['bg_light']])
     ]))
     elements.append(metrics_table)
     elements.append(Spacer(1, 2*cm))
@@ -544,7 +573,12 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
     elements.append(Paragraph(footer_text, normal_text))
     
     # === CONSTRUIR PDF ===
-    doc.build(elements, onFirstPage=create_modern_header, onLaterPages=create_modern_header)
+    # Função que desenha cabeçalho e rodapé em cada página
+    def _decorate_page(canvas_obj, doc_obj):
+        create_modern_header(canvas_obj, doc_obj)
+        create_elegant_footer(canvas_obj, doc_obj)
+
+    doc.build(elements, onFirstPage=_decorate_page, onLaterPages=_decorate_page)
     
     # Adicionar rodapé
     buffer.seek(0)
