@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import requests
+import importlib
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,7 +22,6 @@ from telegram.ext import (
     filters
 )
 from concurrent.futures import ThreadPoolExecutor
-from open_finance.bank_connector import fetch_bank_connection_stats
 
 logger = logging.getLogger(__name__)
 
@@ -1787,7 +1787,7 @@ class OpenFinanceOAuthHandler:
                 )
                 return            
             # Criar botões inline para cada transação
-            message = f"💳 *Transações Pendentes* \\({len(pending_txns)}\\)\n\n"
+            message = f"💳 *Transações Pendentes* \\({len(pending_txns)}\n\n"
             message += "Clique para importar:\n\n"
             
             keyboard = []
@@ -2658,3 +2658,29 @@ async def exibir_mensagens_dinamicas(context, chat_id: int):
         )
     except Exception as e:
         logger.error(f"❌ Erro ao exibir mensagens dinâmicas: {e}", exc_info=True)
+        
+
+def get_db_session():
+    """Inicializa e retorna uma sessão de banco de dados."""
+    from database.database import get_db
+    try:
+        db = next(get_db())
+        return db
+    except Exception as e:
+        logger.error(f"Erro ao inicializar sessão do banco: {e}")
+        raise
+
+# Substituir inicializações diretas de db por chamadas ao método get_db_session
+# Exemplo:
+# db = next(get_db()) -> db = get_db_session()
+
+# Ajustar importação dinâmica
+try:
+    bank_connector_module = importlib.import_module('open_finance.bank_connector')
+    if hasattr(bank_connector_module, 'fetch_bank_connection_stats'):
+        fetch_bank_connection_stats = bank_connector_module.fetch_bank_connection_stats
+    else:
+        raise ImportError("Método 'fetch_bank_connection_stats' não encontrado no módulo 'open_finance.bank_connector'.")
+except ImportError as e:
+    logger.error(f"Erro ao importar 'fetch_bank_connection_stats': {e}")
+    raise

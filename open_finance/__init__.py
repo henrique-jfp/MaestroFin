@@ -7,7 +7,7 @@ __version__ = "1.0.0"
 __author__ = "Maestro Financeiro Team"
 
 from .pluggy_client import PluggyClient
-from .bank_connector import BankConnector
+from .bank_connector_module import BankConnector
 from .data_sync import DataSynchronizer
 
 __all__ = [
