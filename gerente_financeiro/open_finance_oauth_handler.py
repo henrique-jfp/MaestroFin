@@ -8,6 +8,7 @@ resultados de forma clara e amigável.
 """
 import asyncio
 import logging
+from typing import Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
