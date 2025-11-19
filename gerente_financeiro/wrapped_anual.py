@@ -35,9 +35,8 @@ def debug_wrapped_version():
 # CÁLCULOS DE ESTATÍSTICAS ANUAIS
 # ============================================================================
 
-def calcular_resumo_financeiro(usuario_id: int, ano: int) -> Dict:
+def calcular_resumo_financeiro(db, usuario_id: int, ano: int) -> Dict:
     """Calcula resumo geral de receitas e despesas do ano"""
-    db = next(get_db())
     try:
         # DEBUG: Verificar total de lançamentos (incluindo Transferência)
         total_lancamentos = db.query(Lancamento).filter(
@@ -84,13 +83,12 @@ def calcular_resumo_financeiro(usuario_id: int, ano: int) -> Dict:
             'economia_total': economia,
             'taxa_poupanca': taxa_poupanca
         }
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Erro em calcular_resumo_financeiro: {e}", exc_info=True)
+        raise
 
-
-def calcular_categorias_top(usuario_id: int, ano: int, limit: int = 5) -> List[Dict]:
+def calcular_categorias_top(db, usuario_id: int, ano: int, limit: int = 5) -> List[Dict]:
     """Retorna as categorias com maiores gastos do ano"""
-    db = next(get_db())
     try:
         # Usar INNER JOIN e filtrar 'Transferência' na query
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
@@ -119,18 +117,16 @@ def calcular_categorias_top(usuario_id: int, ano: int, limit: int = 5) -> List[D
         )[:limit]
         
         return categorias_ordenadas
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Erro em calcular_categorias_top: {e}", exc_info=True)
+        raise
 
-
-def calcular_evolucao_mensal(usuario_id: int, ano: int) -> Dict:
+def calcular_evolucao_mensal(db, usuario_id: int, ano: int) -> Dict:
     """Calcula receitas e despesas mês a mês"""
-    db = next(get_db())
     try:
         meses_dados = {}
         
         for mes in range(1, 13):            
-            # Usar INNER JOIN e filtrar 'Transferência' na query
             lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
@@ -152,11 +148,12 @@ def calcular_evolucao_mensal(usuario_id: int, ano: int) -> Dict:
             }
         
         return meses_dados
-    finally:
-        db.close()
-def encontrar_melhor_mes(usuario_id: int, ano: int) -> Dict:
+    except Exception as e:
+        logger.error(f"Erro em calcular_evolucao_mensal: {e}", exc_info=True)
+        raise
+
+def encontrar_melhor_mes(db, usuario_id: int, ano: int) -> Dict:
     """Encontra o mês com maior economia"""
-    db = next(get_db())
     try:
         melhor_mes = None
         maior_economia = float('-inf')
@@ -185,11 +182,12 @@ def encontrar_melhor_mes(usuario_id: int, ano: int) -> Dict:
             'nome': melhor_mes,
             'economia': maior_economia
         }
-    finally:
-        db.close()
-def encontrar_maior_gasto(usuario_id: int, ano: int) -> Dict:
+    except Exception as e:
+        logger.error(f"Erro em encontrar_melhor_mes: {e}", exc_info=True)
+        raise
+
+def encontrar_maior_gasto(db, usuario_id: int, ano: int) -> Dict:
     """Encontra a transação de maior valor do ano"""
-    db = next(get_db())
     try:
         # Usar INNER JOIN e filtrar 'Transferência' na query
         lancamentos_financeiros = db.query(Lancamento).join(Categoria).filter(
@@ -212,13 +210,12 @@ def encontrar_maior_gasto(usuario_id: int, ano: int) -> Dict:
             }
         
         return None
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Erro em encontrar_maior_gasto: {e}", exc_info=True)
+        raise
 
-
-def calcular_metas_ano(usuario_id: int, ano: int) -> Dict:
+def calcular_metas_ano(db, usuario_id: int, ano: int) -> Dict:
     """Analisa metas criadas e atingidas no ano"""
-    db = next(get_db())
     try:
         # Metas criadas no ano
         metas_criadas = db.query(Objetivo).filter(
@@ -248,13 +245,12 @@ def calcular_metas_ano(usuario_id: int, ano: int) -> Dict:
                 for meta in metas_criadas
             ]
         }
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Erro em calcular_metas_ano: {e}", exc_info=True)
+        raise
 
-
-def calcular_estatisticas_uso(usuario_id: int, ano: int) -> Dict:
+def calcular_estatisticas_uso(db, usuario_id: int, ano: int) -> Dict:
     """Calcula estatísticas de uso do bot no ano"""
-    db = next(get_db())
     try:
         # Total de transações registradas
         total_lancamentos = db.query(func.count(Lancamento.id)).filter(
@@ -294,17 +290,16 @@ def calcular_estatisticas_uso(usuario_id: int, ano: int) -> Dict:
             'xp_total': xp_total,
             'nivel_atual': nivel_atual
         }
-    finally:
-        db.close()
-
+    except Exception as e:
+        logger.error(f"Erro em calcular_estatisticas_uso: {e}", exc_info=True)
+        raise
 
 # ============================================================================
 # GERAÇÃO DE CURIOSIDADES
 # ============================================================================
 
-def gerar_curiosidades(usuario_id: int, ano: int) -> List[str]:
+def gerar_curiosidades(db, usuario_id: int, ano: int) -> List[str]:
     """Gera insights curiosos sobre os gastos do usuário"""
-    db = next(get_db())
     curiosidades = []
     
     try:
@@ -364,13 +359,12 @@ def gerar_curiosidades(usuario_id: int, ano: int) -> List[str]:
             )
         
         return curiosidades
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Erro em gerar_curiosidades: {e}", exc_info=True)
+        raise
 
-
-def comparar_com_ano_anterior(usuario_id: int, ano_atual: int) -> Optional[Dict]:
+def comparar_com_ano_anterior(db, usuario_id: int, ano_atual: int) -> Optional[Dict]:
     """Compara estatísticas com o ano anterior"""
-    db = next(get_db())
     try:
         ano_anterior = ano_atual - 1
         
@@ -386,8 +380,8 @@ def comparar_com_ano_anterior(usuario_id: int, ano_atual: int) -> Optional[Dict]
             return None
         
         # Calcular estatísticas de ambos os anos
-        stats_atual = calcular_resumo_financeiro(usuario_id, ano_atual)
-        stats_anterior = calcular_resumo_financeiro(usuario_id, ano_anterior)
+        stats_atual = calcular_resumo_financeiro(db, usuario_id, ano_atual)
+        stats_anterior = calcular_resumo_financeiro(db, usuario_id, ano_anterior)
         
         # Calcular variações percentuais
         var_receitas = ((stats_atual['receitas_total'] - stats_anterior['receitas_total']) / 
@@ -407,9 +401,9 @@ def comparar_com_ano_anterior(usuario_id: int, ano_atual: int) -> Optional[Dict]
             'stats_anterior': stats_anterior,
             'melhorou': stats_atual['taxa_poupanca'] > stats_anterior['taxa_poupanca']
         }
-    finally:
-        db.close()
-
+    except Exception as e:
+        logger.error(f"Erro em comparar_com_ano_anterior: {e}", exc_info=True)
+        raise
 
 # ============================================================================
 # FORMATAÇÃO DA MENSAGEM WRAPPED
@@ -437,18 +431,21 @@ def formatar_wrapped_completo(usuario: Usuario, ano: int) -> str:
     Esta é a mensagem ÉPICA que será enviada aos usuários!
     """
     try:
+        db = next(get_db())
         # DEBUG: Confirmar versão corrigida
         logger.info(f"🎊 DEBUG: Wrapped versão {debug_wrapped_version()} rodando para usuário {usuario.id}")
         
         # Coletar todas as estatísticas
-        resumo = calcular_resumo_financeiro(usuario.id, ano)
-        categorias_top = calcular_categorias_top(usuario.id, ano, 5)
-        melhor_mes = encontrar_melhor_mes(usuario.id, ano)
-        maior_gasto = encontrar_maior_gasto(usuario.id, ano)
-        metas = calcular_metas_ano(usuario.id, ano)
-        uso = calcular_estatisticas_uso(usuario.id, ano)
-        curiosidades = gerar_curiosidades(usuario.id, ano)
-        comparacao = comparar_com_ano_anterior(usuario.id, ano)
+        # Todas as funções agora recebem a mesma sessão 'db'
+        resumo = calcular_resumo_financeiro(db, usuario.id, ano)
+        uso = calcular_estatisticas_uso(db, usuario.id, ano) # Movido para cima para ter o total de lançamentos
+        
+        categorias_top = calcular_categorias_top(db, usuario.id, ano, 5)
+        melhor_mes = encontrar_melhor_mes(db, usuario.id, ano)
+        maior_gasto = encontrar_maior_gasto(db, usuario.id, ano)
+        metas = calcular_metas_ano(db, usuario.id, ano)
+        curiosidades = gerar_curiosidades(db, usuario.id, ano)
+        comparacao = comparar_com_ano_anterior(db, usuario.id, ano)
         
         # Avaliar performance
         emoji_perf, avaliacao_perf = avaliar_performance_poupanca(resumo['taxa_poupanca'])
@@ -652,6 +649,8 @@ Com carinho e gratidão,
         
     except Exception as e:
         logger.error(f"❌ Erro ao gerar wrapped para usuário {usuario.id}: {e}", exc_info=True)
+        if 'db' in locals():
+            db.close()
         return None
 
 
@@ -730,10 +729,13 @@ async def enviar_wrapped_manual(bot, usuario: Usuario, ano: int = None):
     Se ano não especificado, usa ano atual
     """
     try:
+        db = next(get_db())
         if ano is None:
             ano = datetime.now().year
         
-        mensagem = formatar_wrapped_completo(usuario, ano)
+        # A função formatar_wrapped_completo agora gerencia sua própria sessão
+        # Vamos chamar a versão antiga da lógica aqui para teste manual
+        mensagem = formatar_wrapped_completo(usuario, ano) # Esta função agora cria sua própria sessão
         
         if mensagem:
             await bot.send_message(
@@ -745,5 +747,7 @@ async def enviar_wrapped_manual(bot, usuario: Usuario, ano: int = None):
         
         return False
     except Exception as e:
+        if 'db' in locals():
+            db.close()
         logger.error(f"❌ Erro ao enviar wrapped manual: {e}", exc_info=True)
         return False
