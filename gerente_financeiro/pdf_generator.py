@@ -487,9 +487,9 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
             ('LINEBELOW', (0, 0), (-1, 0), 2, COLORS['secondary']),
             ('LINEBELOW', (0, 1), (-1, -1), 0.5, COLORS['border']),
             ('BOX', (0, 0), (-1, -1), 1, HexColor('#d8b4fe')),
-    ]))
-    elements.append(category_table)
-    elements.append(Spacer(1, 2*cm))
+        ]))
+        elements.append(category_table)
+        elements.append(Spacer(1, 2*cm))
 
     # === MÉTRICAS DE PERFORMANCE ===
     elements.append(Paragraph("📈 MÉTRICAS DE PERFORMANCE", section_style))
