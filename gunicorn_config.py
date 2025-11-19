@@ -30,7 +30,7 @@ loglevel = "info"
 capture_output = True
 
 # Process naming
-proc_name = "maestrofin_definitivo"
+proc_name = "contacomigo_definitivo"
 
 # Performance otimizada
 worker_tmp_dir = "/dev/shm"  # RAM disk

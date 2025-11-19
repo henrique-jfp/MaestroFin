@@ -41,7 +41,7 @@ from telegram.ext import (
 )
 
 # --- CORREÇÃO: Importamos as funções do ocr_handler, mas não os estados ---
-from .ocr_handler import ocr_iniciar_como_subprocesso, ocr_action_processor
+from .ocr_handler import ocr_action_processor
 from .handlers import cancel, criar_teclado_colunas
 from .utils_validation import (
     validar_valor_monetario, validar_descricao,
@@ -496,8 +496,7 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
 async def ocr_flow_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ponto de entrada para o fluxo de OCR quando um arquivo é enviado."""
     # Chama a função de processamento do OCR
-    # A função ocr_iniciar_como_subprocesso agora retorna um estado
-    return await ocr_iniciar_como_subprocesso(update, context)
+    await ocr_action_processor(update, context)
 
 async def ocr_confirmation_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -529,7 +528,7 @@ manual_entry_conv = ConversationHandler(
         AWAITING_LAUNCH_ACTION: [
             CallbackQueryHandler(start_manual_flow, pattern='^manual_type_'),
             CallbackQueryHandler(finish_flow, pattern='^manual_finish$'),
-            MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.Document.MimeType("application/pdf"), ocr_iniciar_como_subprocesso),
+            MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.Document.MimeType("application/pdf"), ocr_action_processor),
         ],
         ASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
         ASK_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_value)],

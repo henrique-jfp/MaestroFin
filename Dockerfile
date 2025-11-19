@@ -1,4 +1,4 @@
-# Dockerfile para rodar MaestroFin com suporte a WeasyPrint (HTML -> PDF)
+# Dockerfile para rodar ContaComigo com suporte a WeasyPrint (HTML -> PDF)
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1

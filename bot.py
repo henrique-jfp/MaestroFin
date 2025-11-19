@@ -125,12 +125,12 @@ health_app = Flask(__name__)
 
 @health_app.route('/health')
 def health_check():
-    return jsonify({"status": "healthy", "service": "MaestroFin Bot"})
+    return jsonify({"status": "healthy", "service": "ContaComigo Bot"})
 
 @health_app.route('/')
 def home():
     return jsonify({
-        "service": "MaestroFin Bot",
+        "service": "ContaComigo Bot",
         "status": "running",
         "version": "3.1.0"
     })
@@ -328,7 +328,7 @@ async def debug_dashboard(update, context):
 
 🌐 **URLs**:
 • Dashboard: http://localhost:5000
-• Demo: http://localhost:5000/dashboard/demo"""
+• Demo: http://localhost:5000/dashboard"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
         

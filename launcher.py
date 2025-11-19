@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🚀 MAESTRO FINANCEIRO - Launcher Principal para Render
+🚀 CONTA COMIGO - Launcher Principal para Render
 Launcher unificado e otimizado para produção
 """
 
@@ -59,7 +59,7 @@ def start_health_check_server():
     @health_app.route('/health')
     @health_app.route('/healthz')
     def health():
-        return {'status': 'healthy', 'service': 'maestrofin-bot'}, 200
+        return {'status': 'healthy', 'service': 'ContaComigo Bot'}, 200
     
     port = int(os.getenv('PORT', 8000))
     logger.info(f"🏥 Health check server iniciado na porta {port}")
@@ -189,7 +189,7 @@ def apply_migrations():
 
 def main():
     """Função principal"""
-    logger.info("🚀 Iniciando Maestro Financeiro...")
+    logger.info("🚀 Iniciando Conta Comigo...")
     
     # Configurar handler de sinais
     signal.signal(signal.SIGTERM, signal_handler)
@@ -204,25 +204,25 @@ def main():
     apply_migrations()
     
     # Verificar modo de execução
-    # Priorizar variável manual MAESTROFIN_MODE
-    force_mode = os.getenv('MAESTROFIN_MODE', '').lower()
+    # Priorizar variável manual CONTACOMIGO_MODE
+    force_mode = os.getenv('CONTACOMIGO_MODE', '').lower()
     port = os.getenv('PORT')
     is_render = os.getenv('RENDER') or os.getenv('RAILWAY_ENVIRONMENT')
     
     logger.info(f"🔍 Detecção de modo:")
-    logger.info(f"  MAESTROFIN_MODE={force_mode}")
+    logger.info(f"  CONTACOMIGO_MODE={force_mode}")
     logger.info(f"  PORT={port}")
     logger.info(f"  RENDER={os.getenv('RENDER')}")
     logger.info(f"  RAILWAY_ENVIRONMENT={os.getenv('RAILWAY_ENVIRONMENT')}")
     logger.info(f"  is_render={is_render}")
     
-    # Se MAESTROFIN_MODE está setado, usar ele
+    # Se CONTACOMIGO_MODE está setado, usar ele
     if force_mode == 'bot':
-        logger.info("🤖 Modo FORÇADO: BOT (via MAESTROFIN_MODE=bot)")
+        logger.info("🤖 Modo FORÇADO: BOT (via CONTACOMIGO_MODE=bot)")
         start_telegram_bot()
         
     elif force_mode == 'dashboard':
-        logger.info("🌐 Modo FORÇADO: DASHBOARD (via MAESTROFIN_MODE=dashboard)")
+        logger.info("🌐 Modo FORÇADO: DASHBOARD (via CONTACOMIGO_MODE=dashboard)")
         start_dashboard()
         
     elif port and is_render:

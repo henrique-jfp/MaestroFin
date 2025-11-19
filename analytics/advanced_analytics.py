@@ -1,5 +1,5 @@
 """
-🆕 ANALYTICS AVANÇADO - MaestroFin
+🏅 ANALYTICS AVANÇADO - ContaComigo
 Extensões avançadas para o sistema de analytics
 """
 

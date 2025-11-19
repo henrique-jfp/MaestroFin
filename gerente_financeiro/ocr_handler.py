@@ -1,103 +1,65 @@
-# gerente_financeiro/relatorio_handler.py
+# gerente_financeiro/ocr_handler.py
 
 import logging
-from datetime import datetime
-from io import BytesIO
-from dateutil.relativedelta import relativedelta
-from telegram import Update, InputFile
-from telegram.ext import ContextTypes, CommandHandler
-
-# Importar gerador PDF
-try:
-    from .pdf_generator import generate_financial_pdf
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
-    print("❌ Erro: pdf_generator não encontrado ou com erro de importação.")
-
-from database.database import get_db
-from .services import gerar_contexto_relatorio
+import os
+from telegram import Update
+from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
 
-async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def setup_google_credentials():
     """
-    Gera e envia o Relatório Financeiro Premium em PDF.
+    Configura as credenciais do Google Vision API.
+    Retorna True se configurado com sucesso, False caso contrário.
     """
-    user = update.effective_user
-    hoje = datetime.now()
-    
-    # Determina período (Mês atual ou anterior)
-    if context.args and context.args[0].lower() in ['passado', 'anterior']:
-        data_alvo = hoje - relativedelta(months=1)
-        periodo_str = f"do mês passado ({data_alvo.strftime('%B/%Y')})"
-    else:
-        data_alvo = hoje
-        periodo_str = "deste mês"
-        
-    mes_alvo = data_alvo.month
-    ano_alvo = data_alvo.year
-
-    # Mensagem de feedback inicial
-    msg = await update.message.reply_text(f"🏦 Gerando relatório Private {periodo_str}...\nAguarde um momento.")
-    
-    db = next(get_db())
-    user_id = user.id
-    
     try:
-        # 1. Busca dados brutos do serviço
-        contexto_dados = gerar_contexto_relatorio(db, user_id, mes_alvo, ano_alvo)
-        
-        # Verifica se existem dados
-        if not contexto_dados or not contexto_dados.get("has_data", False):
-            await msg.edit_text(f"📉 Não encontrei dados suficientes em {periodo_str} para gerar um relatório completo.")
-            return
+        google_creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        if google_creds_path and os.path.exists(google_creds_path):
+            logger.info("✅ GOOGLE_APPLICATION_CREDENTIALS configurado")
+            return True
+        else:
+            logger.warning("⚠️ GOOGLE_APPLICATION_CREDENTIALS não configurado - funcionalidades OCR limitadas")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Erro ao configurar credenciais Google: {e}")
+        return False
 
-        # 2. Prepara o contexto limpo para o PDF Generator
-        # Isso garante que os dados cheguem no formato correto que o pdf_generator espera
-        
-        pdf_context = {
-            'usuario_nome': user.full_name or "Investidor",
-            'periodo_extenso': data_alvo.strftime('%B de %Y').capitalize(),
-            'receita_total': float(contexto_dados.get('receita_total', 0.0)),
-            'despesa_total': float(contexto_dados.get('despesa_total', 0.0)),
-            'saldo_mes': float(contexto_dados.get('saldo_mes', 0.0)),
-            'taxa_poupanca': float(contexto_dados.get('taxa_poupanca', 0.0)),
-            'insights': contexto_dados.get('insights', []),
-            # Passa a lista de tuplas (Categoria, Valor)
-            'gastos_agrupados': contexto_dados.get('gastos_agrupados', []),
-            # Passa a lista de dicts também, caso o gerador precise de fallback
-            'gastos_por_categoria': contexto_dados.get('gastos_por_categoria_dict', [])
-        }
-        
-        logger.info(f"Gerando PDF para {pdf_context['usuario_nome']} com {len(pdf_context['gastos_agrupados'])} categorias.")
+async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Função placeholder para iniciar OCR como subprocesso.
+    """
+    logger.info("OCR subprocess iniciado (placeholder)")
+    await update.message.reply_text("� OCR não está disponível no momento. Use o modo manual.")
 
-        # 3. Gera o PDF
-        if PDF_AVAILABLE:
-            pdf_bytes = generate_financial_pdf(pdf_context)
-            
-            filename = f"Relatorio_MaestroFin_{data_alvo.strftime('%m_%Y')}.pdf"
-            
-            # Envia o arquivo
-            await update.message.reply_document(
-                document=InputFile(BytesIO(pdf_bytes), filename=filename),
-                caption=(
-                    f"💎 <b>Relatório Financeiro Private</b>\n"
-                    f"📅 {pdf_context['periodo_extenso']}\n\n"
-                    f"💰 Saldo: R$ {pdf_context['saldo_mes']:,.2f}\n"
-                    f"📊 Poupança: {pdf_context['taxa_poupanca']:.1f}%"
-                ),
+async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Processa mensagens com imagens/PDFs para OCR.
+    """
+    try:
+        # Placeholder - funcionalidade básica
+        if update.message.photo:
+            await update.message.reply_text(
+                "📷 <b>OCR Temporariamente Indisponível</b>\n\n"
+                "As funcionalidades de reconhecimento de imagem estão sendo atualizadas.\n"
+                "Use o modo manual para registrar seus lançamentos.",
                 parse_mode='HTML'
             )
-            # Apaga a mensagem de "carregando"
-            await msg.delete()
+        elif update.message.document and update.message.document.mime_type == "application/pdf":
+            await update.message.reply_text(
+                "📄 <b>OCR de PDF Temporariamente Indisponível</b>\n\n"
+                "As funcionalidades de processamento de PDF estão sendo atualizadas.\n"
+                "Use o modo manual para registrar seus lançamentos.",
+                parse_mode='HTML'
+            )
         else:
-            await msg.edit_text("❌ Erro interno: Módulo de geração de PDF não está disponível.")
-
+            await update.message.reply_text(
+                "� <b>Tipo de arquivo não suportado</b>\n\n"
+                "Envie uma foto ou PDF para processamento automático,\n"
+                "ou use /lancamento para o modo manual.",
+                parse_mode='HTML'
+            )
     except Exception as e:
-        logger.error(f"Erro crítico ao gerar relatório: {e}", exc_info=True)
-        await msg.edit_text("❌ Ocorreu um erro ao processar seu relatório. Tente novamente mais tarde.")
-    finally:
-        db.close()
-
-relatorio_handler = CommandHandler('relatorio', gerar_relatorio_comando)
+        logger.error(f"Erro no processamento OCR: {e}")
+        await update.message.reply_text(
+            "❌ Erro ao processar o arquivo. Tente novamente ou use o modo manual."
+        )

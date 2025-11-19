@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-📊 MÉTRICAS AVANÇADAS - MaestroFin
+📊 MÉTRICAS AVANÇADAS - ContaComigo
 Sistema de métricas e KPIs para analytics avançado
 """
 

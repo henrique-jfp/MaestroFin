@@ -83,7 +83,7 @@ class BotAnalyticsPostgreSQL:
                     'sslkey': None,
                     'sslrootcert': None,
                     'connect_timeout': 10,
-                    'application_name': 'maestrofin_analytics'
+                    'application_name': 'contacomigo_analytics'
                 }
                 logging.info("🔐 Configurando SSL Ultra Robusto para PostgreSQL em produção")
             

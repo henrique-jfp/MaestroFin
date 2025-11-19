@@ -3,7 +3,7 @@
 ## Estrutura de Diretórios
 
 ```
-MaestroFin/
+ContaComigo/
 ├── bot.py                          # Ponto de entrada principal do bot
 ├── app.py                          # Aplicação Flask para dashboard e webhooks
 ├── config.py                       # Configurações e variáveis de ambiente
@@ -118,7 +118,7 @@ MaestroFin/
 ## 🏦 Integração Open Finance
 
 ```
-Banco → API Pluggy → MaestroFin → Banco de Dados
+Banco → API Pluggy → ContaComigo → Banco de Dados
  ↓
 100+ bancos suportados (Bradesco, Itaú, Nubank, etc)
  ↓

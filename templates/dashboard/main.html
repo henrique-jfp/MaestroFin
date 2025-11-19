@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financeiro - MaestroFin</title>
+    <title>ContaComigo - Seu Painel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -16,7 +16,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="/">
-                <i class="fas fa-chart-line"></i> MaestroFin Dashboard
+                <i class="fas fa-hand-holding-usd"></i> ContaComigo
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -354,7 +354,7 @@
 
             fetch(`/api/graficos/${USER_ID}?mes=${MES_ATUAL}&ano=${ANO_ATUAL}`)
                 .then(response => response.json())
-                .then(data => {
+                .then data => {
                     // Esconder spinners
                     document.querySelectorAll('.loading-spinner').forEach(el => el.style.display = 'none');
 

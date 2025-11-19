@@ -1,5 +1,5 @@
 """
-Sistema de Alertas e Notificações - MaestroFin
+Sistema de Alertas e Notificações - ContaComigo
 """
 import logging
 from datetime import datetime, time

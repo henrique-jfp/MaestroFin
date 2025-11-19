@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Dashboard Web para Analytics do MaestroFin Bot
+Dashboard Web para Analytics do ContaComigo Bot
 Interface web limpa para visualizar métricas e estatísticas
 """
 
