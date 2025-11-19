@@ -20,6 +20,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -626,7 +627,7 @@ def save_pluggy_investments_to_db(item_id: str, pluggy_item_id: int, db) -> bool
                     )
                     db.add(snapshot)
                     
-                    logger.info(f"🔄 Investimento atualizado: {nome} = R$ {valor_atual}")
+                    logger.info(f"🔄 Investimento atualizado: {nome} - R$ {valor_atual}")
                 else:
                     # Criar novo investimento
                     new_inv = Investment(
@@ -844,93 +845,97 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
 
 def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
     """
-    Sincroniza transações de todas as contas do usuário.
-    
+    Synchronizes transactions for all user accounts in parallel.
+
     Args:
-        user_id: Telegram ID do usuário
-        days: Quantidade de dias para buscar transações
-    
+        user_id: Telegram ID of the user
+        days: Number of days to fetch transactions
+
     Returns:
-        Dict com estatísticas consolidadas
+        Consolidated statistics dictionary
     """
     try:
         from database.database import get_db
         from models import Usuario, PluggyItem, PluggyAccount
-        
+
         db = next(get_db())
-        
-        # Buscar usuário
+
+        # Fetch user
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario:
-            logger.error(f"❌ Usuário {user_id} não encontrado")
-            return {"error": "Usuário não encontrado"}
-        
-        # Buscar todos os items ativos do usuário
+            logger.error(f"❌ User {user_id} not found")
+            return {"error": "User not found"}
+
+        # Fetch all active items for the user
         items = db.query(PluggyItem).filter(
             PluggyItem.id_usuario == usuario.id,
             PluggyItem.status.in_(["UPDATED", "PARTIAL_SUCCESS"])
         ).all()
-        
+
         if not items:
-            logger.info(f"ℹ️  Usuário {user_id} não tem conexões ativas")
+            logger.info(f"ℹ️  User {user_id} has no active connections")
             return {"items": 0, "accounts": 0, "new": 0, "updated": 0}
-        
-        logger.info(f"🏦 {len(items)} item(s) encontrado(s) para sincronização")
-        
+
+        logger.info(f"🏦 {len(items)} item(s) found for synchronization")
+
         total_new = 0
         total_updated = 0
         total_accounts = 0
-        
-        for item in items:
-            logger.info(f"🔍 Processando item: {item.connector_name} (status: {item.status})")
-            
-            # 🆕 ATUALIZAR CONTAS E INVESTIMENTOS DO BANCO
-            try:
-                logger.info(f"🔄 Atualizando lista de contas e investimentos para {item.connector_name}...")
-                save_pluggy_accounts_to_db(item.pluggy_item_id)
-                logger.info(f"✅ Contas e investimentos atualizados")
-            except Exception as e:
-                logger.warning(f"⚠️  Erro ao atualizar contas: {e}")
-            
-            # Buscar accounts deste item (agora atualizadas!)
-            accounts = db.query(PluggyAccount).filter(
-                PluggyAccount.id_item == item.id
-            ).all()
-            
-            logger.info(f"📊 {len(accounts)} conta(s) encontrada(s) neste item")
-            
-            for account in accounts:
-                total_accounts += 1
-                
-                logger.info(f"💳 Sincronizando conta: {account.name} (tipo: {account.type}, subtipo: {account.subtype})")
-                
-                # Sincronizar transações desta account
-                stats = sync_transactions_for_account(
-                    account.id, 
-                    account.pluggy_account_id, 
-                    days
-                )
-                
-                if "error" in stats:
-                    logger.error(f"❌ Erro ao sincronizar conta {account.name}: {stats['error']}")
-                
-                total_new += stats.get("new", 0)
-                total_updated += stats.get("updated", 0)
-        
+
+        def process_account(account):
+            nonlocal total_new, total_updated
+            logger.info(f"💳 Synchronizing account: {account.name} (type: {account.type}, subtype: {account.subtype})")
+
+            # Synchronize transactions for this account
+            stats = sync_transactions_for_account(
+                account.id,
+                account.pluggy_account_id,
+                days
+            )
+
+            if "error" in stats:
+                logger.error(f"❌ Error synchronizing account {account.name}: {stats['error']}")
+
+            total_new += stats.get("new", 0)
+            total_updated += stats.get("updated", 0)
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for item in items:
+                logger.info(f"🔍 Processing item: {item.connector_name} (status: {item.status})")
+
+                # Update accounts and investments for the bank
+                try:
+                    logger.info(f"🔄 Updating account and investment list for {item.connector_name}...")
+                    save_pluggy_accounts_to_db(item.pluggy_item_id)
+                    logger.info(f"✅ Accounts and investments updated")
+                except Exception as e:
+                    logger.warning(f"⚠️  Error updating accounts: {e}")
+
+                # Fetch accounts for this item (now updated!)
+                accounts = db.query(PluggyAccount).filter(
+                    PluggyAccount.id_item == item.id
+                ).all()
+
+                logger.info(f"📊 {len(accounts)} account(s) found for this item")
+                total_accounts += len(accounts)
+
+                # Process accounts in parallel
+                executor.map(process_account, accounts)
+
         logger.info(
-            f"✅ Sincronização completa para usuário {user_id}: "
-            f"{total_new} novas transações em {total_accounts} contas"
+            f"✅ Synchronization complete for user {user_id}: "
+            f"{total_new} new transactions in {total_accounts} accounts"
         )
-        
+
         return {
             "items": len(items),
             "accounts": total_accounts,
             "new": total_new,
             "updated": total_updated
         }
-        
+
     except Exception as e:
-        logger.error(f"❌ Erro ao sincronizar usuário {user_id}: {e}", exc_info=True)
+        logger.error(f"❌ Error synchronizing user {user_id}: {e}", exc_info=True)
         return {"error": str(e)}
     finally:
         db.close()
@@ -1398,9 +1403,12 @@ class OpenFinanceOAuthHandler:
         cpf_masked = f"{cpf[:3]}.***.***-{cpf[-2:]}" if len(cpf) == 11 else "***"
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"✅ CPF recebido: `{cpf_masked}`\n🔄 Processando conexão...",
+            text=f"✅ CPF recebido: `{cpf_masked}`",
             parse_mode="Markdown"
         )
+        
+        # Inicia exibição de mensagens dinâmicas
+        await self.exibir_mensagens_dinamicas(context, update.effective_chat.id)
         
         status_msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -2209,7 +2217,7 @@ class OpenFinanceOAuthHandler:
                             ]
                             reply_markup = InlineKeyboardMarkup(keyboard)
                             
-                            # 🔍 DETECTAR SE É BRADESCO OU BANCO QUE EXIGE APP
+                            # 🔍 DETECTAR SE É BRADESCO/NUBANK OU BANCO QUE EXIGE APP
                             bank_lower = bank_name.lower()
                             is_bradesco = "bradesco" in bank_lower
                             is_nubank = "nubank" in bank_lower or "nu bank" in bank_lower
@@ -2223,18 +2231,20 @@ class OpenFinanceOAuthHandler:
                                     text=f"⏰ *A autorização está demorando\\.\\.\\.*\n\n"
                                          f"🏦 Banco: *{safe_bank_name}*\n"
                                          f"🆔 Conexão: `{item_id}`\n\n"
-                                         f"� *O Bradesco exige autorização pelo app oficial\\!*\n\n"
-                                         f"�🔍 *Como autorizar no App Bradesco:*\n"
-                                         f"1\\. Abra o *App Bradesco*\n"
-                                         f"2\\. Menu → *Open Finance* / *Compartilhar Dados*\n"
-                                         f"3\\. Procure *Maestro Financeiro* ou *Pluggy*\n"
-                                         f"4\\. Autorize o compartilhamento\n"
-                                         f"5\\. Volte aqui e clique *'Já Autorizei'*\n\n"
-                                         f"💡 *Não consegue encontrar?*\n"
-                                         f"Procure nas configurações por: _Consentimentos_, _Compartilhar Dados_ ou _Open Banking_\\.\n\n"
-                                         f"⚠️ Ignore se o link abrir uma página pedindo para baixar o app\\. Use o app que você já tem instalado\\.",
-                                    reply_markup=reply_markup,
-                                    parse_mode="MarkdownV2"
+                                         f"⚠️ *IMPORTANTE:* O {safe_bank_name} exige autorização pelo *app oficial*\\.\n\n"
+                                         f"📱 *Como autorizar no App {safe_bank_name}:*\n"
+                                         f"1\\. Abra o *App {safe_bank_name}* diretamente \\(não pelo link\\)\n"
+                                         f"2\\. Vá em: *Menu* → *Configurações* → *Open Finance* / *Open Banking*\n"
+                                         f"3\\. Procure por *Maestro Financeiro*, *Pluggy* ou *Novas Autorizações*\n"
+                                         f"4\\. Autorize o compartilhamento de dados financeiros\n"
+                                         f"5\\. Volte aqui e clique em *'Já Autorizei'*\n\n"
+                                         f"🍎 *Problema no iPhone?*\n"
+                                         f"• Links podem não abrir o app automaticamente no iOS\n"
+                                         f"• Ignore se abrir página pedindo para baixar o app\n"
+                                         f"• Abra o app manualmente e procure *Open Finance* nas configurações\n"
+                                         f"• Se não encontrar, tente: *Perfil* → *Privacidade* → *Dados Compartilhados*\n\n"
+                                         f"🔗 *Link OAuth* \\(apenas se o app solicitar\\):\n"
+                                         f"`{oauth_url}`"
                                 )
                             else:
                                 # 🌐 Instruções genéricas para outros bancos
@@ -2257,7 +2267,7 @@ class OpenFinanceOAuthHandler:
                             await context.bot.send_message(
                                 chat_id=user_id,
                                 text=f"⏰ *A autorização está demorando\\.\\.\\.*\n\n"
-                                     f"🏦 Banco: *{safe_bank_name}*\n\n"
+                                     f"🏦 {safe_bank_name}\n\n"
                                      f"⚠️ Por favor, verifique se você completou a autorização no site do banco\\.\n\n"
                                      f"Use /minhas\\_contas para verificar se a conexão foi estabelecida\\.",
                                 parse_mode="MarkdownV2"
@@ -2490,6 +2500,8 @@ class OpenFinanceOAuthHandler:
             # IMPORTANTE: Para cartões de crédito, a lógica é INVERTIDA!
             # - Gastos no cartão: amount > 0 (mas é DESPESA)
             # - Pagamento de fatura: amount < 0 (mas é CRÉDITO/redução da dívida)
+            # 
+            # Nossa lógica: amount > 0 no CC = DESPESA, amount < 0 = pagamento (ignorar)
             from models import PluggyAccount
             account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
             
@@ -2615,9 +2627,11 @@ class OpenFinanceOAuthHandler:
                 account = db.query(PluggyAccount).filter(PluggyAccount.id == txn.id_account).first()
                 is_credit_card = account and account.type == "CREDIT"
 
-                # Para cartão de crédito, pular pagamentos de fatura
+                # Para cartão: amount > 0 = GASTO (vermelho), amount < 0 = pagamento (verde)
+                # Para conta normal: amount < 0 = GASTO (vermelho), amount > 0 = receita (verde)
                 if is_credit_card and float(txn.amount) < 0:
-                    logger.info(f"⏭️ Transação {txn.id} é pagamento de fatura - pulando")
+                    # Ignorar pagamento de fatura
+                    logger.info(f"⏭️ Ignorando pagamento de fatura: {txn.id} - {txn.description}")
                     txn.imported_to_lancamento = True
                     skipped_count += 1
                     continue
