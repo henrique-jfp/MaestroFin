@@ -268,6 +268,12 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         # 5. Renderizar o template HTML com os dados
         logger.info("Renderizando template HTML...")
         try:
+            # Adicionar utilitários ao contexto (ex.: now()) para uso no template
+            contexto_dados['now'] = datetime.now
+            # Garantir que mes_nome e ano estejam corretos para o período solicitado
+            contexto_dados['mes_nome'] = contexto_dados.get('mes_nome') or data_alvo.strftime('%B')
+            contexto_dados['ano'] = contexto_dados.get('ano') or ano_alvo
+
             # Usar o template limpo e validado
             template = env.get_template('relatorio_clean.html')
             html_renderizado = template.render(contexto_dados)
