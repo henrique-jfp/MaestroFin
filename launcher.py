@@ -1,22 +1,67 @@
-#!/usr/bin/env python3
 """
-🚀 CONTA COMIGO - Launcher Principal para Render
-Launcher unificado e otimizado para produção
+🚀 CONTA COMIGO - Launcher Principal
+Launcher unificado, robusto e otimizado para produção.
 """
 
 import os
 import sys
 import logging
-import asyncio
-from threading import Thread
 import signal
+from enum import Enum, auto
+from threading import Thread
+from dataclasses import dataclass
 
-# Configurar logging básico
+# Configuração de logging no nível do módulo para ser consistente
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class ExecutionMode(Enum):
+    """Define os modos de execução possíveis para a aplicação."""
+    BOT = auto()
+    DASHBOARD = auto()
+    LOCAL_DEV = auto() # Modo que roda ambos, bot e dashboard
+
+@dataclass(frozen=True)
+class AppSettings:
+    """Configurações da aplicação derivadas do ambiente."""
+    mode: ExecutionMode
+
+def get_settings() -> AppSettings:
+    """
+    Determina o modo de execução com base nas variáveis de ambiente.
+    A lógica é explícita e prioriza a configuração manual.
+    """
+    # 1. Prioridade máxima: Variável de ambiente explícita
+    mode_str = os.getenv('CONTACOMIGO_MODE', '').lower()
+    if mode_str == 'bot':
+        logger.info("🔍 Modo detectado: BOT (via CONTACOMIGO_MODE)")
+        return AppSettings(mode=ExecutionMode.BOT)
+    if mode_str == 'dashboard':
+        logger.info("🔍 Modo detectado: DASHBOARD (via CONTACOMIGO_MODE)")
+        return AppSettings(mode=ExecutionMode.DASHBOARD)
+
+    # 2. Detecção automática de ambiente de produção
+    if os.getenv('RAILWAY_ENVIRONMENT'):
+        logger.info("🔍 Modo detectado: BOT (ambiente Railway)")
+        return AppSettings(mode=ExecutionMode.BOT)
+    
+    # Exemplo para Render (mais robusto que checar a variável 'RENDER')
+    if os.getenv('RENDER_INSTANCE_ID'):
+        service_type = os.getenv('RENDER_SERVICE_TYPE', 'web')
+        if service_type == 'web':
+            logger.info("🔍 Modo detectado: DASHBOARD (Render Web Service)")
+            return AppSettings(mode=ExecutionMode.DASHBOARD)
+        else: # 'worker' ou outro tipo
+            logger.info("🔍 Modo detectado: BOT (Render Worker)")
+            return AppSettings(mode=ExecutionMode.BOT)
+
+    # 3. Fallback para ambiente de desenvolvimento local
+    logger.info("🔍 Modo detectado: LOCAL_DEV (nenhum ambiente de produção detectado)")
+    return AppSettings(mode=ExecutionMode.LOCAL_DEV)
 
 def load_environment():
     """Carrega variáveis de ambiente"""
@@ -187,64 +232,36 @@ def apply_migrations():
         # Não falhar a aplicação por causa de migration
         # As tabelas podem já existir ou ser criadas depois
 
-def main():
-    """Função principal"""
+def main() -> None:
+    """
+    Ponto de entrada principal da aplicação.
+    Orquestra a inicialização baseada nas configurações detectadas.
+    """
     logger.info("🚀 Iniciando Conta Comigo...")
     
-    # Configurar handler de sinais
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
-    # Carregar ambiente
+
     if not load_environment():
         logger.error("❌ Falha ao carregar ambiente. Encerrando...")
         sys.exit(1)
-    
-    # Aplicar migrations
+
     apply_migrations()
     
-    # Verificar modo de execução
-    # Priorizar variável manual CONTACOMIGO_MODE
-    force_mode = os.getenv('CONTACOMIGO_MODE', '').lower()
-    port = os.getenv('PORT')
-    is_render = os.getenv('RENDER') or os.getenv('RAILWAY_ENVIRONMENT')
-    
-    logger.info(f"🔍 Detecção de modo:")
-    logger.info(f"  CONTACOMIGO_MODE={force_mode}")
-    logger.info(f"  PORT={port}")
-    logger.info(f"  RENDER={os.getenv('RENDER')}")
-    logger.info(f"  RAILWAY_ENVIRONMENT={os.getenv('RAILWAY_ENVIRONMENT')}")
-    logger.info(f"  is_render={is_render}")
-    
-    # Se CONTACOMIGO_MODE está setado, usar ele
-    if force_mode == 'bot':
-        logger.info("🤖 Modo FORÇADO: BOT (via CONTACOMIGO_MODE=bot)")
+    settings = get_settings()
+
+    if settings.mode == ExecutionMode.BOT:
         start_telegram_bot()
-        
-    elif force_mode == 'dashboard':
-        logger.info("🌐 Modo FORÇADO: DASHBOARD (via CONTACOMIGO_MODE=dashboard)")
+    elif settings.mode == ExecutionMode.DASHBOARD:
         start_dashboard()
-        
-    elif port and is_render:
-        # Modo web - rodar dashboard Flask (Render Web Service)
-        logger.info("🌐 Modo WEB (Render): Iniciando dashboard Flask")
-        start_dashboard()
-        
-    elif is_render and not port:
-        # Modo worker - rodar bot Telegram (Render Worker)
-        logger.info("🤖 Modo WORKER (Render): Iniciando bot Telegram")
-        start_telegram_bot()
-        
-    else:
-        # Modo local - rodar ambos em threads separadas
-        logger.info("🔄 Modo LOCAL: Iniciando bot e dashboard")
-        
-        # Thread para o bot
+    elif settings.mode == ExecutionMode.LOCAL_DEV:
+        logger.info("🔄 Modo LOCAL: Iniciando bot em uma thread e dashboard no processo principal.")
         bot_thread = Thread(target=start_telegram_bot, daemon=True)
         bot_thread.start()
-        
-        # Dashboard na thread principal
         start_dashboard()
+    else:
+        logger.error(f"❌ Modo de execução desconhecido: {settings.mode}. Encerrando.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
