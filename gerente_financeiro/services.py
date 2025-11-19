@@ -258,21 +258,35 @@ def gerar_contexto_relatorio(db: Session, telegram_id: int, mes: int, ano: int):
 
     data_alvo = datetime(ano, mes, 1)
     periodo_alvo = pd.Period(data_alvo, freq='M')
-    data_inicio_historico = data_alvo - relativedelta(months=5)
-
-    def buscar_dados_periodo(data_inicio, data_fim):
-        # A busca já otimiza carregando a categoria junto
-        return db.query(Lancamento).filter(
-            and_(
-                Lancamento.id_usuario == usuario_q.id,
-                Lancamento.data_transacao >= data_inicio,
-                Lancamento.data_transacao < data_fim
-            )
-        ).options(joinedload(Lancamento.categoria)).all()
 
     # Busca todos os lançamentos do período, incluindo transferências
-    lancamentos_mes_atual = buscar_dados_periodo(data_alvo, data_alvo + relativedelta(months=1))
-    lancamentos_historico_6m = buscar_dados_periodo(data_inicio_historico, data_alvo + relativedelta(months=1))
+    lancamentos_mes_atual = db.query(Lancamento).filter(
+        and_(
+            Lancamento.id_usuario == usuario_q.id,
+            extract('year', Lancamento.data_transacao) == ano,
+            extract('month', Lancamento.data_transacao) == mes
+        )
+    ).options(joinedload(Lancamento.categoria)).all()
+
+    # Busca histórico de 6 meses usando extract para evitar problemas de timezone
+    from sqlalchemy import or_
+    historico_conditions = []
+    temp_date = data_alvo
+    for _ in range(6):
+        historico_conditions.append(
+            and_(
+                extract('year', Lancamento.data_transacao) == temp_date.year,
+                extract('month', Lancamento.data_transacao) == temp_date.month
+            )
+        )
+        temp_date -= relativedelta(months=1)
+
+    lancamentos_historico_6m = db.query(Lancamento).filter(
+        and_(
+            Lancamento.id_usuario == usuario_q.id,
+            or_(*historico_conditions)
+        )
+    ).options(joinedload(Lancamento.categoria)).all()
 
     mes_nome_str = data_alvo.strftime("%B").capitalize()
 
