@@ -634,7 +634,7 @@ HELP_TEXTS = {
         "   • Visualize todas as suas contas conectadas com saldo atualizado em tempo real.\n\n"
         "🔄  <code>/sincronizar</code>\n"
         "   • Sincronize manualmente suas transações dos últimos 30 dias de todas as contas conectadas.\n\n"
-        "📥  <code>/importar_transacoes</code>\n"
+        "📥  <code>/importar</code>\n"
         "   • Veja as transações pendentes e importe com <b>1 clique</b>. A categorização é feita automaticamente de forma inteligente!\n\n"
         "🧯  <code>/categorizar</code>\n"
         "   • <b>Extintor de Incêndio!</b> Se alguma transação importada ficou sem categoria, use este comando para categorizar tudo automaticamente com IA.\n\n"
@@ -1354,6 +1354,66 @@ async def gerar_resposta_ia(update, context, prompt, user_question, usuario_db, 
     except Exception as e:
         logger.error(f"Erro geral e inesperado em gerar_resposta_ia: {e}", exc_info=True)
         await enviar_resposta_erro(context.bot, usuario_db.telegram_id)
+
+# --- HANDLERS DE OPEN FINANCE ---
+
+@track_analytics("importar_of")
+async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Importa transações pendentes do Open Finance para a tabela de lançamentos.
+    """
+    user_id = update.effective_user.id
+    db = next(get_db())
+    try:
+        from open_finance.service import OpenFinanceService
+        service = OpenFinanceService(db)
+        
+        pending_txns = service.get_pending_transactions(user_id)
+        
+        if not pending_txns:
+            await update.message.reply_html("🎉 Nenhuma transação nova para importar. Você está em dia!")
+            return
+
+        status_msg = await update.message.reply_html(f"📥 Encontrei <b>{len(pending_txns)}</b> transações. Importando e categorizando com IA...")
+
+        imported_count = 0
+        for tx in pending_txns:
+            # Lógica para evitar duplicatas na tabela de lançamentos
+            existing_lancamento = db.query(Lancamento).filter(
+                Lancamento.descricao == tx.description,
+                Lancamento.valor == tx.amount,
+                Lancamento.data_transacao == tx.date,
+                Lancamento.id_usuario == tx.account.item.id_usuario
+            ).first()
+
+            if not existing_lancamento:
+                new_lancamento = Lancamento(
+                    id_usuario=tx.account.item.id_usuario,
+                    descricao=tx.description,
+                    valor=abs(tx.amount),
+                    tipo='Saída' if tx.amount < 0 else 'Entrada',
+                    data_transacao=tx.date,
+                    forma_pagamento=tx.account.item.connector_name, # Nome do banco
+                    # Categoria será definida depois pelo /categorizar
+                )
+                db.add(new_lancamento)
+                tx.imported_to_lancamento = True
+                tx.id_lancamento = new_lancamento.id
+                imported_count += 1
+        
+        db.commit()
+        
+        await status_msg.edit_text(
+            f"✅ <b>Importação Concluída!</b>\n\n"
+            f"<b>{imported_count}</b> novas transações foram adicionadas aos seus lançamentos.\n\n"
+            f"💡 <b>Dica:</b> Use o comando <code>/categorizar</code> para organizar tudo com inteligência artificial!"
+        )
+
+    except Exception as e:
+        logger.error(f"Erro em importar_transacoes_of: {e}", exc_info=True)
+        await update.message.reply_html("❌ Ops! Ocorreu um erro ao importar as transações. Tente novamente.")
+    finally:
+        db.close()
 
 # --- HANDLER PARA CALLBACK DE ANÁLISE DE IMPACTO ---
 
