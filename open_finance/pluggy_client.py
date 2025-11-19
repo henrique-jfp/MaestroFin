@@ -1,348 +1,147 @@
 """
-🔌 Cliente Pluggy API - Open Finance
-Cliente HTTP para comunicação com API Pluggy
-Documentação: https://docs.pluggy.ai
-"""
+open_finance/pluggy_client.py
 
+Módulo cliente para a API da Pluggy.
+Responsabilidade Única: Encapsular toda a comunicação HTTP com a API da Pluggy,
+gerenciando autenticação, requisições e tratamento de erros de API.
+Este módulo é agnóstico ao Telegram e ao nosso banco de dados.
+"""
 import os
 import logging
-import requests
+import time
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
+import requests
+from requests import Response
+import json # Adicionado para o decode de erro
+
+# Configurações
+PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID")
+PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET")
+PLUGGY_BASE_URL = "https://api.pluggy.ai"
+
 logger = logging.getLogger(__name__)
 
+# Cache em memória para a API Key
+_api_key_cache: Dict[str, any] = {"key": None, "expires_at": None}
+
+
+class PluggyClientError(Exception):
+    """Exceção base para erros do cliente Pluggy."""
+    def __init__(self, message: str, status_code: Optional[int] = None, details: Optional[Dict] = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.details = details or {}
 
 class PluggyClient:
-    """Cliente para API Pluggy - Open Finance"""
-    
-    BASE_URL = "https://api.pluggy.ai"
-    
-    def __init__(self, client_id: Optional[str] = None, client_secret: Optional[str] = None):
-        """
-        Inicializa cliente Pluggy
-        
-        Args:
-            client_id: Client ID do Pluggy (ou variável PLUGGY_CLIENT_ID)
-            client_secret: Client Secret (ou variável PLUGGY_CLIENT_SECRET)
-        """
-        self.client_id = client_id or os.getenv('PLUGGY_CLIENT_ID')
-        self.client_secret = client_secret or os.getenv('PLUGGY_CLIENT_SECRET')
-        
-        if not self.client_id or not self.client_secret:
-            raise ValueError(
-                "❌ Credenciais Pluggy não encontradas! "
-                "Configure PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET"
-            )
-        
-        self._api_key = None
-        self._api_key_expires_at = None
-        
-        logger.info("✅ Cliente Pluggy inicializado")
-    
-    def _get_api_key(self) -> str:
-        """Obtém API Key (com cache)"""
-        now = datetime.now()
-        
-        # Se já tem key válida, retornar
-        if self._api_key and self._api_key_expires_at and now < self._api_key_expires_at:
-            return self._api_key
-        
-        # Gerar nova API Key
-        logger.info("🔑 Gerando nova API Key...")
-        
-        url = f"{self.BASE_URL}/auth"
-        
-        payload = {
-            "clientId": self.client_id,
-            "clientSecret": self.client_secret,
-        }
-        headers = {"Content-Type": "application/json"}
+    """Um cliente HTTP para a API da Pluggy."""
 
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        self._api_key = data['apiKey']
-        
-        # API Key expira em 24h
-        self._api_key_expires_at = now + timedelta(hours=24)
-        
-        logger.info("✅ API Key obtida com sucesso")
-        return self._api_key
-    
-    def _make_request(
-        self, 
-        method: str, 
-        endpoint: str, 
-        data: Optional[Dict] = None,
-        params: Optional[Dict] = None
-    ) -> Dict:
-        """
-        Faz requisição HTTP para API Pluggy
-        
-        Args:
-            method: GET, POST, PATCH, DELETE
-            endpoint: Endpoint da API (ex: /items)
-            data: Dados JSON para POST/PATCH
-            params: Query parameters
+    def __init__(self, timeout: int = 45):
+        self.timeout = timeout
+        self.api_key = self._get_api_key()
+
+    def _get_api_key(self) -> str:
+        """Obtém uma API Key da Pluggy, utilizando um cache de 23 horas."""
+        now = datetime.now()
+        if _api_key_cache.get("key") and _api_key_cache.get("expires_at", now) > now:
+            return _api_key_cache["key"]
+
+        logger.info("🔑 Obtendo nova API Key da Pluggy...")
+        if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
+            raise PluggyClientError("PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET devem ser configurados.")
+
+        try:
+            response = requests.post(
+                f"{PLUGGY_BASE_URL}/auth",
+                json={"clientId": PLUGGY_CLIENT_ID, "clientSecret": PLUGGY_CLIENT_SECRET},
+                headers={"Content-Type": "application/json"},
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+            data = response.json()
             
-        Returns:
-            Resposta JSON da API
-        """
-        api_key = self._get_api_key()
-        
-        url = f"{self.BASE_URL}{endpoint}"
+            _api_key_cache["key"] = data["apiKey"]
+            _api_key_cache["expires_at"] = now + timedelta(hours=23)
+            
+            logger.info("✅ API Key da Pluggy obtida e cacheada com sucesso.")
+            return data["apiKey"]
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Erro de rede ao obter API Key da Pluggy: {e}")
+            raise PluggyClientError(f"Erro de rede ao autenticar com a Pluggy: {e}")
+
+    def _request(self, method: str, endpoint: str, **kwargs) -> Response:
+        """Executa uma requisição autenticada para a API da Pluggy."""
+        url = f"{PLUGGY_BASE_URL}{endpoint}"
         headers = {
-            "X-API-KEY": api_key,
-            "Content-Type": "application/json"
+            "X-API-KEY": self.api_key,
+            "Content-Type": "application/json",
+            **kwargs.pop("headers", {})
         }
-        
+
         try:
             response = requests.request(
                 method=method,
                 url=url,
                 headers=headers,
-                json=data,
-                params=params,
-                timeout=30
+                timeout=self.timeout,
+                **kwargs
             )
             response.raise_for_status()
-            return response.json()
-            
+            return response
         except requests.exceptions.HTTPError as e:
-            logger.error(f"❌ Erro HTTP {response.status_code}: {e}")
-            logger.error(f"Response: {response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"❌ Erro ao fazer requisição: {e}")
-            raise
-    
-    # ==================== CONNECTORS ====================
-    
-    def list_connectors(self, country: str = "BR") -> List[Dict]:
-        """
-        Lista instituições financeiras disponíveis
-        
-        Args:
-            country: Código do país (BR, MX, AR, etc)
+            details = {}
+            try:
+                details = e.response.json()
+            except json.JSONDecodeError:
+                details = {"raw_response": e.response.text}
             
-        Returns:
-            Lista de conectores disponíveis
-        """
-        logger.info(f"📋 Listando conectores do país: {country}")
-        
-        params = {"countries": country}
-        result = self._make_request("GET", "/connectors", params=params)
-        
-        connectors = result.get('results', [])
-        logger.info(f"✅ {len(connectors)} conectores encontrados")
-        
-        return connectors
-    
-    def get_connector(self, connector_id: int) -> Dict:
-        """Obtém detalhes de um conector específico"""
-        return self._make_request("GET", f"/connectors/{connector_id}")
-    
-    # ==================== ITEMS (Conexões) ====================
-    
-    def create_item(self, connector_id: int, credentials: Dict) -> Dict:
-        """
-        Cria conexão com instituição financeira (Item)
-        
-        Args:
-            connector_id: ID do conector (banco)
-            credentials: Credenciais de login
-                Ex: {"username": "cpf", "password": "senha"}
-                
-        Returns:
-            Item criado com status da conexão
-        """
-        logger.info(f"🔗 Criando conexão com conector {connector_id}...")
-        
-        data = {
-            "connectorId": connector_id,
-            "parameters": credentials
-        }
-        
-        item = self._make_request("POST", "/items", data=data)
-        logger.info(f"✅ Item criado: {item.get('id')}")
-        
-        return item
-    
+            logger.error(f"❌ Erro HTTP {e.response.status_code} em {method} {endpoint}: {details}")
+            raise PluggyClientError(
+                f"Erro na API Pluggy: {details.get('message', e.response.reason)}",
+                status_code=e.response.status_code,
+                details=details
+            )
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Erro de rede em {method} {endpoint}: {e}")
+            raise PluggyClientError(f"Erro de rede ao comunicar com a Pluggy: {e}")
+
+    # --- MÉTODOS DE SERVIÇO ---
+
+    def get_connectors(self) -> List[Dict]:
+        """Busca a lista de conectores (bancos) disponíveis no Brasil."""
+        logger.info("Buscando conectores da Pluggy...")
+        response = self._request("GET", "/connectors", params={"countries": "BR", "pageSize": 500})
+        return response.json().get("results", [])
+
+    def create_item(self, connector_id: int, parameters: Dict) -> Dict:
+        """Cria um novo 'item' (conexão) para um conector específico."""
+        logger.info(f"Criando item para o conector {connector_id}...")
+        payload = {"connectorId": connector_id, "parameters": parameters}
+        response = self._request("POST", "/items", json=payload)
+        return response.json()
+
     def get_item(self, item_id: str) -> Dict:
-        """Obtém detalhes de uma conexão (Item)"""
-        return self._make_request("GET", f"/items/{item_id}")
-    
-    def update_item(self, item_id: str, credentials: Dict) -> Dict:
-        """Atualiza credenciais de uma conexão"""
-        logger.info(f"🔄 Atualizando item {item_id}...")
-        
-        data = {"parameters": credentials}
-        return self._make_request("PATCH", f"/items/{item_id}", data=data)
-    
-    def delete_item(self, item_id: str) -> bool:
-        """Remove conexão com banco"""
-        logger.info(f"🗑️ Removendo item {item_id}...")
-        
-        try:
-            self._make_request("DELETE", f"/items/{item_id}")
-            logger.info("✅ Item removido com sucesso")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Erro ao remover item: {e}")
-            return False
-    
-    # ==================== ACCOUNTS (Contas) ====================
-    
+        """Busca os detalhes e o status de um 'item'."""
+        logger.debug(f"Buscando detalhes do item {item_id}...")
+        response = self._request("GET", f"/items/{item_id}")
+        return response.json()
+
+    def delete_item(self, item_id: str) -> None:
+        """Deleta um 'item' (conexão)."""
+        logger.info(f"Deletando item {item_id}...")
+        self._request("DELETE", f"/items/{item_id}")
+        logger.info(f"Item {item_id} deletado com sucesso.")
+
     def list_accounts(self, item_id: str) -> List[Dict]:
-        """
-        Lista contas bancárias de uma conexão
-        
-        Args:
-            item_id: ID da conexão (Item)
-            
-        Returns:
-            Lista de contas (corrente, poupança, cartão)
-        """
-        logger.info(f"💳 Listando contas do item {item_id}...")
-        
-        result = self._make_request("GET", f"/accounts?itemId={item_id}")
-        
-        accounts = result.get('results', [])
-        logger.info(f"✅ {len(accounts)} contas encontradas")
-        
-        return accounts
-    
-    def get_account(self, account_id: str) -> Dict:
-        """Obtém detalhes de uma conta específica"""
-        return self._make_request("GET", f"/accounts/{account_id}")
-    
-    # ==================== TRANSACTIONS (Transações) ====================
-    
-    def list_transactions(
-        self, 
-        account_id: str,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-        page_size: int = 100
-    ) -> List[Dict]:
-        """
-        Lista transações de uma conta
-        
-        Args:
-            account_id: ID da conta
-            from_date: Data inicial (default: 30 dias atrás)
-            to_date: Data final (default: hoje)
-            page_size: Itens por página
-            
-        Returns:
-            Lista de transações
-        """
-        if not from_date:
-            from_date = datetime.now() - timedelta(days=30)
-        if not to_date:
-            to_date = datetime.now()
-        
-        logger.info(
-            f"💰 Listando transações de {from_date.date()} a {to_date.date()}..."
-        )
-        
-        params = {
-            "accountId": account_id,
-            "from": from_date.strftime("%Y-%m-%d"),
-            "to": to_date.strftime("%Y-%m-%d"),
-            "pageSize": page_size
-        }
-        
-        result = self._make_request("GET", "/transactions", params=params)
-        
-        transactions = result.get('results', [])
-        logger.info(f"✅ {len(transactions)} transações encontradas")
-        
-        return transactions
-    
-    # ==================== INVESTMENTS (Investimentos) ====================
-    
-    def list_investments(self, item_id: str) -> List[Dict]:
-        """
-        Lista investimentos de uma conexão
-        
-        Args:
-            item_id: ID da conexão
-            
-        Returns:
-            Lista de investimentos (CDB, LCI, ações, etc)
-        """
-        logger.info(f"📈 Listando investimentos do item {item_id}...")
-        
-        result = self._make_request("GET", f"/investments?itemId={item_id}")
-        
-        investments = result.get('results', [])
-        logger.info(f"✅ {len(investments)} investimentos encontrados")
-        
-        return investments
-    
-    # ==================== IDENTITY (Dados pessoais) ====================
-    
-    def get_identity(self, item_id: str) -> Dict:
-        """
-        Obtém dados pessoais do usuário
-        
-        Args:
-            item_id: ID da conexão
-            
-        Returns:
-            Nome, CPF, email, telefone, endereço
-        """
-        logger.info(f"👤 Obtendo dados de identidade do item {item_id}...")
-        
-        result = self._make_request("GET", f"/identity?itemId={item_id}")
-        
-        identity = result.get('results', [{}])[0] if result.get('results') else {}
-        return identity
-    
-    # ==================== WEBHOOKS ====================
-    
-    def create_webhook(self, url: str, event: str) -> Dict:
-        """
-        Cria webhook para receber notificações
-        
-        Args:
-            url: URL que receberá POST requests
-            event: Tipo de evento (item/*, accounts/*, transactions/*)
-            
-        Returns:
-            Webhook criado
-        """
-        logger.info(f"🔔 Criando webhook para evento {event}...")
-        
-        data = {
-            "event": event,
-            "url": url
-        }
-        
-        return self._make_request("POST", "/webhooks", data=data)
-    
-    def list_webhooks(self) -> List[Dict]:
-        """Lista webhooks configurados"""
-        result = self._make_request("GET", "/webhooks")
-        return result.get('results', [])
+        """Lista todas as contas associadas a um 'item'."""
+        logger.info(f"Listando contas para o item {item_id}...")
+        response = self._request("GET", "/accounts", params={"itemId": item_id, "pageSize": 500})
+        return response.json().get("results", [])
 
-
-# ==================== HELPER FUNCTIONS ====================
-
-def format_currency(value: float) -> str:
-    """Formata valor monetário"""
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def format_account_type(account_type: str) -> str:
-    """Traduz tipo de conta"""
-    types = {
-        "BANK": "🏦 Conta Corrente",
-        "CREDIT": "💳 Cartão de Crédito",
-        "SAVINGS": "🐷 Poupança",
-        "INVESTMENT": "📈 Investimentos"
-    }
-    return types.get(account_type, account_type)
+    def list_transactions(self, account_id: str, from_date: str) -> List[Dict]:
+        """Lista as transações de uma conta a partir de uma data."""
+        logger.info(f"Listando transações da conta {account_id} a partir de {from_date}...")
+        params = {"accountId": account_id, "from": from_date, "pageSize": 500}
+        response = self._request("GET", "/transactions", params=params)
+        return response.json().get("results", [])
