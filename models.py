@@ -322,8 +322,12 @@ class PluggyAccount(Base):
     balance = Column(Numeric(15, 2), nullable=True)  # Saldo atual
     currency_code = Column(String(3), default="BRL")  # BRL, USD, etc
     
-    # Limite de crédito (apenas para cartões)
+        # Limite de crédito (apenas para cartões)
     credit_limit = Column(Numeric(15, 2), nullable=True)
+    credit_level = Column(String, nullable=True)
+    credit_brand = Column(String, nullable=True)
+    credit_closing_date = Column(String, nullable=True)
+    credit_due_date = Column(String, nullable=True)
     
     # Metadata
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

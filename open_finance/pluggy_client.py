@@ -139,6 +139,12 @@ class PluggyClient:
         response = self._request("GET", "/accounts", params={"itemId": item_id, "pageSize": 500})
         return response.json().get("results", [])
 
+    def get_credit_card(self, account_id: str) -> Dict:
+        """Busca os detalhes específicos de um cartão de crédito."""
+        logger.info(f"Buscando detalhes do cartão de crédito {account_id}...")
+        response = self._request("GET", f"/accounts/{account_id}/credit-card")
+        return response.json()
+
     def list_transactions(self, account_id: str, from_date: str) -> List[Dict]:
         """Lista as transações de uma conta a partir de uma data."""
         logger.info(f"Listando transações da conta {account_id} a partir de {from_date}...")

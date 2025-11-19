@@ -135,16 +135,24 @@ class OpenFinanceService:
                     for tx_data in transactions_data:
                         existing_tx = self.db.query(PluggyTransaction).filter(PluggyTransaction.pluggy_transaction_id == tx_data['id']).first()
                         if not existing_tx:
-                            new_tx = PluggyTransaction(
-                                id_account=acc.id,
-                                pluggy_transaction_id=tx_data['id'],
-                                description=tx_data['description'],
-                                amount=tx_data['amount'],
-                                date=datetime.strptime(tx_data['date'], "%Y-%m-%d").date(),
-                                type=tx_data.get('type'),
-                                category=tx_data.get('category'),
-                                merchant_name=tx_data.get('merchantName')
-                            )
+                                date_str = tx_data['date']
+                                try:
+                                    # Tenta o formato completo primeiro (ISO 8601)
+                                    date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+                                except ValueError:
+                                    # Fallback para o formato simples
+                                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+                                new_tx = PluggyTransaction(
+                                    id_account=acc.id,
+                                    pluggy_transaction_id=tx_data['id'],
+                                    description=tx_data['description'],
+                                    amount=tx_data['amount'],
+                                    date=date_obj,
+                                    type=tx_data.get('type'),
+                                    category=tx_data.get('category'),
+                                    merchant_name=tx_data.get('merchantName')
+                                )
                             self.db.add(new_tx)
                             total_new_txns += 1
                 except PluggyClientError as e:
