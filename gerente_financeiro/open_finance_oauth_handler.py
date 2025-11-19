@@ -2448,7 +2448,7 @@ class OpenFinanceOAuthHandler:
                 f"✅ *Sincronização Concluída\\!*\n\n"
                 f"📊 *Resultados:*\n"
                 f"💳 {result.get('accounts', 0)} conta\\(s\\)\n"
-                f"📝 {result.get('new', 0)} nova\\(s\\) transação\\(ões\\)\n"
+                f"📝 {result.get('new', 0)} nova\\(s\\) transação\\(ões\\)* encontrada\\(s\\)\\!\n"
                 f"🔄 {result.get('updated', 0)} atualizada\\(s\\)\n\n"
                 f"Use /minhas\\_contas para ver os detalhes\\!",
                 parse_mode="MarkdownV2"

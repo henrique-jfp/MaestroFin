@@ -729,3 +729,5 @@ class BankConnector:
                 "total_transactions": 0,
                 "total_investments": 0
             }
+
+__all__ = ['BankConnector', 'fetch_bank_connection_stats']
