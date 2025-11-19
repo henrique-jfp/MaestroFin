@@ -678,3 +678,54 @@ class BankConnector:
         except Exception as exc:
             logger.error(f"❌ Erro ao continuar conexão {item_id}: {exc}")
             raise
+
+    def fetch_bank_connection_stats(self, connection_id: int) -> Dict[str, int]:
+        """
+        Obtém estatísticas de uma conexão bancária, como número de transações e investimentos.
+
+        Args:
+            connection_id: ID da conexão bancária.
+
+        Returns:
+            Um dicionário contendo as estatísticas da conexão.
+        """
+        logger.info(f"🔍 Obtendo estatísticas para conexão {connection_id}...")
+
+        try:
+            with engine.connect() as conn:
+                # Contar transações
+                result = conn.execute(
+                    text("""
+                        SELECT COUNT(*) as total_transactions
+                        FROM bank_transactions bt
+                        JOIN bank_accounts ba ON bt.account_id = ba.id
+                        WHERE ba.connection_id = :connection_id
+                    """),
+                    {"connection_id": connection_id}
+                )
+                total_transactions = result.scalar() or 0
+
+                # Contar investimentos (exemplo fictício, ajustar conforme necessário)
+                result = conn.execute(
+                    text("""
+                        SELECT COUNT(*) as total_investments
+                        FROM investments i
+                        JOIN bank_accounts ba ON i.account_id = ba.id
+                        WHERE ba.connection_id = :connection_id
+                    """),
+                    {"connection_id": connection_id}
+                )
+                total_investments = result.scalar() or 0
+
+            logger.info(f"✅ Estatísticas obtidas para conexão {connection_id}")
+            return {
+                "total_transactions": total_transactions,
+                "total_investments": total_investments
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao obter estatísticas para conexão {connection_id}: {e}", exc_info=True)
+            return {
+                "total_transactions": 0,
+                "total_investments": 0
+            }
