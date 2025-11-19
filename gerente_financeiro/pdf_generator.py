@@ -147,7 +147,15 @@ def create_elegant_footer(canvas_obj, doc):
     
     # Stamp com short commit hash (útil para identificar versão do gerador)
     try:
-        commit_short = _get_short_git_commit()
+        # Primeiro tenta obter da variável passada pelo contexto (se disponível no canvas via doc)
+        commit_short = None
+        try:
+            # context stamp pode ser injetado em doc.build via doc.build_kwargs - se não, fallback no git
+            commit_short = getattr(doc, 'build_stamp', None)
+        except Exception:
+            commit_short = None
+        if not commit_short:
+            commit_short = _get_short_git_commit()
         canvas_obj.setFont("Helvetica", 6)
         canvas_obj.setFillColor(HexColor('#9ca3af'))
         canvas_obj.drawRightString(A4[0] - 2*cm, 0.6*cm, f"build: {commit_short}")
@@ -169,6 +177,31 @@ def register_fonts_if_available():
             pdfmetrics.registerFont(TTFont('DejaVuSans', possible_paths[0]))
         if os.path.exists(possible_paths[1]):
             pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', possible_paths[1]))
+        # Tenta registrar Inter caso esteja embutida no projeto ou disponibilizada no sistema
+        inter_regular_paths = [
+            os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts', 'Inter-Regular.ttf'),
+            '/usr/share/fonts/truetype/inter/Inter-Regular.ttf',
+            '/usr/share/fonts/truetype/inter/Inter-Regular.otf'
+        ]
+        inter_bold_paths = [
+            os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts', 'Inter-Bold.ttf'),
+            '/usr/share/fonts/truetype/inter/Inter-Bold.ttf',
+            '/usr/share/fonts/truetype/inter/Inter-Bold.otf'
+        ]
+        for p in inter_regular_paths:
+            if os.path.exists(p):
+                try:
+                    pdfmetrics.registerFont(TTFont('Inter', p))
+                    break
+                except Exception:
+                    continue
+        for p in inter_bold_paths:
+            if os.path.exists(p):
+                try:
+                    pdfmetrics.registerFont(TTFont('Inter-Bold', p))
+                    break
+                except Exception:
+                    continue
     except Exception:
         # Falha não é crítica; fallback para Helvetica
         pass
@@ -389,6 +422,12 @@ def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
         leftMargin=2*cm,
         rightMargin=2*cm
     )
+    # Injetar build_stamp em doc para que o footer o capture (se provido no contexto)
+    try:
+        if 'build_stamp' in context_data and context_data.get('build_stamp'):
+            setattr(doc, 'build_stamp', context_data.get('build_stamp'))
+    except Exception:
+        pass
     
     # ===========================
     # ESTILOS

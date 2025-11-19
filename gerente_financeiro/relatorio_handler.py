@@ -295,8 +295,39 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             contexto_dados['mes_nome'] = contexto_dados.get('mes_nome') or data_alvo.strftime('%B')
             contexto_dados['ano'] = contexto_dados.get('ano') or ano_alvo
 
-            # Usar o template limpo e validado
-            template = env.get_template('relatorio_clean.html')
+            # Injetar imagens de inspiração (img-pdf-exemplo) como data URIs para uso no template
+            try:
+                import glob
+                imagens_dir = os.path.join(os.path.dirname(__file__), '..', 'img-pdf-exemplo')
+                imagens = []
+                if os.path.isdir(imagens_dir):
+                    for nome in sorted(os.listdir(imagens_dir)):
+                        caminho = os.path.join(imagens_dir, nome)
+                        if os.path.isfile(caminho) and nome.lower().endswith(('.png', '.jpg', '.jpeg', '.svg')):
+                            with open(caminho, 'rb') as fimg:
+                                b = fimg.read()
+                            mime = 'image/png' if nome.lower().endswith('.png') else 'image/jpeg'
+                            datauri = f"data:{mime};base64,{base64.b64encode(b).decode('ascii')}"
+                            imagens.append(datauri)
+                contexto_dados['inspiracao_images'] = imagens
+            except Exception as e:
+                logger.debug(f"Falha ao carregar imagens de inspiração: {e}")
+
+            # opcional: adicionar build_stamp se houver (para o rodapé do template)
+            try:
+                import subprocess
+                commit = None
+                try:
+                    commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=os.path.join(os.path.dirname(__file__), '..')).decode().strip()
+                except Exception:
+                    commit = None
+                contexto_dados['build_stamp'] = commit
+            except Exception:
+                contexto_dados['build_stamp'] = None
+
+            # Usar o template de inspiração (contendo galerias/imagens)
+            # Se quiser reverter para o template antigo, troque o nome abaixo
+            template = env.get_template('relatorio_inspiracao.html')
             html_renderizado = template.render(contexto_dados)
             logger.info(f"Template renderizado. Tamanho: {len(html_renderizado)} caracteres")
             

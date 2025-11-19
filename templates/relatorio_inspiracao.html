@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Relatório Financeiro - Modelo Inspiração</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box }
+    body { font-family: 'Inter', -apple-system, BlinkMac-system-font, sans-serif; color:#0f172a; background:#f3f4f6; padding:24px }
+    .wrap { max-width:1000px; margin:0 auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 20px 40px rgba(2,6,23,0.08) }
+    .hero { position:relative; height:220px; display:flex; align-items:flex-end; padding:28px; color:#fff; background:linear-gradient(135deg,#0f172a88,#3b82f688); }
+    .hero .brand { display:flex; gap:14px; align-items:center }
+    .hero .logo { width:56px; height:56px; border-radius:12px; background:#fff; display:flex; align-items:center; justify-content:center; color:#0f172a; font-weight:800; font-size:22px }
+    .hero h1 { font-size:28px; margin-bottom:4px }
+    .meta { margin-left:auto; text-align:right; font-size:13px; opacity:0.9 }
+
+    .gallery { display:flex; gap:10px; padding:18px 24px; align-items:center }
+    .gallery img { width:100%; max-height:140px; object-fit:cover; border-radius:10px; border:2px solid #eef2ff }
+    .gallery .col { flex:1 }
+
+    .content { padding:28px 32px }
+    .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-bottom:22px }
+    .kpi { background:#fff; border-radius:10px; padding:16px; border:1px solid #e6eef8 }
+    .kpi .v { font-size:20px; font-weight:800 }
+
+    .section { margin-bottom:28px }
+    .section h2 { font-size:18px; margin-bottom:12px }
+
+    .chart { text-align:center; padding:18px; background:linear-gradient(180deg,#ffffff,#fbfdff); border-radius:10px; border:1px solid #eef2ff }
+
+    .footer { background:#0b1220; color:#cbd5e1; padding:20px 28px; text-align:center; font-size:13px }
+
+    @media (max-width:768px) {
+      .kpi-grid { grid-template-columns:repeat(2,1fr) }
+      .gallery { flex-direction:column }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="brand">
+        <div class="logo">M</div>
+        <div>
+          <div style="font-weight:700">MaestroFin</div>
+          <div style="font-size:12px; opacity:0.9">Relatório Financeiro</div>
+        </div>
+      </div>
+      <div class="meta">
+        <div>{{ now().strftime('%d/%m/%Y') }}</div>
+        <div style="font-weight:700">{{ usuario.nome_completo if usuario and usuario.nome_completo else 'Você' }}</div>
+      </div>
+    </div>
+
+    {% if inspiracao_images and inspiracao_images|length > 0 %}
+    <div class="gallery">
+      <div class="col"><img src="{{ inspiracao_images[0] }}" alt="inspiracao-hero"></div>
+      <div class="col"><img src="{{ inspiracao_images[1] if inspiracao_images|length>1 else inspiracao_images[0] }}" alt="inspiracao-2"></div>
+      <div class="col"><img src="{{ inspiracao_images[2] if inspiracao_images|length>2 else inspiracao_images[0] }}" alt="inspiracao-3"></div>
+    </div>
+    {% endif %}
+
+    <div class="content">
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="label">Receita</div>
+          <div class="v">R$ {{ "%.2f"|format(receita_total|default(0)|float) }}</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Despesa</div>
+          <div class="v">R$ {{ "%.2f"|format(despesa_total|default(0)|float) }}</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Saldo</div>
+          <div class="v">R$ {{ "%.2f"|format(saldo_mes|default(0)|float) }}</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Poupança</div>
+          <div class="v">{{ "%.1f"|format(taxa_poupanca|default(0)|float) }}%</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Distribuição de Despesas</h2>
+        <div class="chart">
+          {% if grafico_pizza_base64 %}
+            <img src="data:image/png;base64,{{ grafico_pizza_base64 }}" style="max-width:100%; height:auto; border-radius:8px;">
+          {% else %}
+            <div style="padding:40px; color:#94a3b8">Gráfico indisponível</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Análise por Categoria</h2>
+        {% if gastos_agrupados and gastos_agrupados|length>0 %}
+          <table style="width:100%; border-collapse:collapse;">
+            <thead style="background:#0f172a; color:#fff; text-align:left"><tr><th style="padding:12px">Categoria</th><th style="padding:12px; text-align:right">Valor</th></tr></thead>
+            <tbody>
+              {% for cat, val in gastos_agrupados %}
+                <tr><td style="padding:12px">{{ cat }}</td><td style="padding:12px; text-align:right">R$ {{ "%.2f"|format(val|float) }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div style="padding:20px; color:#64748b">Nenhuma categoria registrada neste período.</div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <div class="footer">Relatório gerado por MaestroFin — build: {{ build_stamp if build_stamp else 'unknown' }}</div>
+  </div>
+</body>
+</html>
