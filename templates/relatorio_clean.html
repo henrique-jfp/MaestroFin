@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Relatório Financeiro - MaestroFin</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; color:#1e293b; background:#fff; padding:20px; }
+    .container { max-width:900px; margin:0 auto; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px }
+    h1 { margin:0; font-size:1.5rem }
+    .kpis { display:flex; gap:12px; margin:16px 0 }
+    .kpi { background:#f8fafc; padding:12px; border-radius:8px; flex:1; box-shadow:0 2px 6px rgba(0,0,0,0.06) }
+    .kpi .value { font-weight:800; font-size:1.25rem }
+    .section { margin-top:20px }
+    table { width:100%; border-collapse:collapse; margin-top:8px }
+    th,td { text-align:left; padding:8px; border-bottom:1px solid #e6eef6 }
+    .right { text-align:right }
+    .small { font-size:0.9rem; color:#64748b }
+    .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; font-weight:600 }
+    .chart { text-align:center; margin-top:12px }
+    .empty { color:#94a3b8 }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Relatório Financeiro</h1>
+        <div class="small">Período: 01 a {{ now().strftime('%d') }} de {{ mes_nome }} de {{ ano }}</div>
+      </div>
+      <div class="right">
+        <div class="small">Usuário</div>
+        <div>{{ usuario.nome_completo if usuario and usuario.nome_completo else 'Você' }}</div>
+      </div>
+    </header>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="small">Receita</div>
+        <div class="value">R$ {{ "%.2f"|format(receita_total|default(0)|float) }}</div>
+        <div class="small">Receita total no mês</div>
+      </div>
+      <div class="kpi">
+        <div class="small">Despesa</div>
+        <div class="value">R$ {{ "%.2f"|format(despesa_total|default(0)|float) }}</div>
+        <div class="small">Despesas totais no mês</div>
+      </div>
+      <div class="kpi">
+        <div class="small">Saldo</div>
+        <div class="value">R$ {{ "%.2f"|format(saldo_mes|default(0)|float) }}</div>
+        <div class="small">Resultado do mês</div>
+      </div>
+      <div class="kpi">
+        <div class="small">Taxa de poupança</div>
+        <div class="value">{{ "%.1f"|format(taxa_poupanca|default(0)|float) }}%</div>
+        <div class="small">Meta: 20%</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Resumo</h2>
+      <p class="small">Aqui está um resumo profissional das suas finanças mensais com destaque para KPIs, distribuição de despesas e recomendações.</p>
+    </div>
+
+    <div class="section">
+      <h2>Distribuição de Despesas</h2>
+      {% if grafico_pizza_base64 %}
+        <div class="chart">
+          <img src="data:image/png;base64,{{ grafico_pizza_base64 }}" alt="Gráfico de pizza" style="max-width:100%; border-radius:8px;">
+        </div>
+      {% else %}
+        <div class="empty">Gráfico não disponível (dados insuficientes)</div>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Gastos por Categoria</h2>
+      {% if gastos_agrupados and gastos_agrupados|length > 0 %}
+        <table>
+          <thead>
+            <tr><th>Categoria</th><th class="right">Total</th><th class="right">% do total</th></tr>
+          </thead>
+          <tbody>
+            {% for categoria, valor in gastos_agrupados %}
+              <tr>
+                <td>{{ categoria }}</td>
+                <td class="right">R$ {{ "%.2f"|format(valor|float) }}</td>
+                <td class="right">{{ "%.1f"|format((valor|float / despesa_total|float * 100) if despesa_total|float > 0 else 0) }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">Nenhuma categoria registrada para este mês.</div>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Recomendações</h2>
+      <ul>
+        <li class="small">Mantenha uma taxa de poupança acima de 20% para segurança financeira.</li>
+        <li class="small">Revise as categorias com maior participação e veja oportunidades de redução.</li>
+        <li class="small">Considere automatizar transferências para poupança quando possível.</li>
+      </ul>
+    </div>
+
+    <footer class="small" style="margin-top:28px; color:#94a3b8">Relatório gerado por MaestroFin • {{ now().strftime('%Y-%m-%d %H:%M') }}</footer>
+  </div>
+</body>
+</html>

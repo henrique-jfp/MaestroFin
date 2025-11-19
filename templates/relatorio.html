@@ -1,868 +1,1666 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório Financeiro Premium - MaestroFin</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
-        /* RESET E BASE */
-        * {
-            margin: 0;
+<!DOCTYPE html><!DOCTYPE html>
+
+<html lang="pt-BR"><html lang="pt-br">
+
+<head><head>
+
+    <meta charset="UTF-8">    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Relatório Financeiro Premium - Maestro Financeiro</title>    <title>Relatório Financeiro Premium - MaestroFin</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <style>    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+        /* RESET E VARIÁVEIS CSS */    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+        * {    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+            margin: 0;    <style>
+
+            padding: 0;        /* RESET E BASE */
+
+            box-sizing: border-box;        * {
+
+        }            margin: 0;
+
             padding: 0;
-            box-sizing: border-box;
-        }
 
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            color: #1e293b;
-            background: #ffffff;
-        }
+        :root {            box-sizing: border-box;
 
-        /* PALETA DE CORES MODERNA */
-        :root {
-            --primary-dark: #0f172a;
-            --primary-blue: #1e3a8a;
-            --primary-purple: #4c1d95;
-            --accent-gold: #fbbf24;
-            --accent-orange: #f97316;
-            --success: #059669;
-            --warning: #d97706;
-            --danger: #dc2626;
-            --neutral-50: #f8fafc;
+            --primary-dark: #0f172a;        }
+
+            --primary-purple: #7c3aed;
+
+            --accent-gold: #f59e0b;        body {
+
+            --accent-orange: #f97316;            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+            --success: #059669;            line-height: 1.6;
+
+            --danger: #dc2626;            color: #1e293b;
+
+            --warning: #f59e0b;            background: #ffffff;
+
+            --neutral-50: #f8fafc;        }
+
             --neutral-100: #f1f5f9;
-            --neutral-200: #e2e8f0;
-            --neutral-300: #cbd5e1;
-            --neutral-600: #475569;
-            --neutral-800: #1e293b;
-            --neutral-900: #0f172a;
-            --pastel-blue: #eff6ff;
-            --pastel-green: #f0fdf4;
-            --pastel-yellow: #fefce8;
-            --pastel-purple: #faf5ff;
-        }
 
-        /* UTILITÁRIOS */
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-        .font-bold { font-weight: 700; }
+            --neutral-200: #e2e8f0;        /* PALETA DE CORES MODERNA */
+
+            --neutral-600: #475569;        :root {
+
+            --pastel-green: #dcfce7;            --primary-dark: #0f172a;
+
+            --pastel-red: #fef2f2;            --primary-blue: #1e3a8a;
+
+            --pastel-blue: #dbeafe;            --primary-purple: #4c1d95;
+
+            --pastel-purple: #f3e8ff;            --accent-gold: #fbbf24;
+
+            --pastel-yellow: #fef3c7;            --accent-orange: #f97316;
+
+        }            --success: #059669;
+
+            --warning: #d97706;
+
+        /* LAYOUT BASE */            --danger: #dc2626;
+
+        body {            --neutral-50: #f8fafc;
+
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;            --neutral-100: #f1f5f9;
+
+            line-height: 1.6;            --neutral-200: #e2e8f0;
+
+            color: var(--primary-dark);            --neutral-300: #cbd5e1;
+
+            background: #f8fafc;            --neutral-600: #475569;
+
+        }            --neutral-800: #1e293b;
+
+            --neutral-900: #0f172a;
+
+        .page {            --pastel-blue: #eff6ff;
+
+            width: 210mm;            --pastel-green: #f0fdf4;
+
+            min-height: 297mm;            --pastel-yellow: #fefce8;
+
+            padding: 20mm;            --pastel-purple: #faf5ff;
+
+            margin: 0 auto;        }
+
+            background: white;
+
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);        /* UTILITÁRIOS */
+
+            position: relative;        .text-center { text-align: center; }
+
+            page-break-after: always;        .text-right { text-align: right; }
+
+        }        .font-bold { font-weight: 700; }
+
         .font-semibold { font-weight: 600; }
-        .font-medium { font-weight: 500; }
-        .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
-        .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+
+        .page:last-child {        .font-medium { font-weight: 500; }
+
+            page-break-after: avoid;        .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+
+        }        .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+
         .text-2xl { font-size: 1.5rem; line-height: 2rem; }
-        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
-        .text-base { font-size: 1rem; line-height: 1.5rem; }
-        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-<!DOCTYPE html>
-        /* PÁGINAS */
-        .page {
-            min-height: 100vh;
-            padding: 40px;
+
+        /* CAPA PREMIUM */        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+
+        .capa-container {        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+
+            text-align: center;        .text-base { font-size: 1rem; line-height: 1.5rem; }
+
+            padding: 4rem 2rem;        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+
             position: relative;
-            page-break-after: always;
+
+        }        /* PÁGINAS */
+
+        .page {
+
+        .logo-premium {            min-height: 100vh;
+
+            font-size: 4rem;            padding: 40px;
+
+            color: var(--accent-gold);            position: relative;
+
+            margin-bottom: 2rem;            page-break-after: always;
+
+            text-shadow: 0 4px 8px rgba(0,0,0,0.3);        }
+
         }
 
         .page:last-child {
-            page-break-after: avoid;
-        }
 
-        /* CAPA PREMIUM */
-        .capa-page {
-            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #4c1d95 100%);
-            color: white;
-            display: flex;
+        .titulo-premium {            page-break-after: avoid;
+
+            font-size: 3.5rem;        }
+
+            font-weight: 900;
+
+            color: var(--primary-dark);        /* CAPA PREMIUM */
+
+            margin-bottom: 1rem;        .capa-page {
+
+            text-shadow: 0 4px 8px rgba(0,0,0,0.3);            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #4c1d95 100%);
+
+            letter-spacing: -0.02em;            color: white;
+
+        }            display: flex;
+
             align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
+
+        .periodo-premium {            justify-content: center;
+
+            font-size: 1.5rem;            position: relative;
+
+            color: var(--neutral-600);            overflow: hidden;
+
+            margin-bottom: 2rem;        }
+
         }
 
         .capa-page::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
+
+        .avatar-container {            content: '';
+
+            position: absolute;            position: absolute;
+
+            top: 60px;            top: 0;
+
+            right: 60px;            left: 0;
+
+        }            right: 0;
+
             bottom: 0;
-            background: radial-gradient(circle at 30% 20%, rgba(251, 191, 36, 0.1) 0%, transparent 50%),
-                        radial-gradient(circle at 70% 80%, rgba(249, 115, 22, 0.1) 0%, transparent 50%);
-        }
 
-        .capa-container {
-            position: relative;
-            z-index: 2;
-            text-align: center;
-            max-width: 800px;
-        }
+        .avatar-placeholder {            background: radial-gradient(circle at 30% 20%, rgba(251, 191, 36, 0.1) 0%, transparent 50%),
 
-        .logo-premium {
+            width: 120px;                        radial-gradient(circle at 70% 80%, rgba(249, 115, 22, 0.1) 0%, transparent 50%);
+
+            height: 120px;        }
+
+            border-radius: 50%;
+
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange));        .capa-container {
+
+            display: flex;            position: relative;
+
+            align-items: center;            z-index: 2;
+
+            justify-content: center;            text-align: center;
+
+            font-size: 3rem;            max-width: 800px;
+
+            color: white;        }
+
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+
+        }        .logo-premium {
+
             font-size: 4rem;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-        }
 
-        .titulo-premium {
-            font-size: 3.5rem;
-            font-weight: 900;
-            margin-bottom: 1rem;
-            text-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            letter-spacing: -0.02em;
-        }
+        .badge-premium {            margin-bottom: 2rem;
 
-        .periodo-premium {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 2rem;
-            opacity: 0.9;
+            display: inline-block;            opacity: 0.9;
+
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange));        }
+
+            color: var(--primary-dark);
+
+            padding: 12px 24px;        .titulo-premium {
+
+            border-radius: 50px;            font-size: 3.5rem;
+
+            font-weight: 700;            font-weight: 900;
+
+            font-size: 0.9rem;            margin-bottom: 1rem;
+
+            margin-top: 2rem;            text-shadow: 0 4px 8px rgba(0,0,0,0.3);
+
+            box-shadow: 0 8px 16px rgba(249, 115, 22, 0.3);            letter-spacing: -0.02em;
+
+        }        }
+
+
+
+        /* CARDS KPI PREMIUM */        .periodo-premium {
+
+        .kpi-grid {            font-size: 1.5rem;
+
+            display: grid;            font-weight: 600;
+
+            grid-template-columns: repeat(2, 1fr);            margin-bottom: 2rem;
+
+            gap: 2rem;            opacity: 0.9;
+
+            margin-bottom: 4rem;        }
+
         }
 
         .avatar-container {
-            position: absolute;
-            top: 60px;
-            right: 60px;
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #fbbf24, #f97316);
-            display: flex;
-            align-items: center;
+
+        .kpi-card {            position: absolute;
+
+            background: white;            top: 60px;
+
+            border-radius: 24px;            right: 60px;
+
+            padding: 2rem;            width: 120px;
+
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);            height: 120px;
+
+            border: 1px solid var(--neutral-200);            border-radius: 50%;
+
+            position: relative;            background: linear-gradient(135deg, #fbbf24, #f97316);
+
+            transition: transform 0.3s ease, box-shadow 0.3s ease;            display: flex;
+
+        }            align-items: center;
+
             justify-content: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-            border: 4px solid white;
+
+        .kpi-card:hover {            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+
+            transform: translateY(-4px);            border: 4px solid white;
+
+            box-shadow: 0 32px 64px rgba(0,0,0,0.15);        }
+
         }
 
         .avatar-placeholder {
-            font-size: 3rem;
-            color: #0f172a;
-        }
 
-        .badge-premium {
-            display: inline-block;
-            background: linear-gradient(135deg, #fbbf24, #f97316);
-            color: #0f172a;
-            padding: 12px 24px;
-            border-radius: 50px;
-            font-weight: 700;
-            font-size: 0.9rem;
-            margin-top: 2rem;
-            box-shadow: 0 8px 16px rgba(251, 191, 36, 0.3);
-        }
+        .kpi-card::before {            font-size: 3rem;
 
-        /* DASHBOARD MODERNO */
-        .dashboard-page {
-            background: var(--neutral-50);
-        }
+            content: '';            color: #0f172a;
 
-        .titulo-secao {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--primary-dark);
-            margin-bottom: 3rem;
-            text-align: center;
-        }
+            position: absolute;        }
 
-        /* CARDS KPI PREMIUM */
-        .kpi-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 2rem;
-            margin-bottom: 4rem;
-        }
-
-        .kpi-card {
-            background: white;
-            border-radius: 24px;
-            padding: 2rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            border: 1px solid var(--neutral-200);
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .kpi-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 32px 64px rgba(0,0,0,0.15);
-        }
-
-        .kpi-card::before {
-            content: '';
-            position: absolute;
             top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
-        }
 
-        .kpi-card.receita::before { background: linear-gradient(90deg, #059669, #10b981); }
-        .kpi-card.despesa::before { background: linear-gradient(90deg, #dc2626, #ef4444); }
-        .kpi-card.saldo::before { background: linear-gradient(90deg, #7c3aed, #8b5cf6); }
-        .kpi-card.poupanca::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+            left: 0;        .badge-premium {
+
+            right: 0;            display: inline-block;
+
+            height: 4px;            background: linear-gradient(135deg, #fbbf24, #f97316);
+
+            border-radius: 24px 24px 0 0;            color: #0f172a;
+
+        }            padding: 12px 24px;
+
+            border-radius: 50px;
+
+        .kpi-card.receita::before { background: linear-gradient(90deg, #059669, #10b981); }            font-weight: 700;
+
+        .kpi-card.despesa::before { background: linear-gradient(90deg, #dc2626, #ef4444); }            font-size: 0.9rem;
+
+        .kpi-card.saldo::before { background: linear-gradient(90deg, #7c3aed, #8b5cf6); }            margin-top: 2rem;
+
+        .kpi-card.poupanca::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }            box-shadow: 0 8px 16px rgba(251, 191, 36, 0.3);
+
+        }
 
         .kpi-icon {
-            position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            width: 48px;
+
+            position: absolute;        /* DASHBOARD MODERNO */
+
+            top: 1.5rem;        .dashboard-page {
+
+            right: 1.5rem;            background: var(--neutral-50);
+
+            width: 48px;        }
+
             height: 48px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.25rem;
-        }
 
-        .kpi-card.receita .kpi-icon { background: var(--pastel-green); color: var(--success); }
-        .kpi-card.despesa .kpi-icon { background: #fef2f2; color: var(--danger); }
-        .kpi-card.saldo .kpi-icon { background: var(--pastel-purple); color: var(--primary-purple); }
-        .kpi-card.poupanca .kpi-icon { background: var(--pastel-yellow); color: var(--warning); }
+            border-radius: 50%;        .titulo-secao {
 
-        .kpi-label {
-            font-size: 0.9rem;
+            display: flex;            font-size: 2.5rem;
+
+            align-items: center;            font-weight: 800;
+
+            justify-content: center;            color: var(--primary-dark);
+
+            font-size: 1.25rem;            margin-bottom: 3rem;
+
+            opacity: 0.9;            text-align: center;
+
+        }        }
+
+
+
+        .kpi-card.receita .kpi-icon { background: var(--pastel-green); color: var(--success); }        /* CARDS KPI PREMIUM */
+
+        .kpi-card.despesa .kpi-icon { background: #fef2f2; color: var(--danger); }        .kpi-grid {
+
+        .kpi-card.saldo .kpi-icon { background: var(--pastel-purple); color: var(--primary-purple); }            display: grid;
+
+        .kpi-card.poupanca .kpi-icon { background: var(--pastel-yellow); color: var(--warning); }            grid-template-columns: repeat(2, 1fr);
+
+            gap: 2rem;
+
+        .kpi-label {            margin-bottom: 4rem;
+
+            font-size: 0.9rem;        }
+
             font-weight: 600;
-            color: var(--neutral-600);
+
+            color: var(--neutral-600);        .kpi-card {
+
+            margin-bottom: 0.5rem;            background: white;
+
+            text-transform: uppercase;            border-radius: 24px;
+
+            letter-spacing: 0.05em;            padding: 2rem;
+
+        }            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+
+            border: 1px solid var(--neutral-200);
+
+        .kpi-value {            position: relative;
+
+            font-size: 2.5rem;            overflow: hidden;
+
+            font-weight: 800;            transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+            color: var(--primary-dark);        }
+
             margin-bottom: 0.5rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+
+            letter-spacing: -0.02em;        .kpi-card:hover {
+
+        }            transform: translateY(-4px);
+
+            box-shadow: 0 32px 64px rgba(0,0,0,0.15);
+
+        .kpi-meta {        }
+
+            font-size: 0.8rem;
+
+            color: var(--neutral-600);        .kpi-card::before {
+
+            font-weight: 500;            content: '';
+
+        }            position: absolute;
+
+            top: 0;
+
+        /* SCORE FINANCEIRO */            left: 0;
+
+        .score-section {            right: 0;
+
+            background: white;            height: 4px;
+
+            border-radius: 24px;            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
+
+            padding: 3rem;        }
+
+            margin: 4rem 0;
+
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);        .kpi-card.receita::before { background: linear-gradient(90deg, #059669, #10b981); }
+
+            text-align: center;        .kpi-card.despesa::before { background: linear-gradient(90deg, #dc2626, #ef4444); }
+
+        }        .kpi-card.saldo::before { background: linear-gradient(90deg, #7c3aed, #8b5cf6); }
+
+        .kpi-card.poupanca::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+
+        .titulo-secao {
+
+            font-size: 2.5rem;        .kpi-icon {
+
+            font-weight: 800;            position: absolute;
+
+            color: var(--primary-dark);            top: 1.5rem;
+
+            margin-bottom: 3rem;            right: 1.5rem;
+
+        }            width: 48px;
+
+            height: 48px;
+
+        .score-circle {            border-radius: 50%;
+
+            width: 160px;            display: flex;
+
+            height: 160px;            align-items: center;
+
+            border-radius: 50%;            justify-content: center;
+
+            background: conic-gradient(from 0deg, #059669 0%, #10b981 25%, #f59e0b 50%, #f97316 75%, #dc2626 100%);            font-size: 1.25rem;
+
+            display: flex;        }
+
+            flex-direction: column;
+
+            align-items: center;        .kpi-card.receita .kpi-icon { background: var(--pastel-green); color: var(--success); }
+
+            justify-content: center;        .kpi-card.despesa .kpi-icon { background: #fef2f2; color: var(--danger); }
+
+            margin: 0 auto 2rem;        .kpi-card.saldo .kpi-icon { background: var(--pastel-purple); color: var(--primary-purple); }
+
+            position: relative;        .kpi-card.poupanca .kpi-icon { background: var(--pastel-yellow); color: var(--warning); }
+
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+
+        }        .kpi-label {
+
+            font-size: 0.9rem;
+
+        .score-circle::before {            font-weight: 600;
+
+            content: '';            color: var(--neutral-600);
+
+            position: absolute;            margin-bottom: 0.5rem;
+
+            inset: 8px;            text-transform: uppercase;
+
+            border-radius: 50%;            letter-spacing: 0.05em;
+
+            background: white;        }
+
         }
 
         .kpi-value {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--primary-dark);
-            margin-bottom: 0.5rem;
-        }
 
-        .kpi-meta {
+        .score-number {            font-size: 2.5rem;
+
+            font-size: 3rem;            font-weight: 800;
+
+            font-weight: 900;            color: var(--primary-dark);
+
+            color: var(--primary-dark);            margin-bottom: 0.5rem;
+
+            position: relative;        }
+
+            z-index: 1;
+
+        }        .kpi-meta {
+
             font-size: 0.8rem;
-            color: var(--neutral-600);
-            font-weight: 500;
-        }
 
-        /* SCORE FINANCEIRO */
-        .score-section {
-            background: white;
+        .score-label {            color: var(--neutral-600);
+
+            font-size: 1.1rem;            font-weight: 500;
+
+            font-weight: 700;        }
+
+            color: var(--neutral-600);
+
+            position: relative;        /* SCORE FINANCEIRO */
+
+            z-index: 1;        .score-section {
+
+        }            background: white;
+
             border-radius: 24px;
-            padding: 3rem;
-            margin: 4rem 0;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
+
+        .score-breakdown {            padding: 3rem;
+
+            display: grid;            margin: 4rem 0;
+
+            grid-template-columns: repeat(4, 1fr);            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+
+            gap: 1.5rem;            text-align: center;
+
+            margin-top: 2rem;        }
+
         }
 
         .score-circle {
-            width: 160px;
-            height: 160px;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, #059669 0%, #10b981 25%, #f59e0b 50%, #f97316 75%, #dc2626 100%);
+
+        .score-item {            width: 160px;
+
+            text-align: center;            height: 160px;
+
+            font-size: 0.9rem;            border-radius: 50%;
+
+        }            background: conic-gradient(from 0deg, #059669 0%, #10b981 25%, #f59e0b 50%, #f97316 75%, #dc2626 100%);
+
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 2rem;
-            position: relative;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-        }
 
-        .score-circle::before {
-            content: '';
-            position: absolute;
-            inset: 8px;
-            border-radius: 50%;
+        .score-bar-bg {            flex-direction: column;
+
+            height: 8px;            align-items: center;
+
+            background: var(--neutral-200);            justify-content: center;
+
+            border-radius: 4px;            margin: 0 auto 2rem;
+
+            margin: 0.5rem 0;            position: relative;
+
+            overflow: hidden;            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+
+        }        }
+
+
+
+        .score-bar-fill {        .score-circle::before {
+
+            height: 100%;            content: '';
+
+            border-radius: 4px;            position: absolute;
+
+            transition: width 0.3s ease;            inset: 8px;
+
+        }            border-radius: 50%;
+
             background: white;
-        }
 
-        .score-number {
-            font-size: 3rem;
-            font-weight: 900;
-            color: var(--primary-dark);
-            position: relative;
-            z-index: 1;
-        }
+        /* TABELAS MODERNAS */        }
 
-        .score-label {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--neutral-600);
-            position: relative;
-            z-index: 1;
-        }
+        .table-section {
 
-        .score-breakdown {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 1.5rem;
-            margin-top: 2rem;
-        }
+            background: white;        .score-number {
 
-        .score-item {
-            text-align: center;
-        }
+            border-radius: 24px;            font-size: 3rem;
 
-        .score-bar-bg {
-            height: 8px;
-            background: var(--neutral-200);
-            border-radius: 4px;
-            margin: 0.5rem 0;
-            overflow: hidden;
-        }
+            padding: 2rem;            font-weight: 900;
 
-        .score-bar-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
+            margin: 4rem 0;            color: var(--primary-dark);
 
-        /* GRÁFICOS */
-        .charts-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            margin: 4rem 0;
-        }
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);            position: relative;
 
-        .chart-card {
-            background: white;
-            border-radius: 24px;
-            padding: 2rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }
+            overflow: hidden;            z-index: 1;
 
-        .chart-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--primary-dark);
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
+        }        }
+
+
+
+        .table-title {        .score-label {
+
+            font-size: 1.5rem;            font-size: 1.1rem;
+
+            font-weight: 700;            font-weight: 700;
+
+            color: var(--primary-dark);            color: var(--neutral-600);
+
+            margin-bottom: 2rem;            position: relative;
+
+            display: flex;            z-index: 1;
+
+            align-items: center;        }
+
             gap: 0.5rem;
+
+        }        .score-breakdown {
+
+            display: grid;
+
+        .modern-table {            grid-template-columns: repeat(4, 1fr);
+
+            width: 100%;            gap: 1.5rem;
+
+            border-collapse: separate;            margin-top: 2rem;
+
+            border-spacing: 0;        }
+
+            font-size: 1.25rem;
+
+        }        .score-item {
+
+            text-align: center;
+
+        .modern-table thead th {        }
+
+            background: var(--primary-dark);
+
+            color: white;        .score-bar-bg {
+
+            padding: 1rem;            height: 8px;
+
+            text-align: left;            background: var(--neutral-200);
+
+            font-weight: 600;            border-radius: 4px;
+
+            font-size: 0.9rem;            margin: 0.5rem 0;
+
+            text-transform: uppercase;            overflow: hidden;
+
+            letter-spacing: 0.05em;        }
+
+            border: none;
+
+        }        .score-bar-fill {
+
+            height: 100%;
+
+        .modern-table tbody tr:nth-child(even) {            border-radius: 4px;
+
+            background: var(--neutral-50);            transition: width 0.3s ease;
+
+        }        }
+
+
+
+        .modern-table tbody td {        /* GRÁFICOS */
+
+            padding: 1rem;        .charts-grid {
+
+            border-bottom: 1px solid var(--neutral-200);            display: grid;
+
+            font-size: 0.9rem;            grid-template-columns: 1fr 1fr;
+
+        }            gap: 2rem;
+
+            margin: 4rem 0;
+
+        .category-cell {        }
+
+            display: flex;
+
+            align-items: center;        .chart-card {
+
+            gap: 0.75rem;            background: white;
+
+        }            border-radius: 24px;
+
+            padding: 2rem;
+
+        .category-dot {            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+
+            width: 12px;        }
+
+            height: 12px;
+
+            border-radius: 50%;        .chart-title {
+
+        }            font-size: 1.5rem;
+
+            font-weight: 700;
+
+        .progress-bar {            color: var(--primary-dark);
+
+            width: 100px;            margin-bottom: 1.5rem;
+
+            height: 8px;            display: flex;
+
+            background: var(--neutral-200);            align-items: center;
+
+            border-radius: 4px;            gap: 0.5rem;
+
+            overflow: hidden;        }
+
         }
 
         .chart-placeholder {
-            height: 300px;
-            background: linear-gradient(135deg, var(--neutral-100), var(--neutral-200));
-            border-radius: 16px;
-            display: flex;
-            flex-direction: column;
+
+        .progress-fill {            height: 300px;
+
+            height: 100%;            background: linear-gradient(135deg, var(--neutral-100), var(--neutral-200));
+
+            border-radius: 4px;            border-radius: 16px;
+
+            transition: width 0.3s ease;            display: flex;
+
+        }            flex-direction: column;
+
             align-items: center;
-            justify-content: center;
-            color: var(--neutral-600);
-            border: 2px dashed var(--neutral-300);
+
+        /* GRÁFICOS */            justify-content: center;
+
+        .charts-grid {            color: var(--neutral-600);
+
+            display: grid;            border: 2px dashed var(--neutral-300);
+
+            grid-template-columns: 1fr 1fr;        }
+
+            gap: 2rem;
+
+            margin: 4rem 0;        .chart-placeholder i {
+
+        }            font-size: 3rem;
+
+            margin-bottom: 1rem;
+
+        .chart-card {            opacity: 0.6;
+
+            background: white;        }
+
+            border-radius: 24px;
+
+            padding: 2rem;        /* MINI CALENDÁRIO */
+
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);        .calendar-section {
+
+            text-align: center;            background: white;
+
+        }            border-radius: 24px;
+
+            padding: 2rem;
+
+        .chart-title {            margin: 4rem 0;
+
+            font-size: 1.5rem;            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+
+            font-weight: 700;        }
+
+            color: var(--primary-dark);
+
+            margin-bottom: 1.5rem;        .calendar-title {
+
+            display: flex;            font-size: 1.5rem;
+
+            align-items: center;            font-weight: 700;
+
+            justify-content: center;            color: var(--primary-dark);
+
+            gap: 0.5rem;            margin-bottom: 2rem;
+
+        }            text-align: center;
+
         }
 
-        .chart-placeholder i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.6;
+        .chart-placeholder {
+
+            height: 300px;        .calendar-grid {
+
+            background: linear-gradient(135deg, var(--neutral-100), var(--neutral-200));            display: grid;
+
+            border-radius: 16px;            grid-template-columns: repeat(7, 1fr);
+
+            display: flex;            gap: 0.5rem;
+
+            flex-direction: column;            margin-bottom: 1rem;
+
+            align-items: center;        }
+
+            justify-content: center;
+
+            color: var(--neutral-600);        .calendar-day {
+
+            border: 2px dashed var(--neutral-300);            aspect-ratio: 1;
+
+        }            border-radius: 8px;
+
+            display: flex;
+
+        .chart-placeholder i {            align-items: center;
+
+            font-size: 3rem;            justify-content: center;
+
+            margin-bottom: 1rem;            font-size: 0.8rem;
+
+            opacity: 0.6;            font-weight: 600;
+
+        }            transition: all 0.2s ease;
+
         }
 
         /* MINI CALENDÁRIO */
-        .calendar-section {
-            background: white;
-            border-radius: 24px;
-            padding: 2rem;
+
+        .calendar-section {        .calendar-day.positive {
+
+            background: white;            background: var(--pastel-green);
+
+            border-radius: 24px;            color: var(--success);
+
+            padding: 2rem;        }
+
             margin: 4rem 0;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);        .calendar-day.negative {
+
+            overflow: hidden;            background: #fef2f2;
+
+        }            color: var(--danger);
+
         }
 
         .calendar-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--primary-dark);
-            margin-bottom: 2rem;
-            text-align: center;
-        }
 
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 0.5rem;
-            margin-bottom: 1rem;
+            font-size: 1.5rem;        .calendar-day.neutral {
+
+            font-weight: 700;            background: var(--neutral-100);
+
+            color: var(--primary-dark);            color: var(--neutral-600);
+
+            margin-bottom: 2rem;        }
+
+            text-align: center;
+
+        }        /* TABELAS MODERNAS */
+
+        .table-section {
+
+        .calendar-grid {            background: white;
+
+            display: grid;            border-radius: 24px;
+
+            grid-template-columns: repeat(7, 1fr);            padding: 2rem;
+
+            gap: 0.5rem;            margin: 4rem 0;
+
+            margin-bottom: 1rem;            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+
+        }            overflow: hidden;
+
         }
 
         .calendar-day {
-            aspect-ratio: 1;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 600;
-            transition: all 0.2s ease;
-        }
 
-        .calendar-day.positive {
-            background: var(--pastel-green);
-            color: var(--success);
+            aspect-ratio: 1;        .table-title {
+
+            border-radius: 8px;            font-size: 1.5rem;
+
+            display: flex;            font-weight: 700;
+
+            align-items: center;            color: var(--primary-dark);
+
+            justify-content: center;            margin-bottom: 2rem;
+
+            font-size: 0.8rem;            display: flex;
+
+            font-weight: 600;            align-items: center;
+
+            transition: all 0.2s ease;            gap: 0.5rem;
+
+        }        }
+
+
+
+        .calendar-day.positive {        .modern-table {
+
+            background: var(--pastel-green);            width: 100%;
+
+            color: var(--success);            border-collapse: separate;
+
+        }            border-spacing: 0;
+
         }
 
         .calendar-day.negative {
-            background: #fef2f2;
-            color: var(--danger);
-        }
 
-        .calendar-day.neutral {
-            background: var(--neutral-100);
-            color: var(--neutral-600);
-        }
+            background: #fef2f2;        .modern-table thead th {
 
-        /* TABELAS MODERNAS */
-        .table-section {
-            background: white;
-            border-radius: 24px;
-            padding: 2rem;
-            margin: 4rem 0;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
+            color: var(--danger);            background: var(--primary-dark);
 
-        .table-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--primary-dark);
-            margin-bottom: 2rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
+        }            color: white;
 
-        .modern-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-
-        .modern-table thead th {
-            background: var(--primary-dark);
-            color: white;
             padding: 1rem;
-            text-align: left;
-            font-weight: 600;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            border: none;
-        }
 
-        .modern-table tbody tr:nth-child(even) {
-            background: var(--neutral-50);
+        .calendar-day.neutral {            text-align: left;
+
+            background: var(--neutral-100);            font-weight: 600;
+
+            color: var(--neutral-600);            font-size: 0.9rem;
+
+        }            text-transform: uppercase;
+
+            letter-spacing: 0.05em;
+
+        /* INSIGHTS */            border: none;
+
+        .insights-section {        }
+
+            background: linear-gradient(135deg, var(--pastel-blue), var(--pastel-purple));
+
+            border-radius: 24px;        .modern-table tbody tr:nth-child(even) {
+
+            padding: 3rem;            background: var(--neutral-50);
+
+            margin: 4rem 0;        }
+
         }
 
         .modern-table tbody td {
-            padding: 1rem;
-            border-bottom: 1px solid var(--neutral-200);
-            font-size: 0.9rem;
-        }
 
-        .category-cell {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
+        .insights-title {            padding: 1rem;
 
-        .category-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
+            font-size: 2rem;            border-bottom: 1px solid var(--neutral-200);
 
-        .progress-bar {
-            width: 100px;
-            height: 8px;
-            background: var(--neutral-200);
-            border-radius: 4px;
-            overflow: hidden;
-        }
+            font-weight: 800;            font-size: 0.9rem;
 
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
+            color: var(--primary-dark);        }
 
-        /* INSIGHTS */
-        .insights-section {
-            background: linear-gradient(135deg, var(--pastel-blue), var(--pastel-purple));
-            border-radius: 24px;
-            padding: 3rem;
-            margin: 4rem 0;
-        }
-
-        .insights-title {
-            font-size: 2rem;
-            font-weight: 800;
-            color: var(--primary-dark);
             text-align: center;
-            margin-bottom: 3rem;
-        }
 
-        .insights-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
+            margin-bottom: 3rem;        .category-cell {
 
-        .insight-card {
-            background: white;
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: 0 16px 32px rgba(0,0,0,0.1);
-            border: 1px solid var(--neutral-200);
-        }
+        }            display: flex;
 
-        .insight-icon {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            display: flex;
             align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
 
-        .insight-card.positive .insight-icon {
-            background: var(--pastel-green);
-            color: var(--success);
+        .insights-grid {            gap: 0.75rem;
+
+            display: grid;        }
+
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+
+            gap: 2rem;        .category-dot {
+
+        }            width: 12px;
+
+            height: 12px;
+
+        .insight-card {            border-radius: 50%;
+
+            background: white;        }
+
+            border-radius: 20px;
+
+            padding: 2rem;        .progress-bar {
+
+            box-shadow: 0 16px 32px rgba(0,0,0,0.1);            width: 100px;
+
+            border: 1px solid var(--neutral-200);            height: 8px;
+
+        }            background: var(--neutral-200);
+
+            border-radius: 4px;
+
+        .insight-icon {            overflow: hidden;
+
+            width: 56px;        }
+
+            height: 56px;
+
+            border-radius: 50%;        .progress-fill {
+
+            display: flex;            height: 100%;
+
+            align-items: center;            border-radius: 4px;
+
+            justify-content: center;            transition: width 0.3s ease;
+
+            font-size: 1.5rem;        }
+
+            margin-bottom: 1.5rem;
+
+        }        /* INSIGHTS */
+
+        .insights-section {
+
+        .insight-card.positive .insight-icon {            background: linear-gradient(135deg, var(--pastel-blue), var(--pastel-purple));
+
+            background: var(--pastel-green);            border-radius: 24px;
+
+            color: var(--success);            padding: 3rem;
+
+        }            margin: 4rem 0;
+
         }
 
         .insight-card.warning .insight-icon {
-            background: var(--pastel-yellow);
-            color: var(--warning);
-        }
 
-        .insight-card.info .insight-icon {
-            background: var(--pastel-blue);
-            color: var(--primary-blue);
-        }
+            background: var(--pastel-yellow);        .insights-title {
 
-        .insight-title {
-            font-size: 1.25rem;
-            font-weight: 700;
+            color: var(--warning);            font-size: 2rem;
+
+        }            font-weight: 800;
+
             color: var(--primary-dark);
-            margin-bottom: 1rem;
+
+        .insight-card.info .insight-icon {            text-align: center;
+
+            background: var(--pastel-blue);            margin-bottom: 3rem;
+
+            color: var(--primary-blue);        }
+
         }
 
-        .insight-text {
-            color: var(--neutral-600);
-            line-height: 1.6;
+        .insights-grid {
+
+        .insight-title {            display: grid;
+
+            font-size: 1.25rem;            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+
+            font-weight: 700;            gap: 2rem;
+
+            color: var(--primary-dark);        }
+
+            margin-bottom: 1rem;
+
+        }        .insight-card {
+
+            background: white;
+
+        .insight-text {            border-radius: 20px;
+
+            color: var(--neutral-600);            padding: 2rem;
+
+            line-height: 1.6;            box-shadow: 0 16px 32px rgba(0,0,0,0.1);
+
+        }            border: 1px solid var(--neutral-200);
+
         }
 
         /* RODAPÉ PREMIUM */
-        .footer-section {
-            background: var(--primary-dark);
-            color: white;
-            padding: 4rem 2rem;
-            text-align: center;
-            position: relative;
-        }
 
-        .footer-section::before {
-            content: '';
+        .footer-section {        .insight-icon {
+
+            background: var(--primary-dark);            width: 56px;
+
+            color: white;            height: 56px;
+
+            padding: 4rem 2rem;            border-radius: 50%;
+
+            text-align: center;            display: flex;
+
+            position: relative;            align-items: center;
+
+        }            justify-content: center;
+
+            font-size: 1.5rem;
+
+        .footer-section::before {            margin-bottom: 1.5rem;
+
+            content: '';        }
+
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
-        }
 
-        .footer-logo {
+            top: 0;        .insight-card.positive .insight-icon {
+
+            left: 0;            background: var(--pastel-green);
+
+            right: 0;            color: var(--success);
+
+            height: 4px;        }
+
+            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
+
+            z-index: 1;        .insight-card.warning .insight-icon {
+
+        }            background: var(--pastel-yellow);
+
+            color: var(--warning);
+
+        .footer-logo {        }
+
             font-size: 2.5rem;
-            margin-bottom: 1rem;
-            opacity: 0.9;
+
+            margin-bottom: 1rem;        .insight-card.info .insight-icon {
+
+            opacity: 0.9;            background: var(--pastel-blue);
+
+        }            color: var(--primary-blue);
+
         }
 
         .footer-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 2rem;
+
+            font-size: 1.5rem;        .insight-title {
+
+            font-weight: 700;            font-size: 1.25rem;
+
+            margin-bottom: 2rem;            font-weight: 700;
+
+            position: relative;            color: var(--primary-dark);
+
+            z-index: 1;            margin-bottom: 1rem;
+
+        }        }
+
+
+
+        .footer-stats {        .insight-text {
+
+            display: grid;            color: var(--neutral-600);
+
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));            line-height: 1.6;
+
+            gap: 2rem;        }
+
+            margin: 3rem 0;
+
+        }        /* RODAPÉ PREMIUM */
+
+        .footer-section {
+
+        .stat-item {            background: var(--primary-dark);
+
+            display: flex;            color: white;
+
+            align-items: center;            padding: 4rem 2rem;
+
+            justify-content: center;            text-align: center;
+
+            gap: 0.75rem;            position: relative;
+
+            padding: 1rem;        }
+
+            background: rgba(255,255,255,0.1);
+
+            border-radius: 12px;        .footer-section::before {
+
+            backdrop-filter: blur(10px);            content: '';
+
+        }            position: absolute;
+
+            top: 0;
+
+        .qr-section {            left: 0;
+
+            margin-top: 3rem;            right: 0;
+
+            padding: 2rem;            height: 4px;
+
+            background: white;            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
+
+            border-radius: 16px;        }
+
+            display: inline-block;
+
+        }        .footer-logo {
+
+            font-size: 2.5rem;
+
+        .qr-placeholder {            margin-bottom: 1rem;
+
+            width: 120px;            opacity: 0.9;
+
+            height: 120px;        }
+
+            background: var(--neutral-200);
+
+            border-radius: 8px;        .footer-title {
+
+            display: flex;            font-size: 1.5rem;
+
+            align-items: center;            font-weight: 700;
+
+            justify-content: center;            margin-bottom: 2rem;
+
+            margin: 0 auto 1rem;        }
+
         }
 
         .footer-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 2rem;
-            margin: 3rem 0;
-        }
 
-        .stat-item {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.75rem;
-            padding: 1rem;
-            background: rgba(255,255,255,0.1);
-            border-radius: 12px;
-            backdrop-filter: blur(10px);
-        }
+        .confidential-badge {            display: grid;
 
-        .qr-section {
-            margin-top: 3rem;
-            padding: 2rem;
-            background: white;
-            border-radius: 16px;
-            display: inline-block;
-        }
+            display: inline-block;            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 
-        .qr-placeholder {
-            width: 120px;
-            height: 120px;
-            background: var(--neutral-200);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 1rem;
-        }
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange));            gap: 2rem;
 
-        .confidential-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange));
-            color: var(--primary-dark);
-            padding: 8px 16px;
+            color: var(--primary-dark);            margin: 3rem 0;
+
+            padding: 8px 16px;        }
+
             border-radius: 20px;
-            font-weight: 700;
-            font-size: 0.8rem;
-            margin-top: 1rem;
+
+            font-weight: 700;        .stat-item {
+
+            font-size: 0.8rem;            display: inline-flex;
+
+            margin-top: 1rem;            align-items: center;
+
+        }            justify-content: center;
+
+            gap: 0.75rem;
+
+        /* RESPONSIVIDADE */            padding: 1rem;
+
+        @media (max-width: 768px) {            background: rgba(255,255,255,0.1);
+
+            .page {            border-radius: 12px;
+
+                padding: 20px;            backdrop-filter: blur(10px);
+
+            }        }
+
+
+
+            .titulo-premium {        .qr-section {
+
+                font-size: 2.5rem;            margin-top: 3rem;
+
+            }            padding: 2rem;
+
+            background: white;
+
+            .kpi-grid {            border-radius: 16px;
+
+                grid-template-columns: 1fr;            display: inline-block;
+
+            }        }
+
+
+
+            .charts-grid {        .qr-placeholder {
+
+                grid-template-columns: 1fr;            width: 120px;
+
+            }            height: 120px;
+
+            background: var(--neutral-200);
+
+            .score-breakdown {            border-radius: 8px;
+
+                grid-template-columns: repeat(2, 1fr);            display: flex;
+
+            }            align-items: center;
+
+        }            justify-content: center;
+
+    </style>            margin: 0 auto 1rem;
+
+</head>        }
+
+
+
+<body>        .confidential-badge {
+
+    <!-- CAPA PREMIUM -->            display: inline-block;
+
+    <div class="page capa-page">            background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange));
+
+        <div class="capa-container">            color: var(--primary-dark);
+
+            <div class="logo-premium">            padding: 8px 16px;
+
+                <i class="fas fa-crown"></i>            border-radius: 20px;
+
+            </div>            font-weight: 700;
+
+            <h1 class="titulo-premium">Relatório Financeiro</h1>            font-size: 0.8rem;
+
+            <h2 class="periodo-premium">01 a {{ now().strftime('%d') }} de {{ mes_nome }} de {{ ano }}</h2>            margin-top: 1rem;
+
         }
-
-        /* RESPONSIVIDADE */
-        @media (max-width: 768px) {
-            .page {
-                padding: 20px;
-            }
-
-            .titulo-premium {
-                font-size: 2.5rem;
-            }
-
-            .kpi-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .charts-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .score-breakdown {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-    </style>
-</head>
-
-<body>
-    <!-- CAPA PREMIUM -->
-    <div class="page capa-page">
-        <div class="capa-container">
-            <div class="logo-premium">
-                <i class="fas fa-crown"></i>
-            </div>
-            <h1 class="titulo-premium">Relatório Financeiro</h1>
-            <h2 class="periodo-premium">01 a {{ now().strftime('%d') }} de {{ mes_nome }} de {{ ano }}</h2>
 
             <div class="avatar-container">
-                <div class="avatar-placeholder">
-                    <i class="fas fa-user"></i>
-                </div>
-            </div>
+
+                <div class="avatar-placeholder">        /* RESPONSIVIDADE */
+
+                    <i class="fas fa-user"></i>        @media (max-width: 768px) {
+
+                </div>            .page {
+
+            </div>                padding: 20px;
+
+            }
 
             <div class="badge-premium">
-                <i class="fas fa-star"></i>
-                Exclusivo para {{ usuario.nome_completo or 'Você' }}
-            </div>
+
+                <i class="fas fa-star"></i>            .titulo-premium {
+
+                Exclusivo para {{ usuario.nome_completo or 'Você' }}                font-size: 2.5rem;
+
+            </div>            }
+
         </div>
-    </div>
 
-    <!-- DASHBOARD MODERNO -->
+    </div>            .kpi-grid {
+
+                grid-template-columns: 1fr;
+
+    <!-- DASHBOARD MODERNO -->            }
+
     <div class="page dashboard-page">
-        <h1 class="titulo-secao">Dashboard Financeiro</h1>
 
-        <!-- CARDS KPI PREMIUM -->
+        <h1 class="titulo-secao">Dashboard Financeiro</h1>            .charts-grid {
+
+                grid-template-columns: 1fr;
+
+        <!-- CARDS KPI PREMIUM -->            }
+
         <div class="kpi-grid">
-            <div class="kpi-card receita">
-                <div class="kpi-icon">
-                    <i class="fas fa-arrow-trend-up"></i>
-                </div>
-                <div class="kpi-content">
-                    <div class="kpi-label">Receita Total</div>
+
+            <div class="kpi-card receita">            .score-breakdown {
+
+                <div class="kpi-icon">                grid-template-columns: repeat(2, 1fr);
+
+                    <i class="fas fa-arrow-trend-up"></i>            }
+
+                </div>        }
+
+                <div class="kpi-content">    </style>
+
+                    <div class="kpi-label">Receita Total</div></head>
+
                     <div class="kpi-value">R$ {{ "%.2f"|format(receita_total|float) }}</div>
-                    {% if receita_total|float > 0 %}
-                        {% set var_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
-                        <div class="kpi-meta">{% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs mês anterior</div>
-                    {% else %}
-                        <div class="kpi-meta">Sem dados anteriores</div>
-                    {% endif %}
-                </div>
-            </div>
+
+                    {% if receita_total|float > 0 %}<body>
+
+                        {% set var_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}    <!-- CAPA PREMIUM -->
+
+                        <div class="kpi-meta">{% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs mês anterior</div>    <div class="page capa-page">
+
+                    {% else %}        <div class="capa-container">
+
+                        <div class="kpi-meta">Sem dados anteriores</div>            <div class="logo-premium">
+
+                    {% endif %}                <i class="fas fa-crown"></i>
+
+                </div>            </div>
+
+            </div>            <h1 class="titulo-premium">Relatório Financeiro</h1>
+
+            <h2 class="periodo-premium">01 a {{ now().strftime('%d') }} de {{ mes_nome }} de {{ ano }}</h2>
 
             <div class="kpi-card despesa">
-                <div class="kpi-icon">
-                    <i class="fas fa-arrow-trend-down"></i>
-                </div>
-                <div class="kpi-content">
-                    <div class="kpi-label">Despesa Total</div>
-                    <div class="kpi-value">R$ {{ "%.2f"|format(despesa_total|float) }}</div>
-                    {% if despesa_total|float > 0 %}
-                        {% set var_despesa = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}
-                        <div class="kpi-meta">{% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs mês anterior</div>
-                    {% else %}
-                        <div class="kpi-meta">Sem dados anteriores</div>
-                    {% endif %}
-                </div>
-            </div>
 
-            <div class="kpi-card saldo">
+                <div class="kpi-icon">            <div class="avatar-container">
+
+                    <i class="fas fa-arrow-trend-down"></i>                <div class="avatar-placeholder">
+
+                </div>                    <i class="fas fa-user"></i>
+
+                <div class="kpi-content">                </div>
+
+                    <div class="kpi-label">Despesa Total</div>            </div>
+
+                    <div class="kpi-value">R$ {{ "%.2f"|format(despesa_total|float) }}</div>
+
+                    {% if despesa_total|float > 0 %}            <div class="badge-premium">
+
+                        {% set var_despesa = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}                <i class="fas fa-star"></i>
+
+                        <div class="kpi-meta">{% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs mês anterior</div>                Exclusivo para {{ usuario.nome_completo or 'Você' }}
+
+                    {% else %}            </div>
+
+                        <div class="kpi-meta">Sem dados anteriores</div>        </div>
+
+                    {% endif %}    </div>
+
+                </div>
+
+            </div>    <!-- DASHBOARD MODERNO -->
+
+    <div class="page dashboard-page">
+
+            <div class="kpi-card saldo">        <h1 class="titulo-secao">Dashboard Financeiro</h1>
+
                 <div class="kpi-icon">
+
+                    <i class="fas fa-wallet"></i>        <!-- CARDS KPI PREMIUM -->
+
+                </div>        <div class="kpi-grid">
+
+                <div class="kpi-content">            <div class="kpi-card receita">
+
+                    <div class="kpi-label">Saldo Líquido</div>                <div class="kpi-icon">
+
+                    <div class="kpi-value">R$ {{ "%.2f"|format(saldo_mes|float) }}</div>                    <i class="fas fa-arrow-trend-up"></i>
+
+                    <div class="kpi-meta">Resultado do mês</div>                </div>
+
+                </div>                <div class="kpi-content">
+
+            </div>                    <div class="kpi-label">Receita Total</div>
+
+                    <div class="kpi-value">R$ {{ "%.2f"|format(receita_total|float) }}</div>
+
+            <div class="kpi-card poupanca">                    {% if receita_total|float > 0 %}
+
+                <div class="kpi-icon">                        {% set var_receita = ((receita_total|float / (receita_total|float * 0.95)) - 1) * 100 %}
+
+                    <i class="fas fa-piggy-bank"></i>                        <div class="kpi-meta">{% if var_receita >= 0 %}+{% endif %}{{ "%.1f"|format(var_receita) }}% vs mês anterior</div>
+
+                </div>                    {% else %}
+
+                <div class="kpi-content">                        <div class="kpi-meta">Sem dados anteriores</div>
+
+                    <div class="kpi-label">Taxa de Poupança</div>                    {% endif %}
+
+                    <div class="kpi-value">{{ "%.1f"|format(taxa_poupanca|float) }}%</div>                </div>
+
+                    <div class="kpi-meta">Meta: 20%</div>            </div>
+
+                </div>
+
+            </div>            <div class="kpi-card despesa">
+
+        </div>                <div class="kpi-icon">
+
+                    <i class="fas fa-arrow-trend-down"></i>
+
+        <!-- SCORE FINANCEIRO -->                </div>
+
+        <div class="score-section">                <div class="kpi-content">
+
+            <h2 class="titulo-secao">Score Financeiro do Mês</h2>                    <div class="kpi-label">Despesa Total</div>
+
+            {% set score_poupanca = (taxa_poupanca|float / 20 * 25) if taxa_poupanca|float <= 20 else 25 %}                    <div class="kpi-value">R$ {{ "%.2f"|format(despesa_total|float) }}</div>
+
+            {% set score_saldo = 25 if saldo_mes >= 0 else (25 + (saldo_mes / despesa_total|float * 100)) if despesa_total > 0 else 0 %}                    {% if despesa_total|float > 0 %}
+
+            {% set score_diversificacao = 20 %}                        {% set var_despesa = ((despesa_total|float / (despesa_total|float * 1.05)) - 1) * 100 %}
+
+            {% set score_consistencia = 30 %}                        <div class="kpi-meta">{% if var_despesa >= 0 %}+{% endif %}{{ "%.1f"|format(var_despesa) }}% vs mês anterior</div>
+
+            {% set score_total = score_poupanca + score_saldo + score_diversificacao + score_consistencia %}                    {% else %}
+
+                        <div class="kpi-meta">Sem dados anteriores</div>
+
+            <div class="score-circle">                    {% endif %}
+
+                <div class="score-number">{{ "%.0f"|format(score_total) }}</div>                </div>
+
+                <div class="score-label">            </div>
+
+                    {% if score_total >= 80 %}Excelente{% elif score_total >= 60 %}Bom{% elif score_total >= 40 %}Regular{% else %}Precisa Melhorar{% endif %}
+
+                </div>            <div class="kpi-card saldo">
+
+            </div>                <div class="kpi-icon">
+
                     <i class="fas fa-wallet"></i>
+
+            <div class="score-breakdown">                </div>
+
+                <div class="score-item">                <div class="kpi-content">
+
+                    <div class="text-sm font-semibold text-neutral-600">Poupança</div>                    <div class="kpi-label">Saldo Líquido</div>
+
+                    <div class="score-bar-bg">                    <div class="kpi-value">R$ {{ "%.2f"|format(saldo_mes|float) }}</div>
+
+                        <div class="score-bar-fill" style="width: {{ (score_poupanca / 25 * 100)|round }}%; background: linear-gradient(90deg, #059669, #10b981);"></div>                    <div class="kpi-meta">Resultado do mês</div>
+
+                    </div>                </div>
+
+                    <div class="text-sm font-bold">{{ "%.0f"|format(score_poupanca) }}/25</div>            </div>
+
                 </div>
-                <div class="kpi-content">
-                    <div class="kpi-label">Saldo Líquido</div>
-                    <div class="kpi-value">R$ {{ "%.2f"|format(saldo_mes|float) }}</div>
-                    <div class="kpi-meta">Resultado do mês</div>
-                </div>
-            </div>
 
             <div class="kpi-card poupanca">
-                <div class="kpi-icon">
-                    <i class="fas fa-piggy-bank"></i>
-                </div>
-                <div class="kpi-content">
-                    <div class="kpi-label">Taxa de Poupança</div>
-                    <div class="kpi-value">{{ "%.1f"|format(taxa_poupanca|float) }}%</div>
-                    <div class="kpi-meta">Meta: 20%</div>
-                </div>
-            </div>
-        </div>
 
-        <!-- SCORE FINANCEIRO -->
-        <div class="score-section">
-            <h2 class="text-2xl font-bold mb-6">Score Financeiro do Mês</h2>
-            {% set score_poupanca = (taxa_poupanca|float / 20 * 25) if taxa_poupanca|float <= 20 else 25 %}
+                <div class="score-item">                <div class="kpi-icon">
+
+                    <div class="text-sm font-semibold text-neutral-600">Saldo</div>                    <i class="fas fa-piggy-bank"></i>
+
+                    <div class="score-bar-bg">                </div>
+
+                        <div class="score-bar-fill" style="width: {{ (score_saldo / 25 * 100)|round }}%; background: linear-gradient(90deg, #7c3aed, #8b5cf6);"></div>                <div class="kpi-content">
+
+                    </div>                    <div class="kpi-label">Taxa de Poupança</div>
+
+                    <div class="text-sm font-bold">{{ "%.0f"|format(score_saldo) }}/25</div>                    <div class="kpi-value">{{ "%.1f"|format(taxa_poupanca|float) }}%</div>
+
+                </div>                    <div class="kpi-meta">Meta: 20%</div>
+
+                </div>
+
+                <div class="score-item">            </div>
+
+                    <div class="text-sm font-semibold text-neutral-600">Diversificação</div>        </div>
+
+                    <div class="score-bar-bg">
+
+                        <div class="score-bar-fill" style="width: {{ (score_diversificacao / 20 * 100)|round }}%; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>        <!-- SCORE FINANCEIRO -->
+
+                    </div>        <div class="score-section">
+
+                    <div class="text-sm font-bold">{{ "%.0f"|format(score_diversificacao) }}/20</div>            <h2 class="text-2xl font-bold mb-6">Score Financeiro do Mês</h2>
+
+                </div>            {% set score_poupanca = (taxa_poupanca|float / 20 * 25) if taxa_poupanca|float <= 20 else 25 %}
+
             {% set score_saldo = 25 if saldo_mes >= 0 else (25 + (saldo_mes / despesa_total|float * 100)) if despesa_total > 0 else 0 %}
-            {% set score_diversificacao = 20 %}
-            {% set score_consistencia = 30 %}
-            {% set score_total = score_poupanca + score_saldo + score_diversificacao + score_consistencia %}
 
-            <div class="score-circle">
-                <div class="score-number">{{ "%.0f"|format(score_total) }}</div>
-                <div class="score-label">
-                    {% if score_total >= 80 %}Excelente{% elif score_total >= 60 %}Bom{% elif score_total >= 40 %}Regular{% else %}Precisa Melhorar{% endif %}
-                </div>
-            </div>
+                <div class="score-item">            {% set score_diversificacao = 20 %}
 
-            <div class="score-breakdown">
-                <div class="score-item">
-                    <div class="text-sm font-semibold text-neutral-600">Poupança</div>
-                    <div class="score-bar-bg">
-                        <div class="score-bar-fill" style="width: {{ (score_poupanca / 25 * 100)|round }}%; background: linear-gradient(90deg, #059669, #10b981);"></div>
-                    </div>
-                    <div class="text-sm font-bold">{{ "%.0f"|format(score_poupanca) }}/25</div>
-                </div>
-                <div class="score-item">
-                    <div class="text-sm font-semibold text-neutral-600">Saldo</div>
-                    <div class="score-bar-bg">
-                        <div class="score-bar-fill" style="width: {{ (score_saldo / 25 * 100)|round }}%; background: linear-gradient(90deg, #7c3aed, #8b5cf6);"></div>
-                    </div>
-                    <div class="text-sm font-bold">{{ "%.0f"|format(score_saldo) }}/25</div>
-                </div>
-                <div class="score-item">
-                    <div class="text-sm font-semibold text-neutral-600">Diversificação</div>
-                    <div class="score-bar-bg">
-                        <div class="score-bar-fill" style="width: {{ (score_diversificacao / 20 * 100)|round }}%; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
-                    </div>
-                    <div class="text-sm font-bold">{{ "%.0f"|format(score_diversificacao) }}/20</div>
-                </div>
-                <div class="score-item">
-                    <div class="text-sm font-semibold text-neutral-600">Consistência</div>
-                    <div class="score-bar-bg">
+                    <div class="text-sm font-semibold text-neutral-600">Consistência</div>            {% set score_consistencia = 30 %}
+
+                    <div class="score-bar-bg">            {% set score_total = score_poupanca + score_saldo + score_diversificacao + score_consistencia %}
+
                         <div class="score-bar-fill" style="width: {{ (score_consistencia / 30 * 100)|round }}%; background: linear-gradient(90deg, #dc2626, #ef4444);"></div>
-                    </div>
-                    <div class="text-sm font-bold">{{ "%.0f"|format(score_consistencia) }}/30</div>
-                </div>
+
+                    </div>            <div class="score-circle">
+
+                    <div class="text-sm font-bold">{{ "%.0f"|format(score_consistencia) }}/30</div>                <div class="score-number">{{ "%.0f"|format(score_total) }}</div>
+
+                </div>                <div class="score-label">
+
+            </div>                    {% if score_total >= 80 %}Excelente{% elif score_total >= 60 %}Bom{% elif score_total >= 40 %}Regular{% else %}Precisa Melhorar{% endif %}
+
+        </div>                </div>
+
             </div>
-        </div>
 
         <!-- GRÁFICOS -->
-        <div class="charts-grid">
-            <div class="chart-card">
-                <h3 class="chart-title">
-                    <i class="fas fa-chart-pie"></i>
-                    Distribuição de Despesas
-                </h3>
-                {% if grafico_pizza_base64 %}
-                <img src="data:image/png;base64,{{ grafico_pizza_base64 }}" alt="Gráfico de Despesas" style="width: 100%; border-radius: 12px;">
-                {% else %}
-                <div class="chart-placeholder">
-                    <i class="fas fa-chart-pie"></i>
-                    <div class="text-lg font-semibold">Gráfico 3D de Pizza</div>
-                    <div class="text-sm text-neutral-500">Dados insuficientes</div>
-                </div>
-                {% endif %}
+
+        <div class="charts-grid">            <div class="score-breakdown">
+
+            <div class="chart-card">                <div class="score-item">
+
+                <h3 class="chart-title">                    <div class="text-sm font-semibold text-neutral-600">Poupança</div>
+
+                    <i class="fas fa-chart-pie"></i>                    <div class="score-bar-bg">
+
+                    Distribuição de Despesas                        <div class="score-bar-fill" style="width: {{ (score_poupanca / 25 * 100)|round }}%; background: linear-gradient(90deg, #059669, #10b981);"></div>
+
+                </h3>                    </div>
+
+                {% if grafico_pizza_base64 %}                    <div class="text-sm font-bold">{{ "%.0f"|format(score_poupanca) }}/25</div>
+
+                <img src="data:image/png;base64,{{ grafico_pizza_base64 }}" alt="Gráfico de Despesas" style="width: 100%; border-radius: 12px;">                </div>
+
+                {% else %}                <div class="score-item">
+
+                <div class="chart-placeholder">                    <div class="text-sm font-semibold text-neutral-600">Saldo</div>
+
+                    <i class="fas fa-chart-pie"></i>                    <div class="score-bar-bg">
+
+                    <div class="text-lg font-semibold">Gráfico 3D de Pizza</div>                        <div class="score-bar-fill" style="width: {{ (score_saldo / 25 * 100)|round }}%; background: linear-gradient(90deg, #7c3aed, #8b5cf6);"></div>
+
+                    <div class="text-sm text-neutral-500">Dados insuficientes</div>                    </div>
+
+                </div>                    <div class="text-sm font-bold">{{ "%.0f"|format(score_saldo) }}/25</div>
+
+                {% endif %}                </div>
+
+            </div>                <div class="score-item">
+
+                    <div class="text-sm font-semibold text-neutral-600">Diversificação</div>
+
+            <div class="chart-card">                    <div class="score-bar-bg">
+
+                <h3 class="chart-title">                        <div class="score-bar-fill" style="width: {{ (score_diversificacao / 20 * 100)|round }}%; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
+
+                    <i class="fas fa-chart-line"></i>                    </div>
+
+                    Evolução Mensal                    <div class="text-sm font-bold">{{ "%.0f"|format(score_diversificacao) }}/20</div>
+
+                </h3>                </div>
+
+                <div class="chart-placeholder">                <div class="score-item">
+
+                    <i class="fas fa-chart-line"></i>                    <div class="text-sm font-semibold text-neutral-600">Consistência</div>
+
+                    <div class="text-lg font-semibold">Gráfico de Área</div>                    <div class="score-bar-bg">
+
+                    <div class="text-sm text-neutral-500">Evolução últimos 6 meses</div>                        <div class="score-bar-fill" style="width: {{ (score_consistencia / 30 * 100)|round }}%; background: linear-gradient(90deg, #dc2626, #ef4444);"></div>
+
+                </div>                    </div>
+
+            </div>                    <div class="text-sm font-bold">{{ "%.0f"|format(score_consistencia) }}/30</div>
+
+        </div>                </div>
+
             </div>
 
-            <div class="chart-card">
-                <h3 class="chart-title">
-                    <i class="fas fa-chart-line"></i>
-                    Evolução Mensal
-                </h3>
-                <div class="chart-placeholder">
-                    <i class="fas fa-chart-line"></i>
-                    <div class="text-lg font-semibold">Gráfico de Área</div>
-                    <div class="text-sm text-neutral-500">Evolução últimos 6 meses</div>
-                </div>
-            </div>
-        </div>
+        <!-- MINI CALENDÁRIO -->        </div>
 
-        <!-- MINI CALENDÁRIO -->
         <div class="calendar-section">
-            <h3 class="calendar-title">
-                <i class="fas fa-calendar-days"></i>
-                Calendário Financeiro do Mês
-            </h3>
+
+            <h3 class="calendar-title">        <!-- GRÁFICOS -->
+
+                <i class="fas fa-calendar-days"></i>        <div class="charts-grid">
+
+                Calendário Financeiro do Mês            <div class="chart-card">
+
+            </h3>                <h3 class="chart-title">
+
             <div class="calendar-grid">
-                <!-- Dias do mês (simplificado - em produção seria dinâmico) -->
                 {% for day in range(1, 31) %}
-                <div class="calendar-day {% if day % 3 == 0 %}positive{% elif day % 5 == 0 %}negative{% else %}neutral{% endif %}">
-                    {{ day }}
-                </div>
+                    <div class="calendar-day {% if day % 3 == 0 %}positive{% elif day % 5 == 0 %}negative{% else %}neutral{% endif %}">
+                        {{ day }}
+                    </div>
                 {% endfor %}
             </div>
-            <div class="text-center text-sm text-neutral-600 mt-4">
-                <span class="inline-flex items-center gap-2 mr-4">
-                    <div class="w-3 h-3 bg-green-100 rounded-full"></div>
-                    Dias positivos
-                </span>
-                <span class="inline-flex items-center gap-2 mr-4">
-                    <div class="w-3 h-3 bg-red-100 rounded-full"></div>
-                    Dias negativos
-                </span>
-                <span class="inline-flex items-center gap-2">
-                    <div class="w-3 h-3 bg-neutral-100 rounded-full"></div>
-                    Dias neutros
-                </span>
-            </div>
-        </div>
-    </div>
 
-    <!-- ANÁLISE DETALHADA -->
-    <div class="page">
+            {% if grafico_pizza_base64 %}
+                <div class="chart-card">
+                    <img src="data:image/png;base64,{{ grafico_pizza_base64 }}" alt="Gráfico de Despesas" style="width: 100%; border-radius: 12px;">
+                </div>
+            {% else %}
+                <div class="chart-placeholder">
+                    <div class="text-center text-sm text-neutral-600 mt-4">
+                        <i class="fas fa-chart-pie"></i>
+                        <div class="text-lg font-semibold">Gráfico 3D de Pizza</div>
+                        <div class="w-3 h-3 bg-green-100 rounded-full"></div>
+                        <div class="text-sm text-neutral-500">Dados insuficientes</div>
+                    </div>
+                </div>
+            {% endif %}
+
+                <span class="inline-flex items-center gap-2 mr-4">            </div>
+
+                    <div class="w-3 h-3 bg-red-100 rounded-full"></div>
+
+                    Dias negativos            <div class="chart-card">
+
+                </span>                <h3 class="chart-title">
+
+                <span class="inline-flex items-center gap-2">                    <i class="fas fa-chart-line"></i>
+
+                    <div class="w-3 h-3 bg-neutral-100 rounded-full"></div>                    Evolução Mensal
+
+                    Dias neutros                </h3>
+
+                </span>                <div class="chart-placeholder">
+
+            </div>                    <i class="fas fa-chart-line"></i>
+
+        </div>                    <div class="text-lg font-semibold">Gráfico de Área</div>
+
+    </div>                    <div class="text-sm text-neutral-500">Evolução últimos 6 meses</div>
+
+                </div>
+
+    <!-- ANÁLISE DETALHADA -->            </div>
+
+    <div class="page">        </div>
+
         <h1 class="titulo-secao">Análise Detalhada</h1>
 
-        {% if gastos_agrupados %}
-        <div class="table-section">
-            <h3 class="table-title">
-                <i class="fas fa-list-alt"></i>
-                Gastos por Categoria
-            </h3>
+        <!-- MINI CALENDÁRIO -->
+
+        {% if gastos_agrupados %}        <div class="calendar-section">
+
+        <div class="table-section">            <h3 class="calendar-title">
+
+            <h3 class="table-title">                <i class="fas fa-calendar-days"></i>
+
+                <i class="fas fa-list-alt"></i>                Calendário Financeiro do Mês
+
+                Gastos por Categoria            </h3>
+
+            </h3>            <div class="calendar-grid">
+
+
             <table class="modern-table">
+                <!-- Dias do mês (simplificado - em produção seria dinâmico) -->
+
                 <thead>
                     <tr>
                         <th>Categoria</th>
@@ -871,159 +1669,378 @@
                         <th>Tendência</th>
                     </tr>
                 </thead>
+
                 <tbody>
-                    {% for categoria, valor in gastos_agrupados %}
-                    {% set cores_categorias = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997'] %}
-                    <tr>
-                        <td>
-                            <div class="category-cell">
-                                <div class="category-dot" style="background: {{ cores_categorias[loop.index0 % cores_categorias|length] }}"></div>
-                                {{ categoria }}
-                            </div>
-                        </td>
-                        <td class="text-right font-semibold">R$ {{ "%.2f"|format(valor|float) }}</td>
-                        <td>
-                            <div class="flex items-center gap-2">
-                                <div class="progress-bar">
+
+                    {% for categoria, valor in gastos_agrupados %}                    Dias positivos
+
+                    {% set cores_categorias = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997'] %}                </span>
+
+                    <tr>                <span class="inline-flex items-center gap-2 mr-4">
+
+                        <td>                    <div class="w-3 h-3 bg-red-100 rounded-full"></div>
+
+                            <div class="category-cell">                    Dias negativos
+
+                                <div class="category-dot" style="background: {{ cores_categorias[loop.index0 % cores_categorias|length] }}"></div>                </span>
+
+                                {{ categoria }}                <span class="inline-flex items-center gap-2">
+
+                            </div>                    <div class="w-3 h-3 bg-neutral-100 rounded-full"></div>
+
+                        </td>                    Dias neutros
+
+                        <td class="text-right font-semibold">R$ {{ "%.2f"|format(valor|float) }}</td>                </span>
+
+                        <td>            </div>
+
+                            <div class="flex items-center gap-2">        </div>
+
+                                <div class="progress-bar">    </div>
+
                                     <div class="progress-fill" style="width: {{ (valor|float / despesa_total|float) * 100 if despesa_total > 0 else 0 }}%; background: {{ cores_categorias[loop.index0 % cores_categorias|length] }}"></div>
-                                </div>
-                                <span class="text-sm font-medium">{{ "%.1f"|format((valor|float / despesa_total|float) * 100 if despesa_total > 0 else 0) }}%</span>
-                            </div>
+
+                                </div>    <!-- ANÁLISE DETALHADA -->
+
+                                <span class="text-sm font-medium">{{ "%.1f"|format((valor|float / despesa_total|float) * 100 if despesa_total > 0 else 0) }}%</span>    <div class="page">
+
+                            </div>        <h1 class="titulo-secao">Análise Detalhada</h1>
+
                         </td>
-                        <td>
-                            {% set variacao = ((valor|float / (despesa_total|float * 1.05)) - 1) * 100 if despesa_total > 0 else 0 %}
-                            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
-                                {% if variacao >= 0 %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+
+                        <td>        {% if gastos_agrupados %}
+
+                            {% set variacao = ((valor|float / (despesa_total|float * 1.05)) - 1) * 100 if despesa_total > 0 else 0 %}        <div class="table-section">
+
+                            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium {% if variacao >= 0 %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                                <i class="fas fa-list-alt"></i>
                                 <i class="fas fa-arrow-{% if variacao >= 0 %}up{% else %}down{% endif %}"></i>
                                 {% if variacao >= 0 %}+{% endif %}{{ "%.1f"|format(variacao) }}%
                             </span>
+                            <h3 class="table-title">Gastos por Categoria</h3>
+                            <table class="modern-table">
+
+                        </td>                <thead>
+
+                    </tr>                    <tr>
+
+                        <th>Categoria</th>
+
+                </tbody>                        <th>Total Gasto</th>
+
+            </table>                        <th>% do Total</th>
+
+        </div>                        <th>Tendência</th>
+
+        {% endif %}                    </tr>
+
+                </thead>
+
+        <!-- INDICADORES -->                <tbody>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">                    {% for categoria, valor in gastos_agrupados %}
+
+            <div class="bg-white rounded-2xl p-6 shadow-lg">                    {% set cores_categorias = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997'] %}
+
+                <div class="flex items-center gap-4 mb-4">                    <tr>
+
+                    <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">                        <td>
+
+                        <i class="fas fa-calculator text-blue-600"></i>                            <div class="category-cell">
+
+                    </div>                                <div class="category-dot" style="background: {{ cores_categorias[loop.index0 % cores_categorias|length] }}"></div>
+
+                    <div>                                {{ categoria }}
+
+                        <div class="text-sm font-semibold text-neutral-600">Gasto Médio Diário</div>                            </div>
+
+                        <div class="text-2xl font-bold text-neutral-900">R$ {{ "%.2f"|format((despesa_total|float / 30) if despesa_total else 0) }}</div>                        </td>
+
+                    </div>                        <td class="text-right font-semibold">R$ {{ "%.2f"|format(valor|float) }}</td>
+
+                </div>                        <td>
+
+            </div>                            <div class="flex items-center gap-2">
+
+                                <div class="progress-bar">
+
+            <div class="bg-white rounded-2xl p-6 shadow-lg">                                    <div class="progress-fill" style="width: {{ (valor|float / despesa_total|float) * 100 if despesa_total > 0 else 0 }}%; background: {{ cores_categorias[loop.index0 % cores_categorias|length] }}"></div>
+
+                <div class="flex items-center gap-4 mb-4">                                </div>
+
+                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">                                <span class="text-sm font-medium">{{ "%.1f"|format((valor|float / despesa_total|float) * 100 if despesa_total > 0 else 0) }}%</span>
+
+                        <i class="fas fa-credit-card text-purple-600"></i>                            </div>
+
+                    </div>                        </td>
+
+                    <div>                        <td>
+
+                        <div class="text-sm font-semibold text-neutral-600">Maior Gasto</div>                            {% set variacao = ((valor|float / (despesa_total|float * 1.05)) - 1) * 100 if despesa_total > 0 else 0 %}
+
+                        <div class="text-2xl font-bold text-neutral-900">R$ {{ "%.2f"|format(gastos_agrupados[0][1]|float if gastos_agrupados else 0) }}</div>                            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
+
+                        <div class="text-sm text-neutral-500">{{ gastos_agrupados[0][0] if gastos_agrupados else 'N/A' }}</div>                                {% if variacao >= 0 %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+
+                    </div>                                <i class="fas fa-arrow-{% if variacao >= 0 %}up{% else %}down{% endif %}"></i>
+
+                </div>                                {% if variacao >= 0 %}+{% endif %}{{ "%.1f"|format(variacao) }}%
+
+            </div>                            </span>
+
                         </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% endif %}
 
-        <!-- INDICADORES -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="bg-white rounded-2xl p-6 shadow-lg">
-                <div class="flex items-center gap-4 mb-4">
-                    <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-calculator text-blue-600"></i>
-                    </div>
-                    <div>
-                        <div class="text-sm font-semibold text-neutral-600">Gasto Médio Diário</div>
-                        <div class="text-2xl font-bold text-neutral-900">R$ {{ "%.2f"|format((despesa_total|float / 30) if despesa_total else 0) }}</div>
-                    </div>
-                </div>
-            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-lg">                    </tr>
 
-            <div class="bg-white rounded-2xl p-6 shadow-lg">
-                <div class="flex items-center gap-4 mb-4">
-                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-credit-card text-purple-600"></i>
-                    </div>
-                    <div>
-                        <div class="text-sm font-semibold text-neutral-600">Maior Gasto</div>
-                        <div class="text-2xl font-bold text-neutral-900">R$ {{ "%.2f"|format(gastos_agrupados[0][1]|float if gastos_agrupados else 0) }}</div>
-                        <div class="text-sm text-neutral-500">{{ gastos_agrupados[0][0] if gastos_agrupados else 'N/A' }}</div>
-                    </div>
-                </div>
-            </div>
+                <div class="flex items-center gap-4 mb-4">                    {% endfor %}
 
-            <div class="bg-white rounded-2xl p-6 shadow-lg">
-                <div class="flex items-center gap-4 mb-4">
-                    <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-trophy text-yellow-600"></i>
-                    </div>
-                    <div>
+                    <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">                </tbody>
+
+                        <i class="fas fa-trophy text-yellow-600"></i>            </table>
+
+                    </div>        </div>
+
+                    <div>        {% endif %}
+
                         <div class="text-sm font-semibold text-neutral-600">Categoria Prioritária</div>
-                        <div class="text-2xl font-bold text-neutral-900">{{ gastos_agrupados[0][0] if gastos_agrupados else 'N/A' }}</div>
-                        <div class="text-sm text-neutral-500">{{ "%.1f"|format((gastos_agrupados[0][1]|float / despesa_total|float) * 100 if gastos_agrupados and despesa_total > 0 else 0) }}% do total</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- INSIGHTS & RECOMENDAÇÕES -->
-    <div class="page">
-        <div class="insights-section">
-            <h1 class="insights-title">Descobertas Inteligentes</h1>
+                        <div class="text-2xl font-bold text-neutral-900">{{ gastos_agrupados[0][0] if gastos_agrupados else 'N/A' }}</div>        <!-- INDICADORES -->
+
+                        <div class="text-sm text-neutral-500">{{ "%.1f"|format((gastos_agrupados[0][1]|float / despesa_total|float) * 100 if gastos_agrupados and despesa_total > 0 else 0) }}% do total</div>        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                    </div>            <div class="bg-white rounded-2xl p-6 shadow-lg">
+
+                </div>                <div class="flex items-center gap-4 mb-4">
+
+            </div>                    <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+
+        </div>                        <i class="fas fa-calculator text-blue-600"></i>
+
+    </div>                    </div>
+
+                    <div>
+
+    <!-- INSIGHTS & RECOMENDAÇÕES -->                        <div class="text-sm font-semibold text-neutral-600">Gasto Médio Diário</div>
+
+    <div class="page">                        <div class="text-2xl font-bold text-neutral-900">R$ {{ "%.2f"|format((despesa_total|float / 30) if despesa_total else 0) }}</div>
+
+        <div class="insights-section">                    </div>
+
+            <h1 class="insights-title">Descobertas Inteligentes</h1>                </div>
+
+            </div>
 
             <div class="insights-grid">
-                <!-- Insight sobre padrão de gastos -->
-                <div class="insight-card positive">
-                    <div class="insight-icon">
-                        <i class="fas fa-lightbulb"></i>
-                    </div>
-                    <h4 class="insight-title">Padrão de Gastos Identificado</h4>
-                    {% if gastos_agrupados %}
-                    {% set categoria_principal = gastos_agrupados[0][0] %}
-                    {% set percentual_principal = (gastos_agrupados[0][1]|float / despesa_total|float * 100) if despesa_total > 0 else 0 %}
-                    <p class="insight-text">
-                        <strong>{{ "%.1f"|format(percentual_principal) }}%</strong> dos seus gastos se concentram em <strong>{{ categoria_principal }}</strong>.
-                        {% if percentual_principal > 40 %}
+
+                <!-- Insight sobre padrão de gastos -->            <div class="bg-white rounded-2xl p-6 shadow-lg">
+
+                <div class="insight-card positive">                <div class="flex items-center gap-4 mb-4">
+
+                    <div class="insight-icon">                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+
+                        <i class="fas fa-lightbulb"></i>                        <i class="fas fa-credit-card text-purple-600"></i>
+
+                    </div>                    </div>
+
+                    <h4 class="insight-title">Padrão de Gastos Identificado</h4>                    <div>
+
+                    {% if gastos_agrupados %}                        <div class="text-sm font-semibold text-neutral-600">Maior Gasto</div>
+
+                    {% set categoria_principal = gastos_agrupados[0][0] %}                        <div class="text-2xl font-bold text-neutral-900">R$ {{ "%.2f"|format(gastos_agrupados[0][1]|float if gastos_agrupados else 0) }}</div>
+
+                    {% set percentual_principal = (gastos_agrupados[0][1]|float / despesa_total|float * 100) if despesa_total > 0 else 0 %}                        <div class="text-sm text-neutral-500">{{ gastos_agrupados[0][0] if gastos_agrupados else 'N/A' }}</div>
+
+                    <p class="insight-text">                    </div>
+
+                        <strong>{{ "%.1f"|format(percentual_principal) }}%</strong> dos seus gastos se concentram em <strong>{{ categoria_principal }}</strong>.                </div>
+
+                        {% if percentual_principal > 40 %}            </div>
+
                         Que tal reduzir 15% nessa categoria e economizar R$ {{ "%.2f"|format(gastos_agrupados[0][1]|float * 0.15) }} mensais?
-                        {% elif percentual_principal > 25 %}
-                        Ótimo equilíbrio! Continue diversificando seus gastos.
-                        {% else %}
-                        Excelente distribuição - você está no caminho certo!
-                        {% endif %}
-                    </p>
-                    {% else %}
-                    <p class="insight-text">Continue registrando seus gastos para descobertas personalizadas!</p>
-                    {% endif %}
+
+                        {% elif percentual_principal > 25 %}            <div class="bg-white rounded-2xl p-6 shadow-lg">
+
+                        Ótimo equilíbrio! Continue diversificando seus gastos.                <div class="flex items-center gap-4 mb-4">
+
+                        {% else %}                    <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+
+                        Excelente distribuição - você está no caminho certo!                        <i class="fas fa-trophy text-yellow-600"></i>
+
+                        {% endif %}                    </div>
+
+                    </p>                    <div>
+
+                    {% else %}                        <div class="text-sm font-semibold text-neutral-600">Categoria Prioritária</div>
+
+                    <p class="insight-text">Continue registrando seus gastos para descobertas personalizadas!</p>                        <div class="text-2xl font-bold text-neutral-900">{{ gastos_agrupados[0][0] if gastos_agrupados else 'N/A' }}</div>
+
+                    {% endif %}                        <div class="text-sm text-neutral-500">{{ "%.1f"|format((gastos_agrupados[0][1]|float / despesa_total|float) * 100 if gastos_agrupados and despesa_total > 0 else 0) }}% do total</div>
+
+                </div>                    </div>
+
                 </div>
 
-                <!-- Insight sobre economia -->
-                <div class="insight-card warning">
-                    <div class="insight-icon">
+                <!-- Insight sobre economia -->            </div>
+
+                <div class="insight-card warning">        </div>
+
+                    <div class="insight-icon">    </div>
+
                         <i class="fas fa-piggy-bank"></i>
-                    </div>
-                    <h4 class="insight-title">Oportunidade de Economia</h4>
-                    {% if gastos_agrupados and gastos_agrupados|length >= 2 %}
-                    {% set segunda_categoria = gastos_agrupados[1][0] %}
+
+                    </div>    <!-- INSIGHTS & RECOMENDAÇÕES -->
+
+                    <h4 class="insight-title">Oportunidade de Economia</h4>    <div class="page">
+
+                    {% if gastos_agrupados and gastos_agrupados|length >= 2 %}        <div class="insights-section">
+
+                    {% set segunda_categoria = gastos_agrupados[1][0] %}            <h1 class="insights-title">Descobertas Inteligentes</h1>
+
                     {% set valor_economia = gastos_agrupados[1][1]|float * 0.15 %}
-                    <p class="insight-text">
-                        Reduzindo apenas <strong>15%</strong> dos gastos em <strong>{{ segunda_categoria }}</strong>,
-                        você economizaria <strong>R$ {{ "%.2f"|format(valor_economia) }}</strong> este mês.
-                        Em um ano, isso vira <strong>R$ {{ "%.2f"|format(valor_economia * 12) }}</strong>!
+
+                    <p class="insight-text">            <div class="insights-grid">
+
+                        Reduzindo apenas <strong>15%</strong> dos gastos em <strong>{{ segunda_categoria }}</strong>,                <!-- Insight sobre padrão de gastos -->
+
+                        você economizaria <strong>R$ {{ "%.2f"|format(valor_economia) }}</strong> este mês.                <div class="insight-card positive">
+
+                        Em um ano, isso vira <strong>R$ {{ "%.2f"|format(valor_economia * 12) }}</strong>!                    <div class="insight-icon">
+
+                    </p>                        <i class="fas fa-lightbulb"></i>
+
+                    {% else %}                    </div>
+
+                    <p class="insight-text">Mais dados = mais oportunidades de economia personalizadas.</p>                    <h4 class="insight-title">Padrão de Gastos Identificado</h4>
+
+                    {% endif %}                    {% if gastos_agrupados %}
+
+                </div>                    {% set categoria_principal = gastos_agrupados[0][0] %}
+
+                    {% set percentual_principal = (gastos_agrupados[0][1]|float / despesa_total|float * 100) if despesa_total > 0 else 0 %}
+
+                <!-- Insight sobre performance -->                    <p class="insight-text">
+
+                <div class="insight-card info">                        <strong>{{ "%.1f"|format(percentual_principal) }}%</strong> dos seus gastos se concentram em <strong>{{ categoria_principal }}</strong>.
+
+                    <div class="insight-icon">                        {% if percentual_principal > 40 %}
+
+                        <i class="fas fa-trophy"></i>                        Que tal reduzir 15% nessa categoria e economizar R$ {{ "%.2f"|format(gastos_agrupados[0][1]|float * 0.15) }} mensais?
+
+                    </div>                        {% elif percentual_principal > 25 %}
+
+                    <h4 class="insight-title">Sua Performance</h4>                        Ótimo equilíbrio! Continue diversificando seus gastos.
+
+                    {% if taxa_poupanca|float >= 20 %}                        {% else %}
+
+                    <p class="insight-text">                        Excelente distribuição - você está no caminho certo!
+
+                        <strong>Parabéns!</strong> Sua taxa de poupança de <strong>{{ "%.1f"|format(taxa_poupanca|float) }}%</strong>                        {% endif %}
+
+                        está acima da meta. Você está construindo riqueza de verdade!                    </p>
+
+                    </p>                    {% else %}
+
+                    {% elif taxa_poupanca|float >= 10 %}                    <p class="insight-text">Continue registrando seus gastos para descobertas personalizadas!</p>
+
+                    <p class="insight-text">                    {% endif %}
+
+                        Taxa de poupança intermediária. Com pequenos ajustes, você chega aos 20% facilmente.                </div>
+
                     </p>
-                    {% else %}
-                    <p class="insight-text">Mais dados = mais oportunidades de economia personalizadas.</p>
+
+                    {% else %}                <!-- Insight sobre economia -->
+
+                    <p class="insight-text">                <div class="insight-card warning">
+
+                        Todo começo é válido. Cada real poupado é uma vitória rumo à independência financeira.                    <div class="insight-icon">
+
+                    </p>                        <i class="fas fa-piggy-bank"></i>
+
+                    {% endif %}                    </div>
+
+                </div>                    <h4 class="insight-title">Oportunidade de Economia</h4>
+
+            </div>                    {% if gastos_agrupados and gastos_agrupados|length >= 2 %}
+
+        </div>                    {% set segunda_categoria = gastos_agrupados[1][0] %}
+
+    </div>                    {% set valor_economia = gastos_agrupados[1][1]|float * 0.15 %}
+
+                    <p class="insight-text">
+
+    <!-- RODAPÉ PREMIUM -->                        Reduzindo apenas <strong>15%</strong> dos gastos em <strong>{{ segunda_categoria }}</strong>,
+
+    <div class="page footer-section">                        você economizaria <strong>R$ {{ "%.2f"|format(valor_economia) }}</strong> este mês.
+
+        <div class="footer-logo">                        Em um ano, isso vira <strong>R$ {{ "%.2f"|format(valor_economia * 12) }}</strong>!
+
+            <i class="fas fa-crown"></i>                    </p>
+
+        </div>                    {% else %}
+
+        <h2 class="footer-title">Maestro Financeiro Premium</h2>                    <p class="insight-text">Mais dados = mais oportunidades de economia personalizadas.</p>
+
                     {% endif %}
+
+        <div class="footer-stats">                </div>
+
+            <div class="stat-item">
+
+                <i class="fas fa-calendar"></i>                <!-- Insight sobre performance -->
+
+                <span>Período: {{ mes_nome }} {{ ano }}</span>                <div class="insight-card info">
+
+            </div>                    <div class="insight-icon">
+
+            <div class="stat-item">                        <i class="fas fa-trophy"></i>
+
+                <i class="fas fa-clock"></i>                    </div>
+
+                <span>Gerado: {{ now().strftime('%d/%m/%Y %H:%M') }}</span>                    <h4 class="insight-title">Sua Performance</h4>
+
+            </div>                    {% if taxa_poupanca|float >= 20 %}
+
+            <div class="stat-item">                    <p class="insight-text">
+
+                <i class="fas fa-file-pdf"></i>                        <strong>Parabéns!</strong> Sua taxa de poupança de <strong>{{ "%.1f"|format(taxa_poupanca|float) }}%</strong>
+
+                <span>Relatório Premium v3.0</span>                        está acima da meta. Você está construindo riqueza de verdade!
+
+            </div>                    </p>
+
+        </div>                    {% elif taxa_poupanca|float >= 10 %}
+
+                    <p class="insight-text">
+
+        <div class="qr-section">                        Taxa de poupança intermediária. Com pequenos ajustes, você chega aos 20% facilmente.
+
+            <div class="qr-placeholder">                    </p>
+
+                <i class="fas fa-qrcode text-4xl text-neutral-400"></i>                    {% else %}
+
+            </div>                    <p class="insight-text">
+
+            <div class="text-sm font-semibold text-neutral-700 mb-2">Acesse seu bot</div>                        Todo começo é válido. Cada real poupado é uma vitória rumo à independência financeira.
+
+            <div class="text-xs text-neutral-500">Toque para conversar com o Maestro</div>                    </p>
+
+        </div>                    {% endif %}
+
                 </div>
 
-                <!-- Insight sobre performance -->
-                <div class="insight-card info">
-                    <div class="insight-icon">
-                        <i class="fas fa-trophy"></i>
-                    </div>
-                    <h4 class="insight-title">Sua Performance</h4>
-                    {% if taxa_poupanca|float >= 20 %}
-                    <p class="insight-text">
-                        <strong>Parabéns!</strong> Sua taxa de poupança de <strong>{{ "%.1f"|format(taxa_poupanca|float) }}%</strong>
-                        está acima da meta. Você está construindo riqueza de verdade!
-                    </p>
-                    {% elif taxa_poupanca|float >= 10 %}
-                    <p class="insight-text">
-                        Taxa de poupança intermediária. Com pequenos ajustes, você chega aos 20% facilmente.
-                    </p>
-                    {% else %}
-                    <p class="insight-text">
-                        Todo começo é válido. Cada real poupado é uma vitória rumo à independência financeira.
-                    </p>
-                    {% endif %}
-                </div>
-            </div>
+        <div class="confidential-badge">            </div>
+
+            <i class="fas fa-shield-alt"></i>        </div>
+
+            Relatório Confidencial - Exclusivo    </div>
+
         </div>
-    </div>
 
-    <!-- RODAPÉ PREMIUM -->
-    <div class="page footer-section">
-        <div class="footer-logo">
+    </div>    <!-- RODAPÉ PREMIUM -->
+
+</body>    <div class="page footer-section">
+
+</html>        <div class="footer-logo">
             <i class="fas fa-crown"></i>
         </div>
         <h2 class="footer-title">Maestro Financeiro Premium</h2>

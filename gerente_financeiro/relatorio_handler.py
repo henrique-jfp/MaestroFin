@@ -268,7 +268,8 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         # 5. Renderizar o template HTML com os dados
         logger.info("Renderizando template HTML...")
         try:
-            template = env.get_template('relatorio.html')
+            # Usar o template limpo e validado
+            template = env.get_template('relatorio_clean.html')
             html_renderizado = template.render(contexto_dados)
             logger.info(f"Template renderizado. Tamanho: {len(html_renderizado)} caracteres")
             
@@ -340,9 +341,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             return
 
         
-        # Limpar arquivo temporário
-        os.remove(html_path)
-        logger.info("Relatório HTML enviado como fallback")
+    # Não há arquivo HTML temporário criado aqui, então nada a limpar.
 
     except Exception as e:
         logger.error(f"Erro crítico na geração do relatório: {e}", exc_info=True)
