@@ -20,7 +20,7 @@ import json  # <-- Para serialização de dados
 from functools import lru_cache  # <-- Cache em memória
 import time  # <-- Para timestamps do cache
 import google.generativeai as genai
-from .prompts import PROMPT_ANALISE_RELATORIO
+
 from database.database import listar_objetivos_usuario
 from models import Categoria, Lancamento, Usuario, Subcategoria, ItemLancamento
 import config
