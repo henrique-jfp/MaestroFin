@@ -26,6 +26,10 @@ from models import Usuario, Lancamento, Objetivo, Categoria, ConquistaUsuario
 
 logger = logging.getLogger(__name__)
 
+def debug_wrapped_version():
+    """Função de debug para verificar se a versão corrigida está rodando"""
+    return "WRAPPED_V2_FIXED_INNER_JOIN"
+
 
 # ============================================================================
 # CÁLCULOS DE ESTATÍSTICAS ANUAIS
@@ -435,6 +439,9 @@ def formatar_wrapped_completo(usuario: Usuario, ano: int) -> str:
     Esta é a mensagem ÉPICA que será enviada aos usuários!
     """
     try:
+        # DEBUG: Confirmar versão corrigida
+        logger.info(f"🎊 DEBUG: Wrapped versão {debug_wrapped_version()} rodando para usuário {usuario.id}")
+        
         # Coletar todas as estatísticas
         resumo = calcular_resumo_financeiro(usuario.id, ano)
         categorias_top = calcular_categorias_top(usuario.id, ano, 5)
