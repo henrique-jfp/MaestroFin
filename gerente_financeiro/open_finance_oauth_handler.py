@@ -6,6 +6,7 @@ Responsabilidade Única: Gerenciar a interação com o usuário (mensagens, bot�
 chamar o OpenFinanceService para executar a lógica de negócio e apresentar os
 resultados de forma clara e amigável.
 """
+import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
