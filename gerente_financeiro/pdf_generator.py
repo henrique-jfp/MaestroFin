@@ -22,6 +22,29 @@ from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 
 logger = logging.getLogger(__name__)
+import subprocess
+
+
+def _get_short_git_commit() -> str:
+    """Tenta obter o short commit hash.
+
+    Ordem de tentativa:
+    1. Variável de ambiente 'MAESTROFIN_COMMIT'
+    2. git rev-parse --short HEAD (se houver .git e git disponível)
+    3. 'unknown'
+    """
+    env_hash = os.environ.get('MAESTROFIN_COMMIT')
+    if env_hash:
+        return env_hash[:7]
+    try:
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        git_dir = os.path.join(repo_root, '.git')
+        if os.path.exists(git_dir):
+            out = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=repo_root)
+            return out.decode().strip()[:7]
+    except Exception:
+        pass
+    return 'unknown'
 
 # ===========================
 # CONFIGURAÇÕES DE CORES
@@ -115,6 +138,15 @@ def create_elegant_footer(canvas_obj, doc):
     canvas_obj.setFont("Helvetica-Oblique", 7)
     canvas_obj.setFillColor(HexColor('#9ca3af'))
     canvas_obj.drawCentredString(A4[0]/2, 0.8*cm, "Seu assistente financeiro inteligente")
+    
+    # Stamp com short commit hash (útil para identificar versão do gerador)
+    try:
+        commit_short = _get_short_git_commit()
+        canvas_obj.setFont("Helvetica", 6)
+        canvas_obj.setFillColor(HexColor('#9ca3af'))
+        canvas_obj.drawRightString(A4[0] - 2*cm, 0.6*cm, f"build: {commit_short}")
+    except Exception:
+        pass
     
     canvas_obj.restoreState()
 
