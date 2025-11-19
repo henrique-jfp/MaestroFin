@@ -686,156 +686,73 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
         from database.database import get_db
         from models import PluggyAccount, PluggyTransaction
         from datetime import datetime, timedelta
-        import json
-        
+
         db = next(get_db())
-        
+
         # Buscar informações da conta primeiro
         account = db.query(PluggyAccount).filter(PluggyAccount.id == account_id).first()
         if account:
-            logger.info(f"🔍 Sincronizando conta: {account.name} (tipo: {account.type}, subtype: {account.subtype})")
-        
+            logger.info(f"🔄 Sincronizando transações para a conta {account_id}")
+
         # Calcular data inicial
         date_from = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         date_to = datetime.now().strftime("%Y-%m-%d")
-        
+
         # Buscar transações na API Pluggy com PAGINAÇÃO COMPLETA
         logger.info(f"🔄 Buscando transações da account {pluggy_account_id} (de {date_from} até {date_to})...")
-        
+
         all_transactions = []
         page = 1
         total_pages = 1
-        
+
         # Loop de paginação - buscar TODAS as páginas
         while page <= total_pages:
-            try:
-                logger.info(f"📄 Buscando página {page} de transações...")
-                
-                transactions_data = pluggy_request(
-                    "GET", 
-                    "/transactions", 
-                    params={
-                        "accountId": pluggy_account_id,
-                        "from": date_from,
-                        "to": date_to,
-                        "page": page
-                    }
-                )
-                
-                # Log da resposta na primeira página (RESUMIDO para evitar spam)
-                if page == 1:
-                    logger.info(f"📡 Response da API Pluggy (página {page}): {len(transactions_data.get('results', []))} itens")
-                
-                page_transactions = transactions_data.get("results", [])
-                total_pages = transactions_data.get("totalPages", 1)
-                total_count = transactions_data.get("total", 0)
-                
-                logger.info(f"📊 Página {page}/{total_pages}: {len(page_transactions)} transações (total geral: {total_count})")
-                
-                all_transactions.extend(page_transactions)
-                page += 1
-                
-            except Exception as api_error:
-                logger.error(f"❌ Erro na API Pluggy ao buscar página {page}: {api_error}")
-                # Se falhou na primeira página, retornar erro
-                if page == 1:
-                    return {"new": 0, "updated": 0, "total": 0, "error": str(api_error)}
-                # Se falhou em páginas posteriores, continuar com o que já temos
-                break
-        
+            response = pluggy_request(
+                method="GET",
+                endpoint=f"/transactions",
+                params={"accountId": pluggy_account_id, "page": page, "pageSize": 100, "from": date_from, "to": date_to}
+            )
+
+            transactions = response.get("results", [])
+            total_pages = response.get("totalPages", 1)
+
+            # Filtrar transações irrelevantes do Banco Inter
+            transactions = [
+                txn for txn in transactions
+                if not any(keyword in txn.get("description", "") for keyword in ["Crédito liberado", "Pix no Crédito"])
+            ]
+
+            all_transactions.extend(transactions)
+            page += 1
+
         logger.info(f"✅ Total de {len(all_transactions)} transações recuperadas de {page-1} página(s)")
-        
-        if len(all_transactions) > 0:
-            # Log da primeira transação para debug (RESUMIDO)
-            first_txn = all_transactions[0]
-            logger.info(f"🔍 Exemplo de transação: ID={first_txn.get('id')}, Desc={first_txn.get('description')}, Amount={first_txn.get('amount')}")
-        
+
         new_count = 0
         updated_count = 0
-        
+
         for txn in all_transactions:
-            # Verificar se transação já existe
-            existing = db.query(PluggyTransaction).filter(
+            existing_txn = db.query(PluggyTransaction).filter(
                 PluggyTransaction.pluggy_transaction_id == txn["id"]
             ).first()
-            
-            # Extrair dados do estabelecimento/recebedor com mais detalhes
-            merchant_name = None
-            merchant_category = None
-            
-            # 1. Tentar do objeto merchant (comum em cartão de crédito)
-            merchant_data = txn.get("merchant")
-            if merchant_data:
-                merchant_name = merchant_data.get("name") or merchant_data.get("businessName")
-                merchant_category = merchant_data.get("category")
-            
-            # 2. Se não achou nome, tentar do paymentData (comum em PIX)
-            if not merchant_name:
-                payment_data = txn.get("paymentData")
-                if payment_data:
-                    # Tentar determinar a outra parte baseado no fluxo do dinheiro
-                    amount = txn.get("amount", 0)
-                    
-                    # Se for saída (negativo), queremos saber quem recebeu
-                    if amount < 0 and payment_data.get("receiver"):
-                        merchant_name = payment_data.get("receiver").get("name")
-                    
-                    # Se for entrada (positivo), queremos saber quem pagou
-                    elif amount > 0 and payment_data.get("payer"):
-                        merchant_name = payment_data.get("payer").get("name")
-                    
-                    # Fallback: se ainda null, tenta receiver (padrão mais comum)
-                    if not merchant_name and payment_data.get("receiver"):
-                        merchant_name = payment_data.get("receiver").get("name")
 
-            if existing:
-                # Atualizar status se mudou
-                changed = False
-                if existing.status != txn.get("status"):
-                    existing.status = txn.get("status")
-                    changed = True
-                
-                # Atualizar merchant info se estiver faltando no banco e presente na API
-                if not existing.merchant_name and merchant_name:
-                    existing.merchant_name = merchant_name
-                    changed = True
-                
-                if not existing.merchant_category and merchant_category:
-                    existing.merchant_category = merchant_category
-                    changed = True
-                    
-                if changed:
-                    existing.updated_at = datetime.now()
-                    updated_count += 1
+            if existing_txn:
+                updated_count += 1
+                existing_txn.update_from_pluggy(txn)
             else:
-                # Criar nova transação
-                new_txn = PluggyTransaction(
-                    id_account=account_id,
-                    pluggy_transaction_id=txn["id"],
-                    description=txn.get("description", "Sem descrição"),
-                    amount=txn.get("amount", 0),
-                    date=_parse_transaction_date(txn.get("date")),
-                    category=txn.get("category"),
-                    status=txn.get("status"),
-                    type=txn.get("type"),
-                    merchant_name=merchant_name,
-                    merchant_category=merchant_category,
-                    imported_to_lancamento=False
-                )
-                
-                db.add(new_txn)
                 new_count += 1
-        
+                new_txn = PluggyTransaction.from_pluggy(txn, account_id)
+                db.add(new_txn)
+
         db.commit()
-        
+
         logger.info(f"✅ Sincronização concluída: {new_count} novas, {updated_count} atualizadas")
-        
+
         return {
             "new": new_count,
             "updated": updated_count,
             "total": len(all_transactions)
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Erro ao sincronizar transações: {e}", exc_info=True)
         return {"new": 0, "updated": 0, "total": 0, "error": str(e)}
@@ -843,215 +760,16 @@ def sync_transactions_for_account(account_id: int, pluggy_account_id: str, days:
         db.close()
 
 
-def sync_all_transactions_for_user(user_id: int, days: int = 30) -> Dict:
-    """
-    Synchronizes transactions for all user accounts in parallel.
-
-    Args:
-        user_id: Telegram ID of the user
-        days: Number of days to fetch transactions
-
-    Returns:
-        Consolidated statistics dictionary
-    """
-    try:
-        from database.database import get_db
-        from models import Usuario, PluggyItem, PluggyAccount
-
-        db = next(get_db())
-
-        # Fetch user
-        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
-        if not usuario:
-            logger.error(f"❌ User {user_id} not found")
-            return {"error": "User not found"}
-
-        # Fetch all active items for the user
-        items = db.query(PluggyItem).filter(
-            PluggyItem.id_usuario == usuario.id,
-            PluggyItem.status.in_(["UPDATED", "PARTIAL_SUCCESS"])
-        ).all()
-
-        if not items:
-            logger.info(f"ℹ️  User {user_id} has no active connections")
-            return {"items": 0, "accounts": 0, "new": 0, "updated": 0}
-
-        logger.info(f"🏦 {len(items)} item(s) found for synchronization")
-
-        total_new = 0
-        total_updated = 0
-        total_accounts = 0
-
-        def process_account(account):
-            nonlocal total_new, total_updated
-            logger.info(f"💳 Synchronizing account: {account.name} (type: {account.type}, subtype: {account.subtype})")
-
-            # Synchronize transactions for this account
-            stats = sync_transactions_for_account(
-                account.id,
-                account.pluggy_account_id,
-                days
-            )
-
-            if "error" in stats:
-                logger.error(f"❌ Error synchronizing account {account.name}: {stats['error']}")
-
-            total_new += stats.get("new", 0)
-            total_updated += stats.get("updated", 0)
-
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for item in items:
-                logger.info(f"🔍 Processing item: {item.connector_name} (status: {item.status})")
-
-                # Update accounts and investments for the bank
-                try:
-                    logger.info(f"🔄 Updating account and investment list for {item.connector_name}...")
-                    save_pluggy_accounts_to_db(item.pluggy_item_id)
-                    logger.info(f"✅ Accounts and investments updated")
-                except Exception as e:
-                    logger.warning(f"⚠️  Error updating accounts: {e}")
-
-                # Fetch accounts for this item (now updated!)
-                accounts = db.query(PluggyAccount).filter(
-                    PluggyAccount.id_item == item.id
-                ).all()
-
-                logger.info(f"📊 {len(accounts)} account(s) found for this item")
-                total_accounts += len(accounts)
-
-                # Process accounts in parallel
-                executor.map(process_account, accounts)
-
-        logger.info(
-            f"✅ Synchronization complete for user {user_id}: "
-            f"{total_new} new transactions in {total_accounts} accounts"
-        )
-
-        return {
-            "items": len(items),
-            "accounts": total_accounts,
-            "new": total_new,
-            "updated": total_updated
-        }
-
-    except Exception as e:
-        logger.error(f"❌ Error synchronizing user {user_id}: {e}", exc_info=True)
-        return {"error": str(e)}
-    finally:
-        db.close()
-
-
-def fetch_bank_connection_stats(item_id: str) -> Dict:
-    """
-    🔍 Busca estatísticas da conexão bancária recém estabelecida.
-    
-    Retorna informações sobre:
-    - Total de transações disponíveis
-    - Saldo atual das contas
-    - Investimentos encontrados
-    - Faturas de cartão de crédito
-    
-    Args:
-        item_id: ID do item Pluggy recém conectado
-        
-    Returns:
-        Dict com estatísticas: {
-            'total_transactions': int,
-            'total_accounts': int,
-            'total_investments': int,
-            'accounts_summary': List[Dict],
-            'investments_summary': List[Dict],
-            'total_balance': Decimal
-        }
-    """
-    try:
-        from decimal import Decimal
-        
-        logger.info(f"🔍 Buscando estatísticas para item {item_id}")
-        
-        # 1️⃣ Buscar contas
-        accounts_data = pluggy_request("GET", f"/accounts", params={"itemId": item_id})
-        accounts = accounts_data.get("results", [])
-        
-        total_balance = Decimal(0)
-        accounts_summary = []
-        
-        for account in accounts:
-            balance = Decimal(account.get("balance", 0) or 0)
-            total_balance += balance
-            
-            accounts_summary.append({
-                'name': account.get('name', 'Conta'),
-                'type': account.get('type', 'BANK'),
-                'balance': balance,
-                'credit_limit': Decimal(account.get('creditLimit', 0) or 0)
-            })
-        
-        # 2️⃣ Buscar transações (conta quantas existem)
-        total_transactions = 0
-        for account in accounts:
-            try:
-                transactions_data = pluggy_request(
-                    "GET", 
-                    f"/transactions", 
-                    params={"accountId": account["id"], "pageSize": 1}  # Só pra contar
-                )
-                total_transactions += transactions_data.get("total", 0)
-            except Exception as e:
-                logger.warning(f"⚠️  Erro ao contar transações da conta {account['id']}: {e}")
-        
-        # 3️⃣ Buscar investimentos
-        investments_summary = []
-        try:
-            investments_data = pluggy_request("GET", f"/investments", params={"itemId": item_id})
-            investments = investments_data.get("results", [])
-            
-            for inv in investments:
-                investments_summary.append({
-                    'name': inv.get('name', 'Investimento'),
-                    'type': inv.get('type', 'Desconhecido'),
-                    'amount': Decimal(inv.get('amount', 0) or 0)
-                })
-                
-        except Exception as e:
-            logger.warning(f"⚠️  Erro ao buscar investimentos: {e}")
-        
-        stats = {
-            'total_transactions': total_transactions,
-            'total_accounts': len(accounts),
-            'total_investments': len(investments_summary),
-            'accounts_summary': accounts_summary,
-            'investments_summary': investments_summary,
-            'total_balance': total_balance
-        }
-        
-        logger.info(f"✅ Estatísticas: {total_transactions} transações, {len(accounts)} contas, {len(investments_summary)} investimentos")
-        
-        return stats
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao buscar estatísticas: {e}", exc_info=True)
-        return {
-            'total_transactions': 0,
-            'total_accounts': 0,
-            'total_investments': 0,
-            'accounts_summary': [],
-            'investments_summary': [],
-            'total_balance': Decimal(0),
-            'error': str(e)
-        }
-
-
 def calcular_limite_disponivel(conta_id: int, db) -> Dict:
     """
     💳 Calcula o limite disponível de um cartão de crédito.
-    
+
     Fórmula: Limite Disponível = Limite Total - Σ(Faturas do mês atual para frente)
-    
+
     Args:
         conta_id: ID da conta (cartão de crédito)
         db: Sessão do banco de dados
-        
+
     Returns:
         Dict com informações: {
             'limite_total': Decimal,
@@ -1065,11 +783,10 @@ def calcular_limite_disponivel(conta_id: int, db) -> Dict:
         from models import Conta, Lancamento
         from decimal import Decimal
         from datetime import datetime, date
-        from dateutil.relativedelta import relativedelta
-        
+
         # Buscar conta
         conta = db.query(Conta).filter(Conta.id == conta_id).first()
-        
+
         if not conta or conta.tipo != 'Cartão de Crédito':
             return {
                 'error': 'Conta não encontrada ou não é um cartão de crédito',
@@ -1079,65 +796,62 @@ def calcular_limite_disponivel(conta_id: int, db) -> Dict:
                 'faturas_futuras': Decimal(0),
                 'total_comprometido': Decimal(0)
             }
-        
+
         limite_total = Decimal(conta.limite_cartao or 0)
-        
+
         if limite_total == 0:
             return {
+                'error': 'Limite total não definido para o cartão',
                 'limite_total': Decimal(0),
                 'limite_disponivel': Decimal(0),
                 'fatura_atual': Decimal(0),
                 'faturas_futuras': Decimal(0),
-                'total_comprometido': Decimal(0),
-                'warning': 'Limite não configurado'
+                'total_comprometido': Decimal(0)
             }
-        
+
         # Data atual
         hoje = date.today()
-        
+
         # Buscar TODAS as transações de Saída (gastos) do mês atual para frente
         lancamentos_futuros = db.query(Lancamento).filter(
             Lancamento.id_conta == conta_id,
             Lancamento.tipo == 'Saída',
             Lancamento.data_transacao >= datetime(hoje.year, hoje.month, 1)
         ).all()
-        
+
         # Calcular total comprometido
         total_comprometido = sum(Decimal(lanc.valor) for lanc in lancamentos_futuros)
-        
+
         # Separar fatura atual vs futuras (baseado no dia de fechamento)
         dia_fechamento = conta.dia_fechamento or 1
-        
+
         # Data de fechamento do mês atual
         if hoje.day <= dia_fechamento:
-            # Ainda estamos no período da fatura atual
-            data_fechamento_atual = date(hoje.year, hoje.month, dia_fechamento)
+            fechamento_atual = datetime(hoje.year, hoje.month, dia_fechamento)
         else:
-            # Já passou o fechamento, estamos na próxima fatura
-            proximo_mes = hoje + relativedelta(months=1)
-            data_fechamento_atual = date(proximo_mes.year, proximo_mes.month, dia_fechamento)
-        
+            fechamento_atual = datetime(hoje.year, hoje.month, dia_fechamento) + timedelta(days=30)
+
         fatura_atual = Decimal(0)
         faturas_futuras = Decimal(0)
-        
+
         for lanc in lancamentos_futuros:
-            if lanc.data_transacao.date() <= data_fechamento_atual:
+            if lanc.data_transacao <= fechamento_atual:
                 fatura_atual += Decimal(lanc.valor)
             else:
                 faturas_futuras += Decimal(lanc.valor)
-        
+
         # Calcular limite disponível
         limite_disponivel = limite_total - total_comprometido
-        
+
         return {
             'limite_total': limite_total,
-            'limite_disponivel': max(limite_disponivel, Decimal(0)),  # Não pode ser negativo
+            'limite_disponivel': max(limite_disponivel, Decimal(0)),
             'fatura_atual': fatura_atual,
             'faturas_futuras': faturas_futuras,
             'total_comprometido': total_comprometido,
             'percentual_usado': (total_comprometido / limite_total * 100) if limite_total > 0 else Decimal(0)
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Erro ao calcular limite disponível: {e}", exc_info=True)
         return {
@@ -2072,6 +1786,7 @@ class OpenFinanceOAuthHandler:
             message = f"💳 *Transações Pendentes* \\({len(pending_txns)}\\)\n\n"
             message += "Clique para importar:\n\n"
             
+                       
             keyboard = []
             for idx, txn in enumerate(pending_txns[:10], 1): # Mostrar apenas 10 por vez
                 # ✅ CORREÇÃO: Determinar cor baseado no tipo de conta
@@ -2668,10 +2383,9 @@ class OpenFinanceOAuthHandler:
                         if idx < len(created_ids):
                             txn.id_lancamento = int(created_ids[idx])
                         imported_count += 1
-                    except Exception as e:
-                        logger.warning(f"Não foi possível linkar id criado para txn {txn.id}: {e}")
-
-                db.commit()
+                    except Exception:
+                        pass
+            db.commit()
             
             # Mensagem final
             emoji_final = "🎉" if falha == 0 else "✅" if sucesso > 0 else "❌"
@@ -2978,7 +2692,7 @@ Categorias:"""
             # Mensagem final
             emoji_final = "🎉" if falha == 0 else "✅" if sucesso > 0 else "❌"
             
-            message = f"{emoji_final} *Categorização Concluída\\!*\n\n"
+            message = f"{emoji_final} *Importação concluída\\!*\n\n"
             message += f"📊 *Resultados:*\n"
             message += f"✅ Sucesso: {sucesso}\n"
             
@@ -2990,15 +2704,11 @@ Categorias:"""
             
             await status_msg.edit_text(message, parse_mode="MarkdownV2")
             
-            logger.info(f"🧯 Categorização concluída para usuário {user_id}: {sucesso} sucesso, {falha} falhas")
+            logger.info(f"✅ {imported_count} transações importadas para usuário {user_id}")
             
         except Exception as e:
-            logger.error(f"❌ Erro na categorização automática: {e}", exc_info=True)
-            await status_msg.edit_text(
-                "❌ *Erro ao categorizar lançamentos*\n\n"
-                "Tente novamente em alguns instantes\\.",
-                parse_mode="MarkdownV2"
-            )
+            logger.error(f"❌ Erro na importação em massa: {e}", exc_info=True)
+            await query.edit_message_text("❌ Erro ao importar transações.")
         finally:
             db.close()
     
