@@ -202,23 +202,22 @@ def gerar_grafico_para_relatorio(gastos_por_categoria: dict) -> io.BytesIO | Non
     """Gera um gráfico de pizza a partir de um dicionário de gastos por categoria."""
     if not gastos_por_categoria:
         return None
-
     try:
         plt.style.use('seaborn-v0_8-whitegrid')
-        
+
         df = pd.DataFrame(list(gastos_por_categoria.items()), columns=['Categoria', 'Valor']).sort_values('Valor', ascending=False)
-        
+
         if len(df) > 6:
             top_5 = df.iloc[:5].copy()
             outros_valor = df.iloc[5:]['Valor'].sum()
             outros_df = pd.DataFrame([{'Categoria': 'Outros', 'Valor': outros_valor}])
             df = pd.concat([top_5, outros_df], ignore_index=True)
 
-    # aumentar dpi para melhorar qualidade ao inserir no PDF
-    fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
-        
+        # aumentar dpi para melhorar qualidade ao inserir no PDF
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
+
         colors = sns.color_palette("viridis_r", len(df))
-        
+
         wedges, _, autotexts = ax.pie(
             df['Valor'], 
             autopct='%1.1f%%', 
@@ -228,16 +227,16 @@ def gerar_grafico_para_relatorio(gastos_por_categoria: dict) -> io.BytesIO | Non
             wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}
         )
         plt.setp(autotexts, size=10, weight="bold", color="white")
-        
+
         centre_circle = plt.Circle((0,0),0.70,fc='white')
         fig.gca().add_artist(centre_circle)
-        
+
         ax.set_title('Distribuição de Despesas', fontsize=16, pad=15, weight='bold')
         ax.axis('equal')
 
-    plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
+        plt.tight_layout()
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
         buffer.seek(0)
         return buffer
     except Exception as e:
@@ -397,9 +396,9 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
         
         df_agrupado.index = df_agrupado.index.strftime('%b/%y')
 
-    # aumentar dpi para maior nitidez nos PDFs
-    fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
-        
+        # aumentar dpi para maior nitidez nos PDFs
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
+
         ax.plot(df_agrupado.index, df_agrupado['Receita'], marker='o', linestyle='-', color='#2ecc71', label='Receitas')
         ax.plot(df_agrupado.index, df_agrupado['Despesa'], marker='o', linestyle='-', color='#e74c3c', label='Despesas')
 
@@ -407,10 +406,10 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
         ax.set_ylabel('Valor (R$)')
         ax.grid(True, which='both', linestyle='--', linewidth=0.5)
         ax.legend()
-        
-    plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
+
+        plt.tight_layout()
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
         buffer.seek(0)
         return buffer
     except Exception as e:
@@ -1036,9 +1035,9 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
         df, tem_dados_suficientes = preparar_dados_para_grafico(lancamentos, agrupar_por)
         if not tem_dados_suficientes:
             return None
-            
-    # DPI alto para imagens mais nítidas no PDF
-    fig, ax = plt.subplots(figsize=(12, 7), dpi=200)
+
+        # DPI alto para imagens mais nítidas no PDF
+        fig, ax = plt.subplots(figsize=(12, 7), dpi=200)
 
         # --- GRÁFICOS DE CATEGORIA E FORMA DE PAGAMENTO ---
         if agrupar_por in ['categoria', 'forma_pagamento']:
@@ -1320,9 +1319,9 @@ def gerar_grafico_dinamico(lancamentos: List[Lancamento], tipo_grafico: str, agr
         else:
             return None
         
-    plt.tight_layout(pad=1.5)
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
+        plt.tight_layout(pad=1.5)
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
         buffer.seek(0)
         plt.close(fig) # Garante que a figura seja fechada para liberar memória
         return buffer
