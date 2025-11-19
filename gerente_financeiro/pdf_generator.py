@@ -1,761 +1,335 @@
-#!/usr/bin/env python3
-"""
-Gerador de PDF Premium para Relatórios Financeiros
-MaestroFin - Relatório Executivo Financeiro v2.0
-Melhorias: Design moderno, gradientes, gráficos aprimorados, layout responsivo
-"""
+# gerente_financeiro/pdf_generator.py
+
 import io
-from datetime import datetime
-import logging
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether, Image as RLImage
-from reportlab.lib.colors import HexColor, white, black, Color
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 import os
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
-from reportlab.pdfgen import canvas
-from reportlab.graphics.shapes import Drawing, Rect, String, Circle, Line
+from datetime import datetime
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm, cm
+from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image, Flowable
+from reportlab.graphics.shapes import Drawing, Rect, String, Group, Circle, Line
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.colors import HexColor
 
-logger = logging.getLogger(__name__)
-import subprocess
-try:
-    # WeasyPrint é a opção mais simples para converter HTML/CSS -> PDF
-    from weasyprint import HTML as WP_HTML
-    WEASYPRINT_AVAILABLE = True
-except Exception:
-    WEASYPRINT_AVAILABLE = False
+# --- CONFIGURAÇÃO DE CORES PREMIUM (Paleta Private Bank) ---
+COLOR_PRIMARY = HexColor('#0F172A')    # Navy Blue Profundo
+COLOR_ACCENT = HexColor('#F59E0B')     # Gold/Amber
+COLOR_BG_LIGHT = HexColor('#F8FAFC')   # Slate 50
+COLOR_TEXT_MAIN = HexColor('#1E293B')  # Slate 800
+COLOR_TEXT_LIGHT = HexColor('#64748B') # Slate 500
+COLOR_SUCCESS = HexColor('#10B981')    # Emerald
+COLOR_DANGER = HexColor('#EF4444')     # Red
+COLOR_WHITE = colors.white
 
-
-def _get_short_git_commit() -> str:
-    """Tenta obter o short commit hash.
-
-    Ordem de tentativa:
-    1. Variável de ambiente 'MAESTROFIN_COMMIT'
-    2. git rev-parse --short HEAD (se houver .git e git disponível)
-    3. 'unknown'
-    """
-    env_hash = os.environ.get('MAESTROFIN_COMMIT')
-    if env_hash:
-        return env_hash[:7]
+# --- REGISTRO DE FONTES ---
+def register_fonts():
+    """Tenta registrar fontes premium (Inter), fallback para Helvetica"""
+    font_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts')
     try:
-        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        git_dir = os.path.join(repo_root, '.git')
-        if os.path.exists(git_dir):
-            out = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=repo_root)
-            return out.decode().strip()[:7]
+        pdfmetrics.registerFont(TTFont('Inter-Bold', os.path.join(font_dir, 'Inter-Bold.ttf')))
+        pdfmetrics.registerFont(TTFont('Inter-Regular', os.path.join(font_dir, 'Inter-Regular.ttf')))
+        return 'Inter-Regular', 'Inter-Bold'
     except Exception:
-        pass
-    return 'unknown'
+        return 'Helvetica', 'Helvetica-Bold'
 
-# ===========================
-# CONFIGURAÇÕES DE CORES
-# ===========================
-COLORS = {
-    'primary': HexColor('#0f172a'),      # Azul escuro profundo
-    'secondary': HexColor('#3b82f6'),    # Azul moderno
-    'accent': HexColor('#f59e0b'),       # Âmbar/Dourado
-    'success': HexColor('#10b981'),      # Verde
-    'danger': HexColor('#ef4444'),       # Vermelho
-    'warning': HexColor('#f59e0b'),      # Laranja
-    'purple': HexColor('#8b5cf6'),       # Roxo
-    'teal': HexColor('#14b8a6'),         # Turquesa
-    'text_dark': HexColor('#1f2937'),    # Texto escuro
-    'text_light': HexColor('#6b7280'),   # Texto claro
-    'bg_light': HexColor('#f9fafb'),     # Fundo claro
-    'bg_white': HexColor('#ffffff'),     # Branco
-    'border': HexColor('#e5e7eb'),       # Borda
-}
+FONT_REG, FONT_BOLD = register_fonts()
 
-# ===========================
-# CABEÇALHO E RODAPÉ
-# ===========================
-def create_modern_header(canvas_obj, doc):
-    """Cabeçalho premium com design gradiente"""
-    canvas_obj.saveState()
-    
-    # Fundo principal do cabeçalho
-    canvas_obj.setFillColor(COLORS['primary'])
-    canvas_obj.rect(0, A4[1] - 2.5*cm, A4[0], 2.5*cm, fill=1, stroke=0)
-    
-    # Linha de destaque superior (linha sutil)
-    canvas_obj.setStrokeColor(COLORS['accent'])
-    canvas_obj.setLineWidth(1)
-    canvas_obj.line(0, A4[1] - 0.4*cm, A4[0], A4[1] - 0.4*cm)
-    
-    # Logo/Ícone decorativo (círculo)
-    canvas_obj.setFillColor(COLORS['accent'])
-    canvas_obj.circle(1.5*cm, A4[1] - 1.25*cm, 0.5*cm, fill=1, stroke=0)
-    
-    # Símbolo dentro do círculo
-    canvas_obj.setFillColor(COLORS['primary'])
-    canvas_obj.setFont("Helvetica-Bold", 20)
-    canvas_obj.drawCentredString(1.5*cm, A4[1] - 1.45*cm, "₿")
-    
-    # Título principal
-    canvas_obj.setFillColor(white)
-    canvas_obj.setFont("Helvetica-Bold", 22)
-    canvas_obj.drawString(2.5*cm, A4[1] - 1.0*cm, "MAESTROFIN")
-    
-    # Subtítulo
-    canvas_obj.setFillColor(HexColor('#cbd5e1'))
-    canvas_obj.setFont("Helvetica", 11)
-    canvas_obj.drawString(2.5*cm, A4[1] - 1.5*cm, "Relatório Executivo Financeiro")
-    
-    # Data e hora
-    canvas_obj.setFillColor(HexColor('#94a3b8'))
-    canvas_obj.setFont("Helvetica", 9)
-    data_texto = datetime.now().strftime('%d/%m/%Y • %H:%M')
-    canvas_obj.drawRightString(A4[0] - 1.5*cm, A4[1] - 1.25*cm, data_texto)
-    
-    canvas_obj.restoreState()
+class GradientCover(Flowable):
+    """Gera a capa com gradiente e tipografia impactante"""
+    def __init__(self, width, height, user_name, period_str):
+        Flowable.__init__(self)
+        self.width = width
+        self.height = height
+        self.user_name = user_name
+        self.period_str = period_str
 
-def create_elegant_footer(canvas_obj, doc):
-    """Rodapé minimalista e elegante"""
-    canvas_obj.saveState()
-    
-    # Linha superior decorativa
-    canvas_obj.setStrokeColor(COLORS['border'])
-    canvas_obj.setLineWidth(0.5)
-    canvas_obj.line(2*cm, 2*cm, A4[0] - 2*cm, 2*cm)
-    
-    # Círculo decorativo central
-    canvas_obj.setFillColor(COLORS['secondary'])
-    canvas_obj.circle(A4[0]/2, 2*cm, 0.15*cm, fill=1, stroke=0)
-    
-    # Informações do rodapé
-    canvas_obj.setFillColor(COLORS['text_light'])
-    canvas_obj.setFont("Helvetica", 8)
-    
-    # Esquerda: Copyright
-    canvas_obj.drawString(2*cm, 1.3*cm, "© 2025 MaestroFin")
-    
-    # Centro: Site
-    canvas_obj.drawCentredString(A4[0]/2, 1.3*cm, "www.maestrofin.com")
-    
-    # Direita: Página
-    canvas_obj.drawRightString(A4[0] - 2*cm, 1.3*cm, f"Página {doc.page}")
-    
-    # Slogan
-    canvas_obj.setFont("Helvetica-Oblique", 7)
-    canvas_obj.setFillColor(HexColor('#9ca3af'))
-    canvas_obj.drawCentredString(A4[0]/2, 0.8*cm, "Seu assistente financeiro inteligente")
-    
-    # Stamp com short commit hash (útil para identificar versão do gerador)
-    try:
-        # Primeiro tenta obter da variável passada pelo contexto (se disponível no canvas via doc)
-        commit_short = None
-        try:
-            # context stamp pode ser injetado em doc.build via doc.build_kwargs - se não, fallback no git
-            commit_short = getattr(doc, 'build_stamp', None)
-        except Exception:
-            commit_short = None
-        if not commit_short:
-            commit_short = _get_short_git_commit()
-        canvas_obj.setFont("Helvetica", 6)
-        canvas_obj.setFillColor(HexColor('#9ca3af'))
-        canvas_obj.drawRightString(A4[0] - 2*cm, 0.6*cm, f"build: {commit_short}")
-    except Exception:
-        pass
-    
-    canvas_obj.restoreState()
+    def draw(self):
+        c = self.canv
+        
+        # Fundo Gradiente (Simulado com linhas para compatibilidade)
+        # Na prática, um rect sólido escuro fica mais elegante em PDFs gerados via código
+        c.setFillColor(COLOR_PRIMARY)
+        c.rect(0, 0, self.width, self.height, fill=True, stroke=False)
+        
+        # Elemento Decorativo (Círculo Dourado)
+        c.setFillColor(COLOR_ACCENT)
+        c.setFillAlpha(0.1)
+        c.circle(self.width, self.height, 300, fill=True, stroke=False)
+        c.setFillAlpha(1)
 
+        # Logo / Nome do Bot
+        c.setFillColor(COLOR_WHITE)
+        c.setFont(FONT_BOLD, 14)
+        c.drawString(20*mm, self.height - 30*mm, "MAESTROFIN PRIVATE")
+        
+        # Título Gigante
+        c.setFont(FONT_BOLD, 42)
+        c.drawString(20*mm, self.height - 80*mm, "Relatório")
+        c.drawString(20*mm, self.height - 95*mm, "Financeiro")
+        
+        # Linha divisória
+        c.setStrokeColor(COLOR_ACCENT)
+        c.setLineWidth(2)
+        c.line(20*mm, self.height - 110*mm, 60*mm, self.height - 110*mm)
+        
+        # Período
+        c.setFont(FONT_REG, 16)
+        c.setFillColor(colors.white)
+        c.drawString(20*mm, self.height - 125*mm, self.period_str)
+        
+        # Badge do Usuário
+        c.setFillColor(HexColor('#1E293B')) # Lighter blue
+        c.roundRect(20*mm, self.height - 160*mm, 120*mm, 14*mm, 7*mm, fill=True, stroke=False)
+        c.setFillColor(COLOR_ACCENT)
+        c.setFont(FONT_BOLD, 10)
+        c.drawString(25*mm, self.height - 156*mm, "PREPARADO EXCLUSIVAMENTE PARA")
+        c.setFillColor(COLOR_WHITE)
+        c.setFont(FONT_BOLD, 14)
+        c.drawString(25*mm, self.height - 151*mm, self.user_name.upper())
 
-# Registrar fontes alternativas se disponíveis (DejaVu como fallback elegante)
-def register_fonts_if_available():
-    try:
-        # Caminhos comuns no Linux para DejaVu
-        possible_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-        ]
-        if os.path.exists(possible_paths[0]):
-            pdfmetrics.registerFont(TTFont('DejaVuSans', possible_paths[0]))
-        if os.path.exists(possible_paths[1]):
-            pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', possible_paths[1]))
-        # Tenta registrar Inter caso esteja embutida no projeto ou disponibilizada no sistema
-        inter_regular_paths = [
-            os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts', 'Inter-Regular.ttf'),
-            '/usr/share/fonts/truetype/inter/Inter-Regular.ttf',
-            '/usr/share/fonts/truetype/inter/Inter-Regular.otf'
-        ]
-        inter_bold_paths = [
-            os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts', 'Inter-Bold.ttf'),
-            '/usr/share/fonts/truetype/inter/Inter-Bold.ttf',
-            '/usr/share/fonts/truetype/inter/Inter-Bold.otf'
-        ]
-        for p in inter_regular_paths:
-            if os.path.exists(p):
-                try:
-                    pdfmetrics.registerFont(TTFont('Inter', p))
-                    break
-                except Exception:
-                    continue
-        for p in inter_bold_paths:
-            if os.path.exists(p):
-                try:
-                    pdfmetrics.registerFont(TTFont('Inter-Bold', p))
-                    break
-                except Exception:
-                    continue
-    except Exception:
-        # Falha não é crítica; fallback para Helvetica
-        pass
+class KPICard(Flowable):
+    """Card de KPI estilo Banco"""
+    def __init__(self, title, value, subtitle, trend="neutral", width=80*mm, height=40*mm):
+        Flowable.__init__(self)
+        self.width = width
+        self.height = height
+        self.title = title
+        self.value = value
+        self.subtitle = subtitle
+        self.trend = trend
 
-
-register_fonts_if_available()
-
-# ===========================
-# COMPONENTES VISUAIS
-# ===========================
-def create_premium_kpi_card(title, value, subtitle, color, trend=None, icon=""):
-    """KPI Card com design premium e sombras"""
-    drawing = Drawing(4.5*cm, 3.5*cm)
-    
-    # Sombra suave (efeito de profundidade)
-    # Sombra suave usando Color com alpha
-    shadow = Rect(0.1*cm, -0.1*cm, 4.5*cm, 3.5*cm,
-                  fillColor=Color(0, 0, 0, alpha=0.08),
-                  strokeColor=None)
-    drawing.add(shadow)
-    
-    # Card principal com borda arredondada simulada
-    main_rect = Rect(0, 0, 4.5*cm, 3.5*cm, 
-                     fillColor=color, 
-                     strokeColor=HexColor('#ffffff40'),
-                     strokeWidth=1)
-    drawing.add(main_rect)
-    
-    # Ornamento superior (linha de destaque)
-    # Ornamento superior sutil (ligeira sobreposição branca com alpha)
-    accent_line = Rect(0, 3.2*cm, 4.5*cm, 0.3*cm,
-                       fillColor=Color(1, 1, 1, alpha=0.12),
-                       strokeColor=None)
-    drawing.add(accent_line)
-    
-    # Ícone/Emoji
-    if icon:
-        icon_text = String(0.4*cm, 2.7*cm, icon, 
-                          fontSize=16, 
-                          fillColor=white, 
-                          fontName=("DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica"))
-        drawing.add(icon_text)
-    
-    # Título
-    title_text = String(0.4*cm, 2.3*cm, title, 
-                       fontSize=9, 
-                       fillColor=Color(1, 1, 1, alpha=0.85), 
-                       fontName="DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
-    drawing.add(title_text)
-    
-    # Valor principal (formatado)
-    if isinstance(value, (int, float)):
-        valor_formatado = f"R$ {value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-    else:
-        valor_formatado = str(value)
-    
-    value_text = String(0.4*cm, 1.4*cm, valor_formatado, 
-                       fontSize=15, 
-                       fillColor=white, 
-                       fontName="DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
-    drawing.add(value_text)
-    
-    # Subtítulo
-    subtitle_text = String(0.4*cm, 0.9*cm, subtitle, 
-                          fontSize=7, 
-                          fillColor=Color(1, 1, 1, alpha=0.68), 
-                          fontName="DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica")
-    drawing.add(subtitle_text)
-    
-    # Indicador de tendência com estilo
-    if trend is not None:
-        trend_color = COLORS['success'] if trend >= 0 else COLORS['danger']
-        trend_symbol = "▲" if trend >= 0 else "▼"
-        trend_text = String(3.8*cm, 0.9*cm, 
-                           f"{trend_symbol} {abs(trend):.1f}%", 
-                           fontSize=8, 
-                           fillColor=trend_color, 
-                           fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
-                           textAnchor='end')
-        drawing.add(trend_text)
-    
-    return drawing
-
-def create_donut_chart(data, labels, title, colors=None):
-    """Gráfico de rosca (donut) moderno"""
-    drawing = Drawing(9*cm, 7*cm)
-    
-    # Gráfico de pizza principal
-    pie = Pie()
-    pie.x = 2.5*cm
-    pie.y = 1.5*cm
-    pie.width = 4*cm
-    pie.height = 4*cm
-    pie.data = data
-    pie.labels = None  # Remover labels diretas
-    
-    # Cores modernas e vibrantes
-    if not colors:
-        colors = [
-            COLORS['secondary'], COLORS['danger'], COLORS['success'], 
-            COLORS['warning'], COLORS['purple'], COLORS['teal'],
-            HexColor('#ec4899'), HexColor('#06b6d4')
-        ]
-    
-    # definir stroke por fatia
-    for s in range(len(data)):
-        try:
-            pie.slices[s].strokeWidth = 1
-            pie.slices[s].strokeColor = white
-        except Exception:
-            pass
-    
-    for i, color in enumerate(colors[:len(data)]):
-        pie.slices[i].fillColor = color
-        pie.slices[i].popout = 5 if i == 0 else 0  # Destacar maior fatia
-    
-    drawing.add(pie)
-    
-    # Título com estilo
-    title_text = String(4.5*cm, 6.2*cm, title, 
-                       fontSize=13, 
-                       fillColor=COLORS['text_dark'], 
-                       fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
-                       textAnchor='middle')
-    drawing.add(title_text)
-    
-    # Legenda customizada
-    legend_y = 5.5*cm
-    for i, (label, value) in enumerate(zip(labels[:6], data[:6])):  # Máximo 6 itens
-        if i >= 3:
-            x_pos = 6*cm
-            y_pos = legend_y - ((i-3) * 0.6*cm)
+    def draw(self):
+        c = self.canv
+        x, y = 0, 0
+        
+        # Sombra (Simulada)
+        c.setFillColor(colors.Color(0,0,0,0.1))
+        c.roundRect(x+2, y-2, self.width, self.height, 6, fill=True, stroke=False)
+        
+        # Fundo Card
+        c.setFillColor(COLOR_WHITE)
+        c.setStrokeColor(HexColor('#E2E8F0'))
+        c.roundRect(x, y, self.width, self.height, 6, fill=True, stroke=True)
+        
+        # Título
+        c.setFillColor(COLOR_TEXT_LIGHT)
+        c.setFont(FONT_REG, 9)
+        c.drawString(x + 5*mm, y + self.height - 8*mm, self.title.upper())
+        
+        # Valor
+        c.setFillColor(COLOR_PRIMARY)
+        c.setFont(FONT_BOLD, 18)
+        c.drawString(x + 5*mm, y + self.height - 18*mm, self.value)
+        
+        # Subtítulo / Trend
+        c.setFont(FONT_REG, 8)
+        if self.trend == "up":
+            c.setFillColor(COLOR_SUCCESS)
+            icon = "▲"
+        elif self.trend == "down":
+            c.setFillColor(COLOR_DANGER)
+            icon = "▼"
         else:
-            x_pos = 1*cm
-            y_pos = legend_y - (i * 0.6*cm)
-        
-        # Quadrado de cor
-        color_box = Rect(x_pos, y_pos, 0.3*cm, 0.3*cm, 
-                        fillColor=colors[i], 
-                        strokeColor=None)
-        drawing.add(color_box)
-        
-        # Texto da legenda
-        legend_label = String(x_pos + 0.4*cm, y_pos + 0.05*cm, 
-                            label[:20], 
-                            fontSize=7, 
-                            fillColor=COLORS['text_dark'], 
-                            fontName="Helvetica")
-        drawing.add(legend_label)
-    
-    return drawing
+            c.setFillColor(COLOR_TEXT_LIGHT)
+            icon = "•"
+            
+        c.drawString(x + 5*mm, y + 5*mm, f"{icon} {self.subtitle}")
 
-def create_section_divider(title, icon=""):
-    """Divisor de seção com estilo"""
-    drawing = Drawing(17*cm, 1*cm)
+def create_header_footer(canvas, doc):
+    """Desenha cabeçalho e rodapé em todas as páginas exceto capa"""
+    canvas.saveState()
     
-    # Linha esquerda
-    left_line = Line(0, 0.5*cm, 3*cm, 0.5*cm)
-    left_line.strokeColor = COLORS['secondary']
-    left_line.strokeWidth = 2
-    drawing.add(left_line)
+    # Rodapé
+    canvas.setFont(FONT_REG, 8)
+    canvas.setFillColor(COLOR_TEXT_LIGHT)
+    canvas.drawString(20*mm, 10*mm, "MaestroFin • Relatório Confidencial")
+    canvas.drawRightString(A4[0] - 20*mm, 10*mm, f"Página {doc.page}")
     
-    # Círculo central
-    circle = Circle(8.5*cm, 0.5*cm, 0.3*cm, 
-                   fillColor=COLORS['secondary'], 
-                   strokeColor=None)
-    drawing.add(circle)
+    # Linha decorativa rodapé
+    canvas.setStrokeColor(COLOR_ACCENT)
+    canvas.setLineWidth(1)
+    canvas.line(20*mm, 14*mm, A4[0]-20*mm, 14*mm)
     
-    # Linha direita
-    right_line = Line(14*cm, 0.5*cm, 17*cm, 0.5*cm)
-    right_line.strokeColor = COLORS['secondary']
-    right_line.strokeWidth = 2
-    drawing.add(right_line)
-    
-    # Título centralizado
-    title_str = f"{icon} {title}" if icon else title
-    title_text = String(8.5*cm, 0.35*cm, title_str, 
-                       fontSize=14, 
-                       fillColor=COLORS['text_dark'], 
-                       fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
-                       textAnchor='middle')
-    drawing.add(title_text)
-    
-    return drawing
+    canvas.restoreState()
 
-# ===========================
-# FUNÇÃO PRINCIPAL
-# ===========================
-def generate_financial_pdf(context_data, filename="relatorio_maestrofin.pdf"):
-    """
-    Gera PDF de relatório financeiro com design premium
-    """
-    # Log curto para ajudar debugging: quais chaves foram passadas e commit usado
-    try:
-        logger.info(f"generate_financial_pdf called - keys: {list(context_data.keys())}")
-        logger.info(f"commit (short): {_get_short_git_commit()}")
-    except Exception:
-        pass
-
-    # Se veio HTML renderizado e WeasyPrint está disponível, usa ele (mais fiel ao CSS)
-    if WEASYPRINT_AVAILABLE and context_data.get('html_renderizado'):
-        try:
-            logger.info("WeasyPrint disponível: convertendo HTML renderizado para PDF")
-            html_str = context_data.get('html_renderizado')
-            wp_pdf = WP_HTML(string=html_str).write_pdf()
-            return wp_pdf
-        except Exception as e:
-            logger.warning(f"Falha ao gerar PDF via WeasyPrint: {e} — fallback para ReportLab")
-
+def generate_financial_pdf(context):
+    """Função principal de geração"""
     buffer = io.BytesIO()
     
-    # Configuração do documento
+    # Margens estilo editorial
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        topMargin=3.5*cm,
-        bottomMargin=2.5*cm,
-        leftMargin=2*cm,
-        rightMargin=2*cm
+        rightMargin=20*mm,
+        leftMargin=20*mm,
+        topMargin=20*mm,
+        bottomMargin=20*mm
     )
-    # Injetar build_stamp em doc para que o footer o capture (se provido no contexto)
-    try:
-        if 'build_stamp' in context_data and context_data.get('build_stamp'):
-            setattr(doc, 'build_stamp', context_data.get('build_stamp'))
-    except Exception:
-        pass
     
-    # ===========================
-    # ESTILOS
-    # ===========================
+    elements = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle(
-        'PremiumTitle',
-        parent=styles['Heading1'],
-        fontSize=28,
-        textColor=COLORS['primary'],
-        alignment=TA_CENTER,
-        spaceAfter=12,
-        spaceBefore=20,
-        fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold"),
-        leading=34
-    )
+    # Estilos Customizados
+    style_h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontName=FONT_BOLD, fontSize=16, textColor=COLOR_PRIMARY, spaceAfter=10, spaceBefore=20)
+    style_normal = ParagraphStyle('Normal', parent=styles['Normal'], fontName=FONT_REG, fontSize=10, textColor=COLOR_TEXT_MAIN, leading=14)
+    style_insight = ParagraphStyle('Insight', parent=styles['Normal'], fontName=FONT_REG, fontSize=10, textColor=HexColor('#065F46'), backColor=HexColor('#ECFDF5'), padding=10, borderColor=HexColor('#10B981'), borderWidth=0.5, borderRadius=5, spaceAfter=5)
+
+    # --- 1. CAPA ---
+    # Remove margens para a capa preencher tudo
+    elements.append(GradientCover(
+        width=A4[0], 
+        height=A4[1], 
+        user_name=context.get('usuario_nome', 'Investidor'),
+        period_str=context.get('periodo_extenso', 'Mês Atual')
+    ))
+    elements.append(PageBreak())
+
+    # --- 2. RESUMO EXECUTIVO (KPIs) ---
+    elements.append(Paragraph("Resumo Executivo", style_h2))
+    elements.append(Spacer(1, 5*mm))
     
-    subtitle_style = ParagraphStyle(
-        'Subtitle',
-        parent=styles['Normal'],
-        fontSize=12,
-        textColor=COLORS['text_light'],
-        alignment=TA_CENTER,
-        spaceAfter=30,
-        fontName=("DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica")
-    )
+    # Preparar dados dos cards
+    rec = context.get('receita_total', 0)
+    desp = context.get('despesa_total', 0)
+    saldo = context.get('saldo_mes', 0)
+    poup = context.get('taxa_poupanca', 0)
     
-    section_style = ParagraphStyle(
-        'SectionTitle',
-        parent=styles['Heading2'],
-        fontSize=16,
-        textColor=COLORS['secondary'],
-        spaceAfter=20,
-        spaceBefore=10,
-        fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
-    )
+    # Grid 2x2 de Cards
+    card_w = 82*mm
+    card_h = 35*mm
     
-    normal_text = ParagraphStyle(
-        'NormalText',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=COLORS['text_dark'],
-        spaceAfter=10,
-        leading=14,
-        alignment=TA_JUSTIFY,
-        fontName=("DejaVuSans" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans') else "Helvetica")
-    )
-    
-    insight_style = ParagraphStyle(
-        'InsightBullet',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=COLORS['success'],
-        spaceAfter=8,
-        leftIndent=25,
-        bulletIndent=10,
-        fontName=("DejaVuSans-Bold" if pdfmetrics.getRegisteredFontNames().count('DejaVuSans-Bold') else "Helvetica-Bold")
-    )
-    
-    # ===========================
-    # ELEMENTOS DO DOCUMENTO
-    # ===========================
-    elements = []
-    
-    # === CAPA ===
-    elements.append(Spacer(1, 0.6*cm))
-    elements.append(Paragraph("RELATÓRIO EXECUTIVO", title_style))
-    elements.append(Paragraph("FINANCEIRO", title_style))
-    
-    periodo_info = f"""
-    <para alignment="center" fontSize="11" color="#64748b">
-    <b>Período:</b> {context_data.get('periodo_inicio', 'N/A')} até {context_data.get('periodo_fim', 'N/A')}<br/>
-    <b>Gerado em:</b> {datetime.now().strftime('%d de %B de %Y às %H:%M')}
-    </para>
-    """
-    elements.append(Paragraph(periodo_info, subtitle_style))
-    elements.append(Spacer(1, 1.2*cm))
-    
-    # === KPIs PRINCIPAIS ===
-    elements.append(create_section_divider("INDICADORES PRINCIPAIS", "📊"))
-    elements.append(Spacer(1, 0.5*cm))
-    
-    receita_total = context_data.get('total_receitas', 0)
-    gastos_total = context_data.get('total_gastos', 0)
-    saldo_periodo = context_data.get('saldo_periodo', 0)
-    
-    # Grid de KPIs (2x2)
-    kpi_grid = [
+    kpi_data = [
         [
-            create_premium_kpi_card("RECEITAS", receita_total, "Total do período", 
-                                   COLORS['success'], 5.2, "💰"),
-            create_premium_kpi_card("DESPESAS", gastos_total, "Total do período", 
-                                   COLORS['danger'], -2.1, "💸")
+            KPICard("Receitas", f"R$ {rec:,.2f}", "Entradas confirmadas", "up", card_w, card_h),
+            KPICard("Despesas", f"R$ {desp:,.2f}", "Saídas totais", "down", card_w, card_h)
         ],
         [
-            create_premium_kpi_card("SALDO", saldo_periodo, "Resultado líquido", 
-                                   COLORS['secondary'] if saldo_periodo >= 0 else COLORS['warning'], 
-                                   None, "💎"),
-            create_premium_kpi_card("ECONOMIA", receita_total - gastos_total, 
-                                   "Capacidade de poupança", COLORS['purple'], None, "🎯")
+            KPICard("Saldo Líquido", f"R$ {saldo:,.2f}", "Disponível em caixa", "neutral", card_w, card_h),
+            KPICard("Taxa de Poupança", f"{poup:.1f}%", "Meta: 20%", "up" if poup > 20 else "down", card_w, card_h)
         ]
     ]
     
-    kpi_table = Table(kpi_grid, colWidths=[4.5*cm, 4.5*cm], rowHeights=[3.5*cm, 3.5*cm])
-    kpi_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    t_kpi = Table(kpi_data, colWidths=[85*mm, 85*mm], rowHeights=[40*mm, 40*mm])
+    t_kpi.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
     ]))
-    elements.append(kpi_table)
-    elements.append(Spacer(1, 0.8*cm))
+    elements.append(t_kpi)
     
-    # === ANÁLISE DE GASTOS ===
+    elements.append(Spacer(1, 10*mm))
+
+    # --- 3. GRÁFICO E CATEGORIAS ---
+    elements.append(Paragraph("Distribuição de Gastos", style_h2))
+    
+    # Gráfico de Pizza (ReportLab nativo para qualidade vetorial)
+    d = Drawing(400, 200)
+    pc = Pie()
+    pc.x = 100
+    pc.y = 25
+    pc.width = 150
+    pc.height = 150
+    
+    # Dados do gráfico
+    cats = context.get('gastos_agrupados', [])[:6] # Top 6
+    if cats:
+        pc.data = [x[1] for x in cats]
+        pc.labels = [f"{x[0]}" for x in cats]
+        # Cores Premium
+        pc.slices.strokeWidth = 0.5
+        pc.slices.strokeColor = colors.white
+        colors_list = [COLOR_PRIMARY, COLOR_ACCENT, COLOR_SUCCESS, COLOR_DANGER, HexColor('#6366F1'), HexColor('#8B5CF6')]
+        for i, color in enumerate(colors_list):
+            if i < len(pc.data):
+                pc.slices[i].fillColor = color
+    else:
+        pc.data = [1]
+        pc.labels = ["Sem dados"]
+
+    d.add(pc)
+    elements.append(d)
+    
+    # Tabela de Categorias
+    elements.append(Spacer(1, 5*mm))
+    
+    table_data = [['Categoria', 'Valor', '% Total']]
+    for cat, val in cats:
+        perc = (val / desp * 100) if desp > 0 else 0
+        table_data.append([cat, f"R$ {val:,.2f}", f"{perc:.1f}%"])
+        
+    t_cat = Table(table_data, colWidths=[90*mm, 40*mm, 30*mm])
+    t_cat.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
+        ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
+        ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
+        ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
+        ('FONTNAME', (0,1), (-1,-1), FONT_REG),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
+        ('ROUNDEDCORNERS', [10, 10, 10, 10]), # Se suportado pela versão, senão ignora
+    ]))
+    elements.append(t_cat)
+    
     elements.append(PageBreak())
-    elements.append(create_section_divider("ANÁLISE DE GASTOS", "💰"))
-    elements.append(Spacer(1, 0.5*cm))
-    
-    if context_data.get('gastos_por_categoria'):
-        categorias = context_data['gastos_por_categoria'][:8]
-        valores = [cat.get('total', 0) for cat in categorias]
-        labels = [f"{cat.get('nome', 'N/A')[:12]}\n{cat.get('percentual', 0):.1f}%" 
-                 for cat in categorias]
-        # Prefer PNG gerado externamente (Matplotlib) se disponível no contexto
-        grafico_png = context_data.get('grafico_pizza_png') or context_data.get('grafico_pizza_png_bytes')
-        if grafico_png:
-            try:
-                # grafico_png pode ser bytes ou base64-encoded string
-                import base64
-                if isinstance(grafico_png, str):
-                    # assume base64
-                    png_bytes = base64.b64decode(grafico_png)
-                else:
-                    png_bytes = grafico_png
 
-                img_buf = io.BytesIO(png_bytes)
-                img = RLImage(img_buf, width=9*cm, height=7*cm)
-                elements.append(img)
-            except Exception as e:
-                logger.warning(f"Falha ao inserir PNG do gráfico no PDF: {e}. Usando gráfico embutido.")
-                donut = create_donut_chart(valores, labels, "Distribuição por Categoria")
-                elements.append(donut)
-        else:
-            donut = create_donut_chart(valores, labels, "Distribuição por Categoria")
-            elements.append(donut)
-        elements.append(Spacer(1, 1*cm))
+    # --- 4. INSIGHTS E RECOMENDAÇÕES ---
+    elements.append(Paragraph("Insights Inteligentes", style_h2))
+    
+    insights = context.get('insights', [])
+    if not insights:
+        insights = [
+            "Mantenha seus gastos essenciais abaixo de 50% da receita.",
+            "Tente aumentar sua taxa de poupança em 1% no próximo mês.",
+            "Revise assinaturas mensais que não está utilizando."
+        ]
         
-        # Tabela detalhada com design moderno
-        table_data = [['CATEGORIA', 'VALOR', '%', 'STATUS']]
-        
-        for cat in categorias:
-            valor = cat.get('total', 0)
-            percentual = cat.get('percentual', 0)
+    for insight in insights:
+        # Adiciona ícone de lâmpada (texto unicode)
+        text = f"💡 {insight}"
+        elements.append(Paragraph(text, style_insight))
+        elements.append(Spacer(1, 2*mm))
+
+    # --- 5. TOP TRANSAÇÕES ---
+    elements.append(Paragraph("Maiores Movimentações", style_h2))
+    
+    top_transacoes = context.get('top_transacoes', [])
+    if top_transacoes:
+        t_data = [['Data', 'Descrição', 'Valor']]
+        for t in top_transacoes:
+            # Formatação segura
+            val_fmt = f"R$ {float(t.get('valor', 0)):,.2f}"
+            data_fmt = t.get('data', '').strftime('%d/%m') if hasattr(t.get('data'), 'strftime') else str(t.get('data'))[:5]
+            t_data.append([data_fmt, t.get('descricao', 'N/A')[:30], val_fmt])
             
-            if percentual > 30:
-                status = "CRÍTICO"
-                status_color = COLORS['danger']
-            elif percentual > 15:
-                status = "ALTO"
-                status_color = COLORS['warning']
-            else:
-                status = "OK"
-                status_color = COLORS['success']
-            
-            valor_fmt = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-            
-            table_data.append([
-                cat.get('nome', 'N/A'),
-                valor_fmt,
-                f"{percentual:.1f}%",
-                status
-            ])
-        
-        category_table = Table(table_data, colWidths=[5*cm, 3.5*cm, 2*cm, 2.5*cm])
-        category_table.setStyle(TableStyle([
-            # Cabeçalho
-            ('BACKGROUND', (0, 0), (-1, 0), COLORS['primary']),
-            ('TEXTCOLOR', (0, 0), (-1, 0), white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('TOPPADDING', (0, 0), (-1, 0), 12),
-            
-            # Corpo
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
-            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-            ('LEFTPADDING', (0, 1), (-1, -1), 12),
-            ('RIGHTPADDING', (0, 1), (-1, -1), 12),
-            ('TOPPADDING', (0, 1), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
-            
-            # Alternância de cores
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, COLORS['bg_light']]),
-            
-            # Bordas sutis
-            ('LINEBELOW', (0, 0), (-1, 0), 1, COLORS['secondary']),
-            ('LINEBELOW', (0, 1), (-1, -1), 0.5, COLORS['border']),
-            ('BOX', (0, 0), (-1, -1), 0.5, COLORS['border']),
+        t_top = Table(t_data, colWidths=[30*mm, 90*mm, 40*mm])
+        t_top.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
+            ('TEXTCOLOR', (0,0), (-1,0), COLOR_PRIMARY),
+            ('LINEBELOW', (0,0), (-1,0), 1, COLOR_ACCENT),
+            ('ALIGN', (2,0), (-1,-1), 'RIGHT'),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_WHITE, COLOR_BG_LIGHT]),
+            ('FONTSIZE', (0,0), (-1,-1), 9),
         ]))
-        elements.append(category_table)
-        elements.append(Spacer(1, 2*cm))
+        elements.append(t_top)
+    else:
+        elements.append(Paragraph("Nenhuma transação relevante encontrada.", style_normal))
 
-    # === MÉTRICAS DE PERFORMANCE ===
-    elements.append(Paragraph("📈 MÉTRICAS DE PERFORMANCE", section_style))
-    elements.append(Spacer(1, 0.5*cm))
-
-    # Calcular métricas
-    receita_total = context_data.get('total_receitas', 0)
-    gastos_total = context_data.get('total_gastos', 0)
-    saldo_periodo = context_data.get('saldo_periodo', 0)
-
-    taxa_poupanca = (saldo_periodo / receita_total * 100) if receita_total > 0 else 0
-    media_diaria_gastos = gastos_total / 30  # Aproximado
-    media_diaria_receitas = receita_total / 30  # Aproximado
-
-    metrics_data = [
-        ['Métrica', 'Valor', 'Status'],
-        ['Taxa de Poupança', f"{taxa_poupanca:.1f}%", "🟢 Excelente" if taxa_poupanca > 20 else "🟡 Regular" if taxa_poupanca > 10 else "🔴 Atenção"],
-        ['Média Diária de Gastos', f"R$ {media_diaria_gastos:.2f}", "📊 Informativo"],
-        ['Média Diária de Receitas', f"R$ {media_diaria_receitas:.2f}", "📊 Informativo"],
-        ['Dias no Verde', "25/30" if saldo_periodo > 0 else "15/30", "🟢 Bom" if saldo_periodo > 0 else "🟡 Regular"],
-        ['Controle de Gastos', "Bom" if gastos_total < receita_total else "Atenção", "🟢 Bom" if gastos_total < receita_total else "🔴 Atenção"]
-    ]
-
-    metrics_table = Table(metrics_data, colWidths=[5*cm, 4*cm, 4*cm])
-    metrics_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), COLORS['purple']),
-        ('TEXTCOLOR', (0, 0), (-1, 0), white),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
-        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -1), COLORS['bg_white']),
-        ('GRID', (0, 0), (-1, -1), 0.5, COLORS['border']),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [COLORS['bg_white'], COLORS['bg_light']])
-    ]))
-    elements.append(metrics_table)
-    elements.append(Spacer(1, 2*cm))
+    # --- 6. CALL TO ACTION FINAL ---
+    elements.append(Spacer(1, 20*mm))
     
-    # === RODAPÉ FINAL ===
-    footer_text = """
-    <para alignment="center" fontSize="9" color="#9ca3af">
-    <b>MaestroFin</b> - Inteligência Financeira ao Seu Alcance<br/>
-    Este relatório foi gerado automaticamente com base nos seus dados financeiros<br/>
-    Para suporte: contato@maestrofin.com | Tel: (11) 9999-9999<br/><br/>
-    <font size="7">© 2025 MaestroFin. Todos os direitos reservados. | Documento confidencial</font>
-    </para>
-    """
-    elements.append(Paragraph(footer_text, normal_text))
+    # Caixa de conclusão
+    elements.append(Paragraph("Próximos Passos", style_h2))
+    elements.append(Paragraph("Para detalhar estes lançamentos ou criar novas metas de economia, acesse o menu principal do bot.", style_normal))
     
-    # === CONSTRUIR PDF ===
-    # Função que desenha cabeçalho e rodapé em cada página
-    def _decorate_page(canvas_obj, doc_obj):
-        create_modern_header(canvas_obj, doc_obj)
-        create_elegant_footer(canvas_obj, doc_obj)
-
-    doc.build(elements, onFirstPage=_decorate_page, onLaterPages=_decorate_page)
+    # Build
+    doc.build(elements, onFirstPage=lambda c, d: None, onLaterPages=create_header_footer)
     
-    # Adicionar rodapé
     buffer.seek(0)
     return buffer.getvalue()
-
-
-# ===========================
-# TESTE DO SISTEMA
-# ===========================
-if __name__ == "__main__":
-    # Dados de teste
-    test_data = {
-        'periodo_inicio': '01/01/2025',
-        'periodo_fim': '31/01/2025',
-        'total_receitas': 8500.00,
-        'total_gastos': 6200.00,
-        'saldo_periodo': 2300.00,
-        'gastos_por_categoria': [
-            {'nome': 'Alimentação', 'total': 1850.00, 'percentual': 29.8},
-            {'nome': 'Transporte', 'total': 1200.00, 'percentual': 19.4},
-            {'nome': 'Lazer e Entretenimento', 'total': 980.00, 'percentual': 15.8},
-            {'nome': 'Saúde', 'total': 750.00, 'percentual': 12.1},
-            {'nome': 'Educação', 'total': 620.00, 'percentual': 10.0},
-            {'nome': 'Vestuário', 'total': 450.00, 'percentual': 7.3},
-            {'nome': 'Tecnologia', 'total': 250.00, 'percentual': 4.0},
-            {'nome': 'Outros', 'total': 100.00, 'percentual': 1.6},
-        ],
-        'top_gastos': [
-            {'data': '2025-01-25 19:30:00', 'descricao': 'Supermercado Extra - Compra mensal', 'categoria': 'Alimentação', 'valor': 485.00},
-            {'data': '2025-01-22 14:20:00', 'descricao': 'Posto Ipiranga - Gasolina', 'categoria': 'Transporte', 'valor': 320.00},
-            {'data': '2025-01-18 21:15:00', 'descricao': 'Restaurante Japonês - Jantar', 'categoria': 'Lazer', 'valor': 280.00},
-            {'data': '2025-01-15 10:45:00', 'descricao': 'Farmácia São Paulo - Medicamentos', 'categoria': 'Saúde', 'valor': 245.00},
-            {'data': '2025-01-12 16:30:00', 'descricao': 'Cinema Cinemark - Ingressos', 'categoria': 'Lazer', 'valor': 180.00},
-            {'data': '2025-01-10 09:00:00', 'descricao': 'Curso Online Udemy - Python', 'categoria': 'Educação', 'valor': 150.00},
-            {'data': '2025-01-08 15:20:00', 'descricao': 'Loja Renner - Roupas', 'categoria': 'Vestuário', 'valor': 320.00},
-            {'data': '2025-01-05 11:30:00', 'descricao': 'Uber - Corridas do mês', 'categoria': 'Transporte', 'valor': 125.00},
-            {'data': '2025-01-03 20:00:00', 'descricao': 'iFood - Delivery', 'categoria': 'Alimentação', 'valor': 95.00},
-            {'data': '2025-01-02 14:15:00', 'descricao': 'Amazon - Fone Bluetooth', 'categoria': 'Tecnologia', 'valor': 180.00},
-        ],
-        'insights': [
-            'Seus gastos com alimentação representam 29.8% do total - considere otimizar compras',
-            'Você conseguiu economizar R$ 2.300,00 este mês - excelente resultado!',
-            'Transporte é seu segundo maior gasto (19.4%) - analise alternativas mais econômicas',
-            'Taxa de poupança de 27% está acima da média recomendada de 20%',
-            'Gastos com lazer estão controlados e dentro de um padrão saudável',
-            'Considere investir parte da economia em aplicações de renda fixa',
-            'Seus gastos essenciais (alimentação, saúde, transporte) representam 61.3%',
-            'Parabéns! Seu controle financeiro está em nível excelente'
-        ]
-    }
-    
-    # Gerar PDF
-    print("🎨 Gerando relatório financeiro premium...")
-    pdf_content = generate_financial_pdf(test_data)
-    
-    # Salvar arquivo
-    output_filename = 'relatorio_maestrofin_premium.pdf'
-    with open(output_filename, 'wb') as f:
-        f.write(pdf_content)
-    
-    print(f"✅ PDF gerado com sucesso: {output_filename}")
-    print(f"📊 Total de páginas: Aproximadamente 3-4 páginas")
-    print(f"💎 Design: Premium com cabeçalho, rodapé e elementos visuais modernos")
-    print(f"📈 Incluído: KPIs, gráficos, tabelas e insights inteligentes")
