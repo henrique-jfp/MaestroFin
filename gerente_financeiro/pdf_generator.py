@@ -216,9 +216,6 @@ def create_donut_chart(data, labels, title, colors=None):
         pie.slices[i].fillColor = color
         pie.slices[i].popout = 5 if i == 0 else 0  # Destacar maior fatia
     
-    # Criar efeito donut (círculo branco no centro)
-    pie.innerRadiusPercent = 50
-    
     drawing.add(pie)
     
     # Título com estilo
