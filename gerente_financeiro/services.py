@@ -21,7 +21,7 @@ import time  # <-- Para timestamps do cache
 import google.generativeai as genai
 from .prompts import PROMPT_ANALISE_RELATORIO
 from database.database import listar_objetivos_usuario
-from models import Categoria, Lancamento, Usuario, Subcategoria
+from models import Categoria, Lancamento, Usuario, Subcategoria, ItemLancamento
 import config
 from . import external_data
 from dateutil.relativedelta import relativedelta
@@ -717,6 +717,20 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
                 
                 # Cria o lançamento
                 novo_lancamento = Lancamento(**lancamento_data)
+
+                # Se a preparação trouxe itens, anexa objetos ItemLancamento ao lançamento antes do commit
+                itens_payload = lancamento_data.get('itens') or []
+                for item in itens_payload:
+                    try:
+                        nome_item = item.get('nome_item') or item.get('descricao') or 'Item'
+                        qtd = float(str(item.get('quantidade', 1)).replace(',', '.')) if item.get('quantidade') is not None else 1.0
+                        valor_unit = float(str(item.get('valor_unitario', 0)).replace(',', '.')) if item.get('valor_unitario') is not None else 0.0
+                        novo_item = ItemLancamento(nome_item=nome_item, quantidade=qtd, valor_unitario=valor_unit)
+                        novo_lancamento.itens.append(novo_item)
+                    except Exception:
+                        # não deixamos falhar o processamento por um item mal formatado
+                        logger.debug(f"Item inválido ignorado ao salvar transação: {item}")
+
                 db.add(novo_lancamento)
                 
                 transacoes_salvas.append(novo_lancamento)
@@ -730,10 +744,16 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
         
         # Commit das transações
         db.commit()
-        
+
+        # IDs criados (após commit os objetos terão id)
+        try:
+            stats['created_ids'] = [int(getattr(t, 'id')) for t in transacoes_salvas]
+        except Exception:
+            stats['created_ids'] = []
+
         # Gera mensagem de resultado
         mensagem_resultado = _gerar_mensagem_resultado_salvamento(stats, tipo_origem)
-        
+
         return True, mensagem_resultado, stats
         
     except Exception as e:
@@ -823,7 +843,45 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
             dados['data_transacao'] = datetime.strptime(dados['data_transacao'], '%d/%m/%Y')
         except:
             dados['data_transacao'] = datetime.strptime(dados['data_transacao'], '%Y-%m-%d')
-    
+
+    # --- Heurística adicional: inferir categoria/subcategoria se não vierem explícitas ---
+    try:
+        if not dados.get('id_categoria'):
+            texto_busca = (transacao_data.get('descricao') or '') + ' ' + (transacao_data.get('merchant_name') or '')
+            texto_busca = texto_busca.lower()
+
+            # Mapeamento simples (pode ser enriquecido com o mapa global)
+            heur_map = {
+                'supermercado': 'Alimentação', 'mercado': 'Alimentação', 'ifood': 'Alimentação', 'ubereats': 'Alimentação',
+                'uber': 'Transporte', '99': 'Transporte', 'posto': 'Transporte', 'gasolina': 'Transporte',
+                'farmacia': 'Saúde', 'netflix': 'Assinaturas', 'spotify': 'Assinaturas',
+                'amazon': 'Compras', 'magazine': 'Compras', 'loja': 'Compras', 'restaurante': 'Alimentação',
+                'aluguel': 'Moradia', 'condominio': 'Moradia', 'agua': 'Moradia', 'luz': 'Moradia'
+            }
+
+            found_cat = None
+            for kw, cat_nome in heur_map.items():
+                if kw in texto_busca:
+                    try:
+                        from sqlalchemy import func
+                        from database.database import get_db
+                        db_tmp = next(get_db())
+                        categoria_obj = db_tmp.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_nome)).first()
+                        db_tmp.close()
+                    except Exception:
+                        categoria_obj = None
+
+                    if categoria_obj:
+                        dados['id_categoria'] = categoria_obj.id
+                        found_cat = categoria_obj
+                        break
+
+        # Se vier itens detalhados (algumas integrações podem trazer lista de itens), anexa ao dict
+        if 'itens' in transacao_data and isinstance(transacao_data['itens'], list):
+            dados['itens'] = transacao_data['itens']
+    except Exception as e:
+        logger.debug(f"Heurística de categoria falhou: {e}")
+
     return dados
 
 
@@ -883,6 +941,62 @@ def _calcular_similaridade_descricao(desc1: str, desc2: str) -> float:
     uniao = len(palavras1.union(palavras2))
     
     return intersecao / uniao if uniao > 0 else 0.0
+
+
+def _extrair_itens_de_descricao(texto: str, valor_total: float) -> List[Dict[str, Any]]:
+    """Heurística leve para extrair itens de uma descrição de transação.
+    Retorna lista de dicionários: {'nome_item', 'quantidade', 'valor_unitario'}
+    - Procura padrões como "Produto X R$ 12,34" ou "2x Pizza R$ 25,00"
+    - Se nada for encontrado, retorna um item único com o merchant/descritivo e o valor total
+    """
+    try:
+        if not texto:
+            return []
+        texto = texto.replace('\n', ' ').replace('\r', ' ')
+        # Padrão: nome ... R$ 12,34
+        pattern_valores = re.compile(r'(?P<nome>[A-Za-z0-9\s\-\&\.,]{3,80}?)\s+(?:R\$|r\$)\s*(?P<valor>\d+[.,]\d{2})')
+        encontrados = pattern_valores.findall(texto)
+        itens = []
+        for match in encontrados:
+            nome_raw = match[0].strip(' -–:;,.')
+            valor_str = match[1].replace('.', '').replace(',', '.')
+            try:
+                valor = float(valor_str)
+            except Exception:
+                valor = 0.0
+            itens.append({'nome_item': nome_raw, 'quantidade': 1, 'valor_unitario': valor})
+
+        if itens:
+            return itens
+
+        # Padrão alternativo: "2x Pizza - R$12,00" ou "2 x Pizza R$12,00"
+        pattern_qtd = re.compile(r'(?P<qtd>\d+)\s*[xX]\s*(?P<nome>[A-Za-z0-9\s\-\&]{3,80})\s*(?:-|\s)\s*(?:R\$|r\$)?\s*(?P<valor>\d+[.,]\d{2})?')
+        encontrados2 = pattern_qtd.findall(texto)
+        for m in encontrados2:
+            try:
+                qtd = int(m[0])
+            except Exception:
+                qtd = 1
+            nome = m[1].strip()
+            valor = 0.0
+            if m[2]:
+                try:
+                    valor = float(m[2].replace('.', '').replace(',', '.'))
+                except Exception:
+                    valor = 0.0
+            itens.append({'nome_item': nome, 'quantidade': qtd, 'valor_unitario': valor})
+
+        if itens:
+            return itens
+
+        # Fallback: se não conseguiu extrair itens, sugere um único item com o merchant/descritivo
+        resumo = texto
+        if len(resumo) > 60:
+            resumo = resumo[:57] + '...'
+        return [{'nome_item': resumo.strip(), 'quantidade': 1, 'valor_unitario': float(valor_total)}]
+    except Exception as e:
+        logger.debug(f"Falha ao extrair itens da descrição: {e}")
+        return []
 
 
 async def processar_transacoes_inteligente(db: Session, usuario_db, transacoes_raw: list,
@@ -1799,6 +1913,14 @@ def _buscar_transacoes_open_finance(db: Session, user_id: int) -> List[Dict]:
                 "fonte": "open_finance",  # 🏦 Identificador de origem
                 "banco": _mapear_banco_por_connector(row[9])  # Nome do banco
             }
+            # Tenta extrair itens a partir da descrição/merchant_name (heurística local)
+            try:
+                descricao_full = (row[1] or '') + ' ' + (row[6] or '')
+                itens_extraidos = _extrair_itens_de_descricao(descricao_full, float(row[2]) if row[2] else 0.0)
+                if itens_extraidos:
+                    transacao['itens'] = itens_extraidos
+            except Exception:
+                pass
             transacoes.append(transacao)
         
         logger.info(f"✅ {len(transacoes)} transações bancárias encontradas para user {user_id}")
