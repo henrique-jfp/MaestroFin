@@ -64,7 +64,7 @@ def track_analytics(command_name):
 
 from database.database import get_db, get_or_create_user, buscar_lancamentos_usuario
 from models import Categoria, Lancamento, Subcategoria, Usuario, ItemLancamento, Conta
-from .prompts import PROMPT_GERENTE_VDM, PROMPT_INSIGHT_FINAL, SUPER_PROMPT_MAESTRO_CONTEXTUAL
+from .prompts import PROMPT_GERENTE_VDM, PROMPT_INSIGHT_FINAL
 from .states import (
     AWAIT_GERENTE_QUESTION, ASK_OBJETIVO_DESCRICAO, ASK_OBJETIVO_VALOR, ASK_OBJETIVO_PRAZO,
     AWAIT_EMAIL_NOTIFICACAO
