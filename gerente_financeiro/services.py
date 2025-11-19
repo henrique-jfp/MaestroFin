@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import seaborn as sns
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, extract, text
 import asyncio
