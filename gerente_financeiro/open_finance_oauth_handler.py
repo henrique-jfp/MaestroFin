@@ -64,6 +64,29 @@ def _build_banks_keyboard(connectors: list) -> InlineKeyboardMarkup:
     keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="of_cancel")])
     return InlineKeyboardMarkup(keyboard)
 
+def _find_oauth_url(item_data: dict) -> Optional[str]:
+    """Inspeciona a resposta da API da Pluggy para encontrar a URL de autorização."""
+    if not item_data:
+        return None
+    
+    # Tentativa 1: Chave 'url' no nível raiz (mais comum)
+    if 'url' in item_data and isinstance(item_data['url'], str):
+        return item_data['url']
+        
+    # Tentativa 2: Chave 'redirectUrl' no nível raiz
+    if 'redirectUrl' in item_data and isinstance(item_data['redirectUrl'], str):
+        return item_data['redirectUrl']
+
+    # Tentativa 3: Dentro do objeto 'parameter'
+    parameter = item_data.get('parameter')
+    if isinstance(parameter, dict):
+        if 'url' in parameter and isinstance(parameter['url'], str):
+            return parameter['url']
+        if 'data' in parameter and isinstance(parameter['data'], str) and parameter['data'].startswith('http'):
+             return parameter['data']
+
+    return None
+
 # --- Handlers do ConversationHandler ---
 
 async def start_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -121,7 +144,7 @@ async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         await update.message.delete()
     except Exception:
-        pass # Não é crítico se a mensagem não puder ser deletada
+        pass
         
     status_msg = await update.message.reply_text("⏳ Criando conexão segura...")
 
@@ -131,21 +154,20 @@ async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     db = next(get_db())
     service = OpenFinanceService(db)
     try:
-        # Etapa 1: Criar o item
         item = service.create_connection_item(user_id, connector['id'], cpf)
         item_id = item.get('id')
 
         if not item_id:
             raise PluggyClientError("A API não retornou um ID para a conexão criada.")
 
-        # Etapa 2: Obter o link de autorização diretamente do item criado
-        oauth_url = item.get("url")
+        # Usa a nova função auxiliar para encontrar a URL
+        oauth_url = _find_oauth_url(item)
 
         if not oauth_url:
-            # Fallback: se a URL não vier no campo principal, aguardar e consultar de novo
-            await asyncio.sleep(3) # Dá um tempo para a Pluggy processar
+            # Fallback: aguarda um pouco e tenta novamente
+            await asyncio.sleep(4)
             item_status = service.get_item_status(item_id)
-            oauth_url = item_status.get("url")
+            oauth_url = _find_oauth_url(item_status)
             if not oauth_url:
                  raise PluggyClientError("Não foi possível obter o link de autorização do banco após a criação.")
 
