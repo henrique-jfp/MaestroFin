@@ -117,7 +117,11 @@ async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("CPF inválido. Por favor, digite os 11 números.")
         return AWAITING_CPF
 
-    await update.message.delete() # Remove o CPF do chat por segurança
+    try:
+        await update.message.delete()
+    except Exception:
+        pass # Não é crítico se a mensagem não puder ser deletada
+        
     status_msg = await update.message.reply_text("⏳ Criando conexão segura...")
 
     user_id = update.effective_user.id
@@ -126,17 +130,27 @@ async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     db = next(get_db())
     service = OpenFinanceService(db)
     try:
+        # Etapa 1: Criar o item
         item = service.create_connection_item(user_id, connector['id'], cpf)
-        item_status = service.get_item_status(item['id'])
-        
-        oauth_url = item_status.get("parameter", {}).get("data")
+        item_id = item.get('id')
+
+        if not item_id:
+            raise PluggyClientError("A API não retornou um ID para a conexão criada.")
+
+        # Etapa 2: Obter o link de autorização diretamente do item criado
+        oauth_url = item.get("url")
 
         if not oauth_url:
-            raise PluggyClientError("Não foi possível obter o link de autorização do banco.")
+            # Fallback: se a URL não vier no campo principal, aguardar e consultar de novo
+            await asyncio.sleep(3) # Dá um tempo para a Pluggy processar
+            item_status = service.get_item_status(item_id)
+            oauth_url = item_status.get("url")
+            if not oauth_url:
+                 raise PluggyClientError("Não foi possível obter o link de autorização do banco após a criação.")
 
         keyboard = [
             [InlineKeyboardButton("🔐 Autorizar no Banco", url=oauth_url)],
-            [InlineKeyboardButton("✅ Já autorizei", callback_data=f"of_authorized_{item['id']}")]
+            [InlineKeyboardButton("✅ Já autorizei", callback_data=f"of_authorized_{item_id}")]
         ]
         await status_msg.edit_text(
             f"Clique no botão para autorizar o acesso no site oficial do {connector['name']}. "
@@ -144,8 +158,14 @@ async def handle_cpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return WAITING_AUTH
+        
     except PluggyClientError as e:
-        await status_msg.edit_text(f"❌ Erro ao criar conexão: {e}")
+        logger.error(f"Erro de cliente Pluggy ao criar conexão: {e}")
+        await status_msg.edit_text(f"❌ Erro ao iniciar a conexão com o banco: {e}")
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Erro inesperado em handle_cpf: {e}", exc_info=True)
+        await status_msg.edit_text("❌ Ocorreu um erro inesperado. Tente novamente mais tarde.")
         return ConversationHandler.END
     finally:
         db.close()
