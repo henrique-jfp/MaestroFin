@@ -2165,6 +2165,64 @@ class OpenFinanceOAuthHandler:
                 "🗑️ Para desconectar um banco, use:\n/desconectar_banco"
             )
             return
+
+    # --- NOVA FUNÇÃO /categorizar ---
+    async def categorizar_lancamentos(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Categoriza todos os lançamentos sem categoria de um usuário usando a lógica inteligente.
+        """
+        user_id = update.effective_user.id
+        logger.info(f"🔥 Usuário {user_id} iniciou o /categorizar (extintor de incêndio).")
+
+        await update.message.reply_text("🔥 Analisando e categorizando seus lançamentos... Isso pode levar um momento.")
+
+        from database.database import get_db
+        from models import Lancamento, Usuario
+        from .services import _categorizar_com_mapa_inteligente # Importa a nova lógica
+        from sqlalchemy.orm import joinedload
+
+        db = next(get_db())
+        try:
+            usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+            if not usuario:
+                await update.message.reply_text("Usuário não encontrado.")
+                return
+
+            lancamentos_sem_categoria = db.query(Lancamento).filter(
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.id_categoria == None
+            ).all()
+
+            if not lancamentos_sem_categoria:
+                await update.message.reply_text("✅ Todos os seus lançamentos já estão categorizados!")
+                return
+
+            categorizados_count = 0
+            for lanc in lancamentos_sem_categoria:
+                texto_busca = lanc.descricao.lower()
+                
+                # Chama a nova lógica de serviço unificada
+                cat_id, subcat_id = _categorizar_com_mapa_inteligente(texto_busca, lanc.tipo, db)
+
+                if cat_id:
+                    lanc.id_categoria = cat_id
+                    if subcat_id:
+                        lanc.id_subcategoria = subcat_id
+                    categorizados_count += 1
+            
+            if categorizados_count > 0:
+                db.commit()
+                await update.message.reply_text(f"✅ Sucesso! {categorizados_count} de {len(lancamentos_sem_categoria)} lançamentos foram categorizados automaticamente.")
+            else:
+                await update.message.reply_text("🔍 Análise concluída. Não consegui encontrar categorias automáticas para os lançamentos pendentes.")
+
+        except Exception as e:
+            logger.error(f"Erro no /categorizar para user {user_id}: {e}", exc_info=True)
+            await update.message.reply_text("❌ Ocorreu um erro ao tentar categorizar. Tente novamente mais tarde.")
+        finally:
+            db.close()
+
+
     
     # ==================== IMPORT CALLBACKS ====================
     
