@@ -102,7 +102,7 @@ class OpenFinanceService:
         self.db.commit()
         return new_accounts, updated_accounts
 
-    def sync_transactions_for_user(self, user_id: int, days: int = 30) -> Dict[str, int]:
+    def sync_transactions_for_user(self, user_id: int, days: int = 60) -> Dict[str, int]:
         """Sincroniza transações de todas as contas conectadas de um usuário."""
         connections = self.get_user_connections(user_id)
         if not connections:
