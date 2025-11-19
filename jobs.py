@@ -18,9 +18,10 @@ async def sync_all_users_transactions(context: ContextTypes.DEFAULT_TYPE):
         
         from database.database import get_db
         from models import Usuario, PluggyItem
-        from gerente_financeiro.open_finance_oauth_handler import sync_all_transactions_for_user
+        from open_finance.service import OpenFinanceService
         
         db = next(get_db())
+        service = OpenFinanceService(db)
         
         # Buscar todos usuários com items ativos
         usuarios_com_items = (
@@ -40,27 +41,26 @@ async def sync_all_users_transactions(context: ContextTypes.DEFAULT_TYPE):
         
         for usuario in usuarios_com_items:
             try:
-                stats = sync_all_transactions_for_user(usuario.telegram_id, days=7)
+                stats = service.sync_transactions_for_user(usuario.telegram_id, days=7)
                 
-                if "error" not in stats:
-                    new_txns = stats.get("new", 0)
+                new_txns = stats.get("new_transactions", 0)
+                if new_txns > 0:
                     total_new += new_txns
                     total_synced += 1
                     
                     # Notificar usuário se houver transações novas
-                    if new_txns > 0:
-                        try:
-                            await context.bot.send_message(
-                                chat_id=usuario.telegram_id,
-                                text=(
-                                    f"🔔 *Nova\\(s\\) transação\\(ões\\)\\!*\n\n"
-                                    f"Encontrei *{new_txns} nova\\(s\\) transação\\(ões\\)* nas suas contas\\.\n\n"
-                                    f"Use /importar\\_transacoes para revisar e importar\\."
-                                ),
-                                parse_mode="MarkdownV2"
-                            )
-                        except Exception as e:
-                            logger.error(f"❌ Erro ao notificar usuário {usuario.telegram_id}: {e}")
+                    try:
+                        await context.bot.send_message(
+                            chat_id=usuario.telegram_id,
+                            text=(
+                                f"🔔 *Nova\\(s\\) transação\\(ões\\)\\!*\n\n"
+                                f"Encontrei *{new_txns} nova\\(s\\) transação\\(ões\\)* nas suas contas\\.\n\n"
+                                f"Use /importar\\_transacoes para revisar e importar\\."
+                            ),
+                            parse_mode="MarkdownV2"
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ Erro ao notificar usuário {usuario.telegram_id}: {e}")
                 
             except Exception as e:
                 logger.error(f"❌ Erro ao sincronizar usuário {usuario.telegram_id}: {e}")

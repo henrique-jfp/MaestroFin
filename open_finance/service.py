@@ -9,7 +9,7 @@ para persistir e consultar dados no banco de dados local.
 import logging
 from typing import List, Dict, Tuple, Optional
 from sqlalchemy.orm import Session, joinedload
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .pluggy_client import PluggyClient, PluggyClientError
 from models import Usuario, PluggyItem, PluggyAccount, PluggyTransaction
@@ -73,31 +73,47 @@ class OpenFinanceService:
             return new_item
 
     def sync_accounts_for_item(self, pluggy_item: PluggyItem) -> Tuple[int, int]:
-        """Sincroniza as contas de um item específico."""
+        """Sincroniza as contas de um item específico, incluindo dados de cartão."""
         accounts_data = self.client.list_accounts(pluggy_item.pluggy_item_id)
         
         new_accounts = 0
         updated_accounts = 0
 
         for acc_data in accounts_data:
+            # Lógica de "upsert": encontrar ou criar
             existing_account = self.db.query(PluggyAccount).filter(PluggyAccount.pluggy_account_id == acc_data['id']).first()
-            if existing_account:
-                existing_account.balance = acc_data.get('balance')
-                updated_accounts += 1
-            else:
-                new_account = PluggyAccount(
-                    id_item=pluggy_item.id,
-                    pluggy_account_id=acc_data['id'],
-                    type=acc_data.get('type'),
-                    subtype=acc_data.get('subtype'),
-                    name=acc_data.get('name'),
-                    balance=acc_data.get('balance'),
-                    credit_limit=acc_data.get('creditLimit'),
-                    currency_code=acc_data.get('currencyCode', 'BRL'),
-                    number=acc_data.get('number')
-                )
-                self.db.add(new_account)
+            
+            account_to_update = existing_account or PluggyAccount(id_item=pluggy_item.id, pluggy_account_id=acc_data['id'])
+
+            # Atualiza os campos
+            account_to_update.type = acc_data.get('type')
+            account_to_update.subtype = acc_data.get('subtype')
+            account_to_update.name = acc_data.get('name')
+            account_to_update.balance = acc_data.get('balance')
+            account_to_update.currency_code = acc_data.get('currencyCode', 'BRL')
+            account_to_update.number = acc_data.get('number')
+            
+            # Se for Cartão de Crédito, busca detalhes
+            if acc_data.get('type') == 'CREDIT':
+                try:
+                    credit_data = self.client.get_credit_card(acc_data['id'])
+                    account_to_update.credit_limit = credit_data.get('limit')
+                    account_to_update.balance = credit_data.get('balance', acc_data.get('balance')) # Usa o balance do endpoint específico se disponível
+                    account_to_update.credit_level = credit_data.get('level')
+                    account_to_update.credit_brand = credit_data.get('brand')
+                    account_to_update.credit_closing_date = credit_data.get('closingDate')
+                    account_to_update.credit_due_date = credit_data.get('dueDate')
+
+                except PluggyClientError as e:
+                    logger.warning(f"Não foi possível obter detalhes do cartão de crédito para a conta {acc_data['id']}: {e}")
+                    # Se falhar, usa os dados genéricos
+                    account_to_update.credit_limit = acc_data.get('creditLimit')
+            
+            if not existing_account:
+                self.db.add(account_to_update)
                 new_accounts += 1
+            else:
+                updated_accounts += 1
         
         self.db.commit()
         return new_accounts, updated_accounts

@@ -234,7 +234,7 @@ async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 # --- Handlers de Comandos Individuais ---
 
 async def list_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler para /minhas_contas."""
+    """Handler para /minhas_contas com informações detalhadas."""
     user_id = update.effective_user.id
     db = next(get_db())
     service = OpenFinanceService(db)
@@ -244,13 +244,34 @@ async def list_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_html("Você não tem bancos conectados. Use <code>/conectar_banco</code>.")
             return
 
-        response_text = "🏦 *Suas Conexões:*\n\n"
+        response_text = "🏦 *Suas Conexões:*\n"
         for conn in connections:
-            response_text += f"*{conn.connector_name}* (Status: `{conn.status}`)\n"
-            for acc in conn.accounts:
-                balance_str = f"R$ {acc.balance:,.2f}" if acc.balance is not None else "N/A"
-                response_text += f"  - `{acc.name}`: {balance_str}\n"
-            response_text += "\n"
+            response_text += f"\n*{conn.connector_name}* (Status: `{conn.status}`)\n"
+            
+            # Separa as contas por tipo
+            bank_accounts = [acc for acc in conn.accounts if acc.type == 'BANK']
+            credit_accounts = [acc for acc in conn.accounts if acc.type == 'CREDIT']
+
+            if bank_accounts:
+                response_text += "*Contas Corrente/Poupança:*\n"
+                for acc in bank_accounts:
+                    balance_str = f"R$ {acc.balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    response_text += f"  - `{acc.name}`: *{balance_str}*\n"
+            
+            if credit_accounts:
+                response_text += "*Cartões de Crédito:*\n"
+                for acc in credit_accounts:
+                    invoice = f"R$ {acc.balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") # 'balance' em cartão é a fatura
+                    limit = f"R$ {acc.credit_limit:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if acc.credit_limit is not None else "N/A"
+                    available_limit_val = (acc.credit_limit or 0) - acc.balance
+                    available_limit = f"R$ {available_limit_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if acc.credit_limit is not None else "N/A"
+
+                    response_text += (
+                        f"  - `{acc.name}` ({acc.credit_brand}):\n"
+                        f"    - Fatura Atual: *{invoice}*\n"
+                        f"    - Limite Disponível: *{available_limit}* (de {limit})\n"
+                    )
+            response_text += "---"
         
         await update.message.reply_markdown(response_text)
     finally:
