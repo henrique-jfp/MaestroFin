@@ -1,3 +1,12 @@
+def _is_pix_credito_inter(tx):
+    """Detecta transação interna do Inter que deve ser ignorada."""
+    desc = tx.get('description', '') if isinstance(tx, dict) else getattr(tx, 'description', '')
+    return desc.strip().lower() == 'crédito liberado - pix no crédito'
+
+def _is_credit_card(acc):
+    """Detecta se a conta é cartão de crédito."""
+    tipo = acc.get('type', '') if isinstance(acc, dict) else getattr(acc, 'type', '')
+    return tipo.upper() == 'CREDIT'
 """
 open_finance/service.py
 
@@ -222,6 +231,8 @@ class OpenFinanceService:
                 try:
                     transactions_data = self.client.list_transactions(acc.pluggy_account_id, from_date)
                     for tx_data in transactions_data:
+                        if _is_pix_credito_inter(tx_data):
+                            continue  # Ignora transação do Inter Pix no crédito
                         existing_tx = self.db.query(PluggyTransaction).filter(PluggyTransaction.pluggy_transaction_id == tx_data['id']).first()
                         if not existing_tx:
                             date_str = tx_data['date']
@@ -229,13 +240,17 @@ class OpenFinanceService:
                                 date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
                             except ValueError:
                                 date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            # Corrige tipo e valor para cartão de crédito
+                            is_credit_card = _is_credit_card(acc)
+                            valor = abs(tx_data['amount'])
+                            tipo = 'Saída' if is_credit_card else ('Saída' if tx_data['amount'] < 0 else 'Entrada')
                             new_tx = PluggyTransaction(
                                 id_account=acc.id,
                                 pluggy_transaction_id=tx_data['id'],
                                 description=tx_data['description'],
-                                amount=tx_data['amount'],
+                                amount=valor,
                                 date=date_obj,
-                                type=tx_data.get('type'),
+                                type=tipo,
                                 category=tx_data.get('category'),
                                 merchant_name=tx_data.get('merchantName')
                             )
