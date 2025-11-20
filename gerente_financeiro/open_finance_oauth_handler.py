@@ -375,8 +375,30 @@ class OpenFinanceOAuthHandler:
         await importar_of(update, context)
     
     async def categorizar_lancamentos(self, update, context):
-        """Handler para /categorizar - placeholder por enquanto"""
-        await update.message.reply_text("🔄 Função de categorização em desenvolvimento. Use /importar para importar transações primeiro.")
+        """Handler para /categorizar: categoriza lançamentos sem categoria do usuário usando IA."""
+        user_id = update.effective_user.id
+        db = next(get_db())
+        from models import Lancamento
+        from gerente_financeiro.services import _categorizar_com_mapa_inteligente
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == user_id,
+            Lancamento.id_categoria == None
+        ).all()
+        if not lancamentos:
+            await update.message.reply_text("✅ Todos os lançamentos já estão categorizados!")
+            db.close()
+            return
+        categorizados = 0
+        for l in lancamentos:
+            texto_busca = (l.descricao or "")
+            cat_id, subcat_id = _categorizar_com_mapa_inteligente(texto_busca, l.tipo, db)
+            if cat_id:
+                l.id_categoria = cat_id
+                l.id_subcategoria = subcat_id
+                categorizados += 1
+        db.commit()
+        db.close()
+        await update.message.reply_text(f"✨ {categorizados} lançamentos categorizados automaticamente! 🚀")
     
     async def debug_open_finance(self, update, context):
         """Handler para /debug_open_finance"""
