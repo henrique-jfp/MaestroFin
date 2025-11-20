@@ -3,6 +3,7 @@ import logging
 import random
 import re
 import time
+import functools
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 from typing import List, Tuple, Dict, Any
@@ -1355,9 +1356,30 @@ async def gerar_resposta_ia(update, context, prompt, user_question, usuario_db, 
         logger.error(f"Erro geral e inesperado em gerar_resposta_ia: {e}", exc_info=True)
         await enviar_resposta_erro(context.bot, usuario_db.telegram_id)
 
+import traceback
+
+def self_healing_decorator(func):
+    """Decorator que captura exceções, formata o traceback e envia para o usuário."""
+    @functools.wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        try:
+            return await func(update, context, *args, **kwargs)
+        except Exception as e:
+            error_details = traceback.format_exc()
+            user_message = (
+                "💣 *BOOM!* Algo quebrou no comando que você usou.\n\n"
+                "*RELATÓRIO DE AUTO-DESTRUIÇÃO:*\n"
+                f"```\n{error_details}\n```\n\n"
+                "O dev já foi notificado (mentira, mas ele vai ver isso eventualmente). Tente de novo, talvez com mais fé."
+            )
+            await update.message.reply_text(user_message, parse_mode='Markdown')
+            logger.error(f"Erro auto-reportado no comando {func.__name__}: {error_details}")
+    return wrapper
+
 # --- HANDLERS DE OPEN FINANCE ---
 
 @track_analytics("importar_of")
+@self_healing_decorator
 async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Importa transações pendentes do Open Finance para a tabela de lançamentos.
@@ -1367,42 +1389,53 @@ async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from open_finance.service import OpenFinanceService
         service = OpenFinanceService(db)
-        
+
         pending_txns = service.get_pending_transactions(user_id)
-        
+
         if not pending_txns:
             await update.message.reply_html("🎉 Nenhuma transação nova para importar. Você está em dia!")
             return
 
         status_msg = await update.message.reply_html(f"📥 Encontrei <b>{len(pending_txns)}</b> transações. Importando e categorizando com IA...")
 
-        imported_count = 0
-        for tx in pending_txns:
-            # Lógica para evitar duplicatas na tabela de lançamentos
-            existing_lancamento = db.query(Lancamento).filter(
-                Lancamento.descricao == tx.description,
-                Lancamento.valor == tx.amount,
-                Lancamento.data_transacao == tx.date,
-                Lancamento.id_usuario == tx.account.item.id_usuario
-            ).first()
+        from asyncio import gather
+        from models import Lancamento
 
-            if not existing_lancamento:
-                new_lancamento = Lancamento(
-                    id_usuario=tx.account.item.id_usuario,
-                    descricao=tx.description,
-                    valor=abs(tx.amount),
-                    tipo='Saída' if tx.amount < 0 else 'Entrada',
-                    data_transacao=tx.date,
-                    forma_pagamento=tx.account.item.connector_name, # Nome do banco
-                    # Categoria será definida depois pelo /categorizar
-                )
-                db.add(new_lancamento)
-                tx.imported_to_lancamento = True
-                tx.id_lancamento = new_lancamento.id
-                imported_count += 1
-        
-        db.commit()
-        
+        async def process_transaction(tx):
+            """Processa uma única transação de forma assíncrona para evitar duplicação."""
+            # CORREÇÃO: Cada transação processa em sua própria sessão para evitar conflitos
+            from database.database import get_db
+            db_session = next(get_db())
+            try:
+                existing = db_session.query(Lancamento).filter(
+                    Lancamento.descricao == tx.description,
+                    Lancamento.valor == abs(tx.amount),
+                    Lancamento.data_transacao == tx.date,
+                    Lancamento.id_usuario == tx.account.item.id_usuario
+                ).first()
+
+                if not existing:
+                    new_lancamento = Lancamento(
+                        id_usuario=tx.account.item.id_usuario,
+                        descricao=tx.description,
+                        valor=abs(tx.amount),
+                        tipo='Saída' if tx.amount < 0 else 'Entrada',
+                        data_transacao=tx.date,
+                        forma_pagamento=tx.account.item.connector_name,
+                    )
+                    db_session.add(new_lancamento)
+                    tx.imported_to_lancamento = True
+                    db_session.commit()
+                    return 1  # Retorna 1 para contar como importado
+                return 0  # Retorna 0 se for duplicado
+            finally:
+                db_session.close()
+
+        # Executa todas as verificações e inserções em paralelo
+        tasks = [process_transaction(tx) for tx in pending_txns]
+        results = await gather(*tasks)
+        imported_count = sum(results)
+
         await status_msg.edit_text(
             f"✅ <b>Importação Concluída!</b>\n\n"
             f"<b>{imported_count}</b> novas transações foram adicionadas aos seus lançamentos.\n\n"
@@ -1410,8 +1443,8 @@ async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        logger.error(f"Erro em importar_transacoes_of: {e}", exc_info=True)
-        await update.message.reply_html("❌ Ops! Ocorreu um erro ao importar as transações. Tente novamente.")
+        logger.error(f"Erro ao importar transações: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ocorreu um erro ao importar as transações. Tente novamente mais tarde.")
     finally:
         db.close()
 

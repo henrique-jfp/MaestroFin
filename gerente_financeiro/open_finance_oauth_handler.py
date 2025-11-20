@@ -302,7 +302,7 @@ async def _sync_transactions_background(user_id: int, context: ContextTypes.DEFA
     db = next(get_db())
     service = OpenFinanceService(db)
     try:
-        stats = service.sync_transactions_for_user(user_id)
+        stats = await service.sync_transactions_for_user_async(user_id)
         await context.bot.send_message(
             user_id,
             f"✅ Sincronização concluída! {stats['new_transactions']} nova(s) transação(ões) encontrada(s)."

@@ -16,7 +16,45 @@ from models import Usuario, PluggyItem, PluggyAccount, PluggyTransaction
 
 logger = logging.getLogger(__name__)
 
+import asyncio
+
+async def _fetch_and_process_transactions(client: PluggyClient, account: PluggyAccount, from_date: str, session: Session) -> int:
+    """Função auxiliar para buscar e processar transações de UMA conta de forma assíncrona."""
+    new_tx_count = 0
+    try:
+        # A chamada de rede agora roda em uma thread separada para não bloquear o event loop
+        transactions_data = await asyncio.to_thread(client.list_transactions, account.pluggy_account_id, from_date)
+
+        # O processamento e adição na sessão do SQLAlchemy acontece aqui
+        for tx_data in transactions_data:
+            existing_tx = session.query(PluggyTransaction).filter(PluggyTransaction.pluggy_transaction_id == tx_data['id']).first()
+            if not existing_tx:
+                date_str = tx_data['date']
+                try:
+                    date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+                except ValueError:
+                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+                new_tx = PluggyTransaction(
+                    id_account=account.id,
+                    pluggy_transaction_id=tx_data['id'],
+                    description=tx_data['description'],
+                    amount=tx_data['amount'],
+                    date=date_obj,
+                    type=tx_data.get('type'),
+                    category=tx_data.get('category'),
+                    merchant_name=tx_data.get('merchantName')
+                )
+                session.add(new_tx)
+                new_tx_count += 1
+    except PluggyClientError as e:
+        logger.error(f"Erro assíncrono ao sincronizar conta {account.pluggy_account_id}: {e}")
+    return new_tx_count
+
+
 class OpenFinanceService:
+    """Serviço principal para operações do Open Finance."""
+
     def __init__(self, db_session: Session):
         self.db = db_session
         self.client = PluggyClient()
@@ -117,6 +155,40 @@ class OpenFinanceService:
         
         self.db.commit()
         return new_accounts, updated_accounts
+
+    async def sync_transactions_for_user_async(self, user_id: int, days: int = 60) -> Dict[str, int]:
+        """Sincroniza transações de forma massivamente paralela."""
+        connections = self.get_user_connections(user_id)
+        if not connections:
+            return {"accounts": 0, "new_transactions": 0}
+
+        from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        all_accounts = [acc for conn in connections for acc in conn.accounts]
+        if not all_accounts:
+            return {"accounts": 0, "new_transactions": 0}
+
+        # CORREÇÃO: Cada tarefa deve ter sua própria sessão de banco de dados
+        # para evitar conflitos de concorrência
+        async def _fetch_and_process_with_session(account, from_date):
+            """Wrapper que cria sua própria sessão de banco para evitar conflitos."""
+            from database.database import get_db
+            db_session = next(get_db())
+            try:
+                result = await _fetch_and_process_transactions(self.client, account, from_date, db_session)
+                if result > 0:
+                    db_session.commit()
+                return result
+            finally:
+                db_session.close()
+
+        # Cria uma tarefa para cada conta e as executa em paralelo
+        tasks = [_fetch_and_process_with_session(acc, from_date) for acc in all_accounts]
+        results = await asyncio.gather(*tasks)
+
+        total_new_txns = sum(results)
+
+        return {"accounts": len(all_accounts), "new_transactions": total_new_txns}
 
     def sync_transactions_for_user(self, user_id: int, days: int = 60) -> Dict[str, int]:
         """Sincroniza transações de todas as contas conectadas de um usuário."""
