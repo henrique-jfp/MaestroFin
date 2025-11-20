@@ -1390,11 +1390,7 @@ async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
     service = OpenFinanceService(db)
     pending_txns = service.get_pending_transactions(user_id)
     db.close()
-
-    if not pending_txns:
-        await update.message.reply_html("🎉 Nenhuma transação nova para importar. Você está em dia!")
-        return
-
+    pending_imports_cache[user_id] = pending_txns
     # Resumo interativo
     resumo = f"<b>Resumo da Importação:</b>\n"
     resumo += f"Total: {len(pending_txns)} novas transações\n"
@@ -1403,217 +1399,52 @@ async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     if len(pending_txns) > 10:
         resumo += f"\n...e mais {len(pending_txns)-10} lançamentos."
-
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Confirmar Importação", callback_data="confirmar_importacao")],
         [InlineKeyboardButton("❌ Cancelar", callback_data="cancelar_importacao")]
     ])
     await update.message.reply_text(resumo, reply_markup=keyboard, parse_mode="HTML")
 
-    # Callback para confirmação
-    async def confirmar_callback(update, context):
-        await update.callback_query.answer("Importando...")
-        def salvar_thread():
-            db2 = next(get_db())
-            from models import Lancamento
-            imported_count = 0
-            for tx in pending_txns:
-                existing = db2.query(Lancamento).filter(
-                    Lancamento.descricao == getattr(tx, 'description', ''),
-                    Lancamento.valor == abs(getattr(tx, 'amount', 0)),
-                    Lancamento.data_transacao == getattr(tx, 'date', None),
-                    Lancamento.id_usuario == getattr(getattr(tx, 'account', type('A', (), {})).item, 'id_usuario', user_id)
-                ).first()
-                if not existing:
-                    new_lancamento = Lancamento(
-                        id_usuario=getattr(getattr(tx, 'account', type('A', (), {})).item, 'id_usuario', user_id),
-                        descricao=getattr(tx, 'description', ''),
-                        valor=abs(getattr(tx, 'amount', 0)),
-                        tipo='Saída' if getattr(tx, 'amount', 0) < 0 else 'Entrada',
-                        data_transacao=getattr(tx, 'date', None),
-                        forma_pagamento=getattr(getattr(tx, 'account', type('A', (), {})).item, 'connector_name', 'Desconhecido'),
-                    )
-                    db2.add(new_lancamento)
-                    imported_count += 1
-            db2.commit()
-            db2.close()
-            context.bot.send_message(chat_id=update.effective_chat.id,
-                text=f"✅ Importação concluída! {imported_count} lançamentos salvos.\n💡 Use /categorizar para organizar tudo com IA.",
-                parse_mode="HTML")
-        from threading import Thread
-        Thread(target=salvar_thread).start()
+# --- CALLBACKS DE IMPORTAÇÃO ---
+from telegram import Update
+from telegram.ext import ContextTypes
 
-    async def cancelar_callback(update, context):
-        await update.callback_query.answer("Importação cancelada.")
-        await update.callback_query.edit_message_text("❌ Importação cancelada. Nenhum lançamento foi salvo.")
+pending_imports_cache = {}
 
-    context.application.add_handler(CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$"))
-    context.application.add_handler(CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$"))
+async def confirmar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer("Importando...")
+    user_id = update.effective_user.id
+    pending_txns = pending_imports_cache.get(user_id, [])
+    def salvar_thread():
+        db2 = next(get_db())
+        from models import Lancamento
+        imported_count = 0
+        for tx in pending_txns:
+            existing = db2.query(Lancamento).filter(
+                Lancamento.descricao == getattr(tx, 'description', ''),
+                Lancamento.valor == abs(getattr(tx, 'amount', 0)),
+                Lancamento.data_transacao == getattr(tx, 'date', None),
+                Lancamento.id_usuario == getattr(getattr(tx, 'account', type('A', (), {})).item, 'id_usuario', user_id)
+            ).first()
+            if not existing:
+                new_lancamento = Lancamento(
+                    id_usuario=getattr(getattr(tx, 'account', type('A', (), {})).item, 'id_usuario', user_id),
+                    descricao=getattr(tx, 'description', ''),
+                    valor=abs(getattr(tx, 'amount', 0)),
+                    tipo='Saída' if getattr(tx, 'amount', 0) < 0 else 'Entrada',
+                    data_transacao=getattr(tx, 'date', None),
+                    forma_pagamento=getattr(getattr(tx, 'account', type('A', (), {})).item, 'connector_name', 'Desconhecido'),
+                )
+                db2.add(new_lancamento)
+                imported_count += 1
+        db2.commit()
+        db2.close()
+        context.bot.send_message(chat_id=update.effective_chat.id,
+            text=f"✅ Importação concluída! {imported_count} lançamentos salvos.\n💡 Use /categorizar para organizar tudo com IA.",
+            parse_mode="HTML")
+    from threading import Thread
+    Thread(target=salvar_thread).start()
 
-# --- HANDLER PARA CALLBACK DE ANÁLISE DE IMPACTO ---
-
-async def handle_analise_impacto_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Processa o clique no botão "Como isso me afeta?", busca dados financeiros
-    do usuário, gera e envia uma análise de impacto personalizada usando a IA.
-    """
-    query = update.callback_query
-    await query.answer()
-    
-    callback_data = query.data
-    if not callback_data.startswith("analise_"):
-        return
-    
-    tipo_dado = callback_data.replace("analise_", "")
-    
-    db = next(get_db())
-    try:
-        user_info = query.from_user
-        usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
-        
-        # Edita a mensagem para dar feedback ao usuário
-        await query.edit_message_text("Analisando o impacto para você... 🧠")
-        
-        # Busca os dados externos (cotação, etc.)
-        dados_externos = await obter_dados_externos(tipo_dado)
-        informacao_externa = dados_externos.get("texto_html", "Informação não disponível")
-        
-        # Busca o contexto financeiro do usuário
-        lancamentos = buscar_lancamentos_com_relacionamentos(db, usuario_db.telegram_id)
-        contexto_json = services.preparar_contexto_json(lancamentos)
-        
-        # Monta o prompt para a IA
-        prompt_impacto = PROMPT_ANALISE_IMPACTO.format(
-            user_name=usuario_db.nome_completo or "você",
-            perfil_investidor=usuario_db.perfil_investidor or "Não definido",
-            informacao_externa=informacao_externa,
-            contexto_json=contexto_json
-        )
-        
-        # Chama a IA para gerar a análise
-        try:
-            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-            response = await model.generate_content_async(prompt_impacto)
-            resposta_bruta = response.text
-        except Exception as model_error:
-            logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
-            logger.info("🔄 Tentando fallback para 'gemini-flash-latest'...")
-            model = genai.GenerativeModel('gemini-flash-latest')
-            response = await model.generate_content_async(prompt_impacto)
-            resposta_bruta = response.text
-        resposta_limpa = _limpar_resposta_ia(resposta_bruta)
-        
-        
-        # 2. Envia a resposta limpa para o usuário.
-        await query.edit_message_text(
-            text=resposta_limpa,  # <--- Usa a variável corrigida
-            parse_mode='HTML',
-            disable_web_page_preview=True
-        )
-        
-    except Exception as e:
-        logger.error(f"Erro na análise de impacto: {e}", exc_info=True)
-        # Envia uma mensagem de erro amigável se algo der errado
-        await query.edit_message_text(
-            text="😅 Ops! Não consegui gerar a análise de impacto. Tente novamente mais tarde.",
-            parse_mode='HTML'
-        )
-    finally:
-        db.close()
-
-# --- PAINEL DE GERENCIAMENTO DE NOTIFICAÇÕES ---
-async def painel_notificacoes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    db = next(get_db())
-    try:
-        usuario = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
-        email = getattr(usuario, 'email_notificacao', None)
-        horario = usuario.horario_notificacao.strftime('%H:%M') if hasattr(usuario, 'horario_notificacao') and usuario.horario_notificacao else '09:00'
-        msg = f"<b>Painel de Notificações</b>\n\n"
-        msg += f"E-mail para notificações: {email if email else 'Não cadastrado'}\n"
-        msg += f"Horário dos lembretes: {horario}\n\n"
-        msg += "Tipos de notificações:\n"
-        msg += "• Limite de cartão: Ativado\n"
-        msg += "• Vencimento de fatura: Ativado\n"
-        msg += "• Fechamento de fatura: Ativado\n"
-        msg += "• Resumo semanal: Desativado\n"
-        msg += "• Alerta de gastos: Ativado\n\n"
-        msg += "Use os botões abaixo para personalizar suas preferências."
-        keyboard = [
-            [InlineKeyboardButton("Alterar E-mail", callback_data="notificacao_email")],
-            [InlineKeyboardButton("Alterar Horário", callback_data="notificacao_horario")],
-            [InlineKeyboardButton("Ativar/Desativar Resumo Semanal", callback_data="notificacao_resumo")],
-            [InlineKeyboardButton("Ativar/Desativar Alerta de Gastos", callback_data="notificacao_alerta")],
-            [InlineKeyboardButton("Concluir", callback_data="notificacao_concluir")]
-        ]
-        await update.message.reply_html(msg, reply_markup=InlineKeyboardMarkup(keyboard))
-    finally:
-        db.close()
-    return ConversationHandler.END
-
-# --- CADASTRO DE CARTÃO REMOVIDO - FUNCIONALIDADE TRANSFERIDA PARA ONBOARDING_HANDLER.PY ---
-
-# --- FUNÇÕES CRIADORAS DE CONVERSATION HANDLER ---
-
-def create_gerente_conversation_handler():
-    return ConversationHandler(
-        entry_points=[CommandHandler("gerente", start_gerente)],
-        states={
-            AWAIT_GERENTE_QUESTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_language),
-                
-                # Handler antigo para os botões de análise de impacto
-                CallbackQueryHandler(handle_analise_impacto_callback, pattern=r"^analise_"),
-                
-                # --- NOVA LINHA ADICIONADA ---
-                # Handler novo e mais genérico para os botões de ação da IA
-                # Ele vai capturar qualquer callback que NÃO comece com "analise_"
-                CallbackQueryHandler(handle_action_button_callback, pattern=r"^(?!analise_).+")
-            ],
-        },
-        fallbacks=[
-            CommandHandler("cancelar", cancel)
-        ],
-        per_chat=True,
-        allow_reentry=True
-    )
-
-# --- CONVERSATION HANDLER PARA /start REMOVIDO - AGORA ESTÁ NO ONBOARDING_HANDLER.PY ---
-
-# --- CADASTRO DE CARTÃO REMOVIDO - FUNCIONALIDADE TRANSFERIDA PARA ONBOARDING_HANDLER.PY ---
-
-async def cadastro_email_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("📧 Digite seu email para receber notificações:")
-    return AWAIT_EMAIL_NOTIFICACAO
-
-async def receive_email_notificacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    email = update.message.text.strip()
-    
-    # Validação básica de email
-    if '@' not in email or '.' not in email.split('@')[1]:
-        await update.message.reply_text("Email inválido. Digite um email válido:")
-        return AWAIT_EMAIL_NOTIFICACAO
-    
-    # Salvar no banco
-    db = next(get_db())
-    try:
-        user = get_or_create_user(db, update.effective_user.id, update.effective_user.username)
-        user.email_notificacao = email
-        db.commit()
-        await update.message.reply_text(f"✅ Email {email} cadastrado com sucesso!")
-    finally:
-        db.close()
-    
-    return ConversationHandler.END
-
-def create_cadastro_email_conversation_handler():
-    """ConversationHandler para cadastro de email"""
-    return ConversationHandler(
-        entry_points=[CommandHandler("email", cadastro_email_start)],
-        states={
-            AWAIT_EMAIL_NOTIFICACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_email_notificacao)],
-        },
-        fallbacks=[CommandHandler("cancelar", cancel)],
-        per_message=False,
-        per_user=True,
-        per_chat=True
-    )
+async def cancelar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer("Importação cancelada.")
+    await update.callback_query.edit_message_text("❌ Importação cancelada. Nenhum lançamento foi salvo.")
