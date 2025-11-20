@@ -584,13 +584,13 @@ def create_application_ultra_robust():
     try:
         logger.info("🗄️ Configurando banco de dados...")
         criar_tabelas()
-        
         # 🔥 NOVA POPULAÇÃO ULTRA-ROBUSTA
         db: Session = next(get_db())
         db.close()
-            
         logger.info("✅ Banco de dados pronto.")
-        
+    except Exception as db_error:
+        logger.error(f"❌ Erro banco de dados: {db_error} - continuando")
+
     try:
         genai.configure(api_key=config.GEMINI_API_KEY)
         logger.info("✅ API do Gemini configurada.")
