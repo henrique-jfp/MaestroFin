@@ -1386,67 +1386,69 @@ async def importar_of(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     user_id = update.effective_user.id
     db = next(get_db())
-    try:
-        from open_finance.service import OpenFinanceService
-        service = OpenFinanceService(db)
+    from open_finance.service import OpenFinanceService
+    service = OpenFinanceService(db)
+    pending_txns = service.get_pending_transactions(user_id)
+    db.close()
 
-        pending_txns = service.get_pending_transactions(user_id)
+    if not pending_txns:
+        await update.message.reply_html("🎉 Nenhuma transação nova para importar. Você está em dia!")
+        return
 
-        if not pending_txns:
-            await update.message.reply_html("🎉 Nenhuma transação nova para importar. Você está em dia!")
-            return
+    # Resumo interativo
+    resumo = f"<b>Resumo da Importação:</b>\n"
+    resumo += f"Total: {len(pending_txns)} novas transações\n"
+    resumo += "\n".join([
+        f"• {getattr(tx, 'description', 'Sem descrição')} - R$ {abs(getattr(tx, 'amount', 0)):.2f}" for tx in pending_txns[:10]
+    ])
+    if len(pending_txns) > 10:
+        resumo += f"\n...e mais {len(pending_txns)-10} lançamentos."
 
-        status_msg = await update.message.reply_html(f"📥 Encontrei <b>{len(pending_txns)}</b> transações. Importando e categorizando com IA...")
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Confirmar Importação", callback_data="confirmar_importacao")],
+        [InlineKeyboardButton("❌ Cancelar", callback_data="cancelar_importacao")]
+    ])
+    await update.message.reply_text(resumo, reply_markup=keyboard, parse_mode="HTML")
 
-        from asyncio import gather
-        from models import Lancamento
-
-        async def process_transaction(tx):
-            """Processa uma única transação de forma assíncrona para evitar duplicação."""
-            # CORREÇÃO: Cada transação processa em sua própria sessão para evitar conflitos
-            from database.database import get_db
-            db_session = next(get_db())
-            try:
-                existing = db_session.query(Lancamento).filter(
-                    Lancamento.descricao == tx.description,
-                    Lancamento.valor == abs(tx.amount),
-                    Lancamento.data_transacao == tx.date,
-                    Lancamento.id_usuario == tx.account.item.id_usuario
+    # Callback para confirmação
+    async def confirmar_callback(update, context):
+        await update.callback_query.answer("Importando...")
+        def salvar_thread():
+            db2 = next(get_db())
+            from models import Lancamento
+            imported_count = 0
+            for tx in pending_txns:
+                existing = db2.query(Lancamento).filter(
+                    Lancamento.descricao == getattr(tx, 'description', ''),
+                    Lancamento.valor == abs(getattr(tx, 'amount', 0)),
+                    Lancamento.data_transacao == getattr(tx, 'date', None),
+                    Lancamento.id_usuario == getattr(getattr(tx, 'account', type('A', (), {})).item, 'id_usuario', user_id)
                 ).first()
-
                 if not existing:
                     new_lancamento = Lancamento(
-                        id_usuario=tx.account.item.id_usuario,
-                        descricao=tx.description,
-                        valor=abs(tx.amount),
-                        tipo='Saída' if tx.amount < 0 else 'Entrada',
-                        data_transacao=tx.date,
-                        forma_pagamento=tx.account.item.connector_name,
+                        id_usuario=getattr(getattr(tx, 'account', type('A', (), {})).item, 'id_usuario', user_id),
+                        descricao=getattr(tx, 'description', ''),
+                        valor=abs(getattr(tx, 'amount', 0)),
+                        tipo='Saída' if getattr(tx, 'amount', 0) < 0 else 'Entrada',
+                        data_transacao=getattr(tx, 'date', None),
+                        forma_pagamento=getattr(getattr(tx, 'account', type('A', (), {})).item, 'connector_name', 'Desconhecido'),
                     )
-                    db_session.add(new_lancamento)
-                    tx.imported_to_lancamento = True
-                    db_session.commit()
-                    return 1  # Retorna 1 para contar como importado
-                return 0  # Retorna 0 se for duplicado
-            finally:
-                db_session.close()
+                    db2.add(new_lancamento)
+                    imported_count += 1
+            db2.commit()
+            db2.close()
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                text=f"✅ Importação concluída! {imported_count} lançamentos salvos.\n💡 Use /categorizar para organizar tudo com IA.",
+                parse_mode="HTML")
+        from threading import Thread
+        Thread(target=salvar_thread).start()
 
-        # Executa todas as verificações e inserções em paralelo
-        tasks = [process_transaction(tx) for tx in pending_txns]
-        results = await gather(*tasks)
-        imported_count = sum(results)
+    async def cancelar_callback(update, context):
+        await update.callback_query.answer("Importação cancelada.")
+        await update.callback_query.edit_message_text("❌ Importação cancelada. Nenhum lançamento foi salvo.")
 
-        await status_msg.edit_text(
-            f"✅ <b>Importação Concluída!</b>\n\n"
-            f"<b>{imported_count}</b> novas transações foram adicionadas aos seus lançamentos.\n\n"
-            f"💡 <b>Dica:</b> Use o comando <code>/categorizar</code> para organizar tudo com inteligência artificial!"
-        )
-
-    except Exception as e:
-        logger.error(f"Erro ao importar transações: {e}", exc_info=True)
-        await update.message.reply_text("❌ Ocorreu um erro ao importar as transações. Tente novamente mais tarde.")
-    finally:
-        db.close()
+    context.application.add_handler(CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$"))
+    context.application.add_handler(CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$"))
 
 # --- HANDLER PARA CALLBACK DE ANÁLISE DE IMPACTO ---
 
