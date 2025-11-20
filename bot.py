@@ -152,9 +152,9 @@ from jobs import configurar_jobs
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
 from gerente_financeiro.handlers import (
     create_gerente_conversation_handler, 
-    create_cadastro_email_conversation_handler,
-    handle_analise_impacto_callback,  
-    help_callback, 
+        create_cadastro_email_conversation_handler,
+    handle_action_button_callback,
+    help_callback,  
     help_command,
     cancel,
     painel_notificacoes,
@@ -477,7 +477,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
 
     callback_builders = [
         ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^help_")),
-        ("analise_callback", lambda: CallbackQueryHandler(handle_analise_impacto_callback, pattern="^analise_")),
+        ("analise_callback", lambda: CallbackQueryHandler(handle_action_button_callback, pattern="^analise_")),
         ("deletar_meta_callback", lambda: CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_")),
         ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
         ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
