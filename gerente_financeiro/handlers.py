@@ -1448,3 +1448,9 @@ async def confirmar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def cancelar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer("Importação cancelada.")
     await update.callback_query.edit_message_text("❌ Importação cancelada. Nenhum lançamento foi salvo.")
+
+# --- EXPORTS PARA IMPORTS EXPLÍCITOS ---
+__all__ = [
+    "create_gerente_conversation_handler",
+    # Adicione outros exports necessários aqui
+]
