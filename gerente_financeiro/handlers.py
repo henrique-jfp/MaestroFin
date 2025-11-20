@@ -1461,7 +1461,23 @@ def create_gerente_conversation_handler():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+# --- STUB PARA CORRIGIR IMPORTAÇÃO DO EMAIL ---
+def create_cadastro_email_conversation_handler():
+    """
+    Stub para cadastro de email. Implemente a lógica real conforme necessário.
+    """
+    from telegram.ext import ConversationHandler, CommandHandler
+    async def start_email(update, context):
+        await update.message.reply_text("Fluxo de cadastro de email não implementado.")
+        return ConversationHandler.END
+    return ConversationHandler(
+        entry_points=[CommandHandler("cadastro_email", start_email)],
+        states={},
+        fallbacks=[CommandHandler("cancel", start_email)],
+    )
+
 __all__ = [
     "create_gerente_conversation_handler",
+    "create_cadastro_email_conversation_handler",
     # Adicione outros exports necessários aqui
 ]
