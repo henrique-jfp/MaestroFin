@@ -158,7 +158,9 @@ from gerente_financeiro.handlers import (
     help_command,
     cancel,
     painel_notificacoes,
-    importar_of
+    importar_of,
+    confirmar_callback,
+    cancelar_callback
 )
 from gerente_financeiro.agendamentos_handler import (
     agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
@@ -584,26 +586,11 @@ def create_application_ultra_robust():
         criar_tabelas()
         
         # 🔥 NOVA POPULAÇÃO ULTRA-ROBUSTA
-        try:
-            from database.database_ultra_robust import verificar_e_popular_se_necessario
-            db: Session = next(get_db())
-            sucesso = verificar_e_popular_se_necessario(db)
-            db.close()
-            
-            if sucesso:
-                logger.info("✅ Dados iniciais OK")
-            else:
-                logger.warning("⚠️ População dados falhou - continuando")
-                
-        except Exception as pop_error:
-            logger.warning(f"⚠️ Erro população dados: {pop_error} - continuando")
+        db: Session = next(get_db())
+        db.close()
             
         logger.info("✅ Banco de dados pronto.")
         
-    except Exception as e:
-        logger.error(f"❌ Erro BD: {e} - continuando em modo degradado")
-
-    # 🔥 CONFIGURAÇÃO GEMINI ULTRA-ROBUSTA
     try:
         genai.configure(api_key=config.GEMINI_API_KEY)
         logger.info("✅ API do Gemini configurada.")

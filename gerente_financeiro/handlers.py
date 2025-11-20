@@ -1450,6 +1450,17 @@ async def cancelar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.edit_message_text("❌ Importação cancelada. Nenhum lançamento foi salvo.")
 
 # --- EXPORTS PARA IMPORTS EXPLÍCITOS ---
+
+def create_gerente_conversation_handler():
+    from telegram.ext import ConversationHandler, CommandHandler, MessageHandler, filters
+    return ConversationHandler(
+        entry_points=[CommandHandler("gerente", start_gerente)],
+        states={
+            AWAIT_GERENTE_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_language)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
 __all__ = [
     "create_gerente_conversation_handler",
     # Adicione outros exports necessários aqui
