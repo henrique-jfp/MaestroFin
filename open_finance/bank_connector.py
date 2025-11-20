@@ -11,7 +11,22 @@ from database.database import SessionLocal, engine
 from sqlalchemy import text
 from .pluggy_client import PluggyClient
 
+
 logger = logging.getLogger(__name__)
+# Paleta visual para logs e mensagens
+PALETA = {
+    "azul": "#0A2540",
+    "cinza": "#F5F7FA",
+    "destaque": "#3E7BFA",
+    "dourado": "#F2C94C",
+    "grafite": "#1B1F23"
+}
+
+def log_destaque(msg):
+    logger.info(f"\033[1;36m✨ {msg}\033[0m")
+
+def log_aviso(msg):
+    logger.warning(f"\033[1;33m⚠️ {msg}\033[0m")
 
 
 class BankConnectorError(Exception):
@@ -382,13 +397,7 @@ class BankConnector:
             provider_message = connector_insights.get('providerMessage')
 
             if status != last_status:
-                logger.info(
-                    "⌛ Status item %s: %s (detail=%s, next_step=%s)",
-                    item_id,
-                    status,
-                    detail,
-                    next_step,
-                )
+                log_destaque(f"⌛ Status item {item_id}: {status} (detail={detail}, next_step={next_step})")
                 last_status = status
                 last_detail = detail
 
@@ -415,9 +424,9 @@ class BankConnector:
 
                 # 🔴 CRÍTICO: Passar item completo para BankConnectorUserActionRequired
                 # A classe irá extrair redirectUrl ou construir manualmente
-                logger.info(f"⏳ Aguardando confirmação do usuário... Item ID: {item.get('id')}")
-                logger.info(f"   Item status: {item.get('status')}")
-                logger.info(f"   NextStep: {next_step}")
+                log_aviso(f"⏳ Aguardando confirmação do usuário... Item ID: {item.get('id')}")
+                log_aviso(f"   Item status: {item.get('status')}")
+                log_aviso(f"   NextStep: {next_step}")
                 
                 raise BankConnectorUserActionRequired(
                     message, 

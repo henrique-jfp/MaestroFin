@@ -21,7 +21,28 @@ PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID")
 PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET")
 PLUGGY_BASE_URL = "https://api.pluggy.ai"
 
+
 logger = logging.getLogger(__name__)
+# Paleta visual para logs e mensagens
+PALETA = {
+    "azul": "#0A2540",
+    "cinza": "#F5F7FA",
+    "destaque": "#3E7BFA",
+    "dourado": "#F2C94C",
+    "grafite": "#1B1F23"
+}
+
+def log_sucesso(msg):
+    logger.info(f"\033[1;34m✅ {msg}\033[0m")
+
+def log_erro(msg):
+    logger.error(f"\033[1;31m❌ {msg}\033[0m")
+
+def log_aviso(msg):
+    logger.warning(f"\033[1;33m⚠️ {msg}\033[0m")
+
+def log_destaque(msg):
+    logger.info(f"\033[1;36m✨ {msg}\033[0m")
 
 # Cache em memória para a API Key
 _api_key_cache: Dict[str, any] = {"key": None, "expires_at": None}
@@ -45,10 +66,12 @@ class PluggyClient:
         """Obtém uma API Key da Pluggy, utilizando um cache de 23 horas."""
         now = datetime.now()
         if _api_key_cache.get("key") and _api_key_cache.get("expires_at", now) > now:
+            log_destaque("API Key Pluggy recuperada do cache.")
             return _api_key_cache["key"]
 
-        logger.info("🔑 Obtendo nova API Key da Pluggy...")
+        log_destaque("🔑 Solicitando nova API Key da Pluggy...")
         if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
+            log_erro("PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET devem ser configurados.")
             raise PluggyClientError("PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET devem ser configurados.")
 
         try:
@@ -60,14 +83,12 @@ class PluggyClient:
             )
             response.raise_for_status()
             data = response.json()
-            
             _api_key_cache["key"] = data["apiKey"]
             _api_key_cache["expires_at"] = now + timedelta(hours=23)
-            
-            logger.info("✅ API Key da Pluggy obtida e cacheada com sucesso.")
+            log_sucesso("API Key da Pluggy obtida e cacheada com sucesso.")
             return data["apiKey"]
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Erro de rede ao obter API Key da Pluggy: {e}")
+            log_erro(f"Erro de rede ao obter API Key da Pluggy: {e}")
             raise PluggyClientError(f"Erro de rede ao autenticar com a Pluggy: {e}")
 
     def _request(self, method: str, endpoint: str, **kwargs) -> Response:
@@ -110,48 +131,51 @@ class PluggyClient:
 
     def get_connectors(self) -> List[Dict]:
         """Busca a lista de conectores (bancos) disponíveis no Brasil."""
-        logger.info("Buscando conectores da Pluggy...")
+        log_destaque("Buscando conectores da Pluggy...")
         response = self._request("GET", "/connectors", params={"countries": "BR", "pageSize": 500})
+        log_sucesso(f"{len(response.json().get('results', []))} conectores encontrados.")
         return response.json().get("results", [])
 
     def create_item(self, connector_id: int, parameters: Dict) -> Dict:
         """Cria um novo 'item' (conexão) para um conector específico."""
-        logger.info(f"Criando item para o conector {connector_id}...")
+        log_destaque(f"Criando item para o conector {connector_id}...")
         payload = {"connectorId": connector_id, "parameters": parameters}
         response = self._request("POST", "/items", json=payload)
+        log_sucesso(f"Item criado para o conector {connector_id}.")
         return response.json()
 
     def get_item(self, item_id: str) -> Dict:
         """Busca os detalhes e o status de um 'item'."""
-        logger.debug(f"Buscando detalhes do item {item_id}...")
+        log_destaque(f"Buscando detalhes do item {item_id}...")
         response = self._request("GET", f"/items/{item_id}")
+        log_sucesso(f"Detalhes do item {item_id} obtidos.")
         return response.json()
 
     def delete_item(self, item_id: str) -> None:
         """Deleta um 'item' (conexão)."""
-        logger.info(f"Deletando item {item_id}...")
+        log_aviso(f"Deletando item {item_id}...")
         self._request("DELETE", f"/items/{item_id}")
-        logger.info(f"Item {item_id} deletado com sucesso.")
+        log_sucesso(f"Item {item_id} deletado com sucesso.")
 
     def list_accounts(self, item_id: str) -> List[Dict]:
         """Lista todas as contas associadas a um 'item'."""
-        logger.info(f"Listando contas para o item {item_id}...")
+        log_destaque(f"Listando contas para o item {item_id}...")
         response = self._request("GET", "/accounts", params={"itemId": item_id, "pageSize": 500})
+        log_sucesso(f"{len(response.json().get('results', []))} contas encontradas para o item {item_id}.")
         return response.json().get("results", [])
 
     def get_credit_card(self, account_id: str) -> Dict:
         """Busca os detalhes específicos de um cartão de crédito."""
-        logger.info(f"Buscando detalhes do cartão de crédito {account_id}...")
+        log_destaque(f"Buscando detalhes do cartão de crédito {account_id}...")
         response = self._request("GET", f"/accounts/{account_id}/credit-card")
+        log_sucesso(f"Detalhes do cartão de crédito {account_id} obtidos.")
         return response.json()
 
     def list_transactions(self, account_id: str, from_date: str) -> List[Dict]:
         """Lista TODAS as transações de uma conta a partir de uma data, tratando paginação."""
-        logger.info(f"Listando transações da conta {account_id} a partir de {from_date}...")
-        
+        log_destaque(f"Listando transações da conta {account_id} a partir de {from_date}...")
         all_transactions = []
         page = 1
-        
         while True:
             params = {
                 "accountId": account_id, 
@@ -162,17 +186,12 @@ class PluggyClient:
             response = self._request("GET", "/transactions", params=params)
             data = response.json()
             results = data.get("results", [])
-            
             if not results:
-                break # Sai do loop se não houver mais resultados
-                
+                break
             all_transactions.extend(results)
-            
-            # Verifica se há mais páginas
             if data.get("totalPages", 1) > page:
                 page += 1
             else:
                 break
-
-        logger.info(f"Total de {len(all_transactions)} transações encontradas para a conta {account_id}.")
+        log_sucesso(f"Total de {len(all_transactions)} transações encontradas para a conta {account_id}.")
         return all_transactions
