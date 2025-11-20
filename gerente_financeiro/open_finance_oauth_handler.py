@@ -375,7 +375,7 @@ class OpenFinanceOAuthHandler:
         await importar_of(update, context)
     
     async def categorizar_lancamentos(self, update, context):
-        """Handler para /categorizar: categoriza lançamentos sem categoria do usuário usando IA."""
+        """Handler interativo para /categorizar: mostra quantos lançamentos há, pede confirmação, executa categorização."""
         user_id = update.effective_user.id
         db = next(get_db())
         from models import Lancamento
@@ -384,21 +384,49 @@ class OpenFinanceOAuthHandler:
             Lancamento.id_usuario == user_id,
             Lancamento.id_categoria == None
         ).all()
-        if not lancamentos:
-            await update.message.reply_text("✅ Todos os lançamentos já estão categorizados!")
-            db.close()
-            return
-        categorizados = 0
-        for l in lancamentos:
-            texto_busca = (l.descricao or "")
-            cat_id, subcat_id = _categorizar_com_mapa_inteligente(texto_busca, l.tipo, db)
-            if cat_id:
-                l.id_categoria = cat_id
-                l.id_subcategoria = subcat_id
-                categorizados += 1
-        db.commit()
+        total = len(lancamentos)
         db.close()
-        await update.message.reply_text(f"✨ {categorizados} lançamentos categorizados automaticamente! 🚀")
+        if total == 0:
+            await update.message.reply_text("✅ Todas as transações já estão categorizadas!")
+            return
+        # Mostra resumo e pede confirmação
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+        resumo = f"🧯 Você tem <b>{total}</b> lançamentos para categorizar automaticamente com IA.\nDeseja continuar?"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Categorizar agora", callback_data="confirmar_categorizacao")],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="cancelar_categorizacao")]
+        ])
+        await update.message.reply_text(resumo, reply_markup=keyboard, parse_mode="HTML")
+
+        async def confirmar_callback(update, context):
+            await update.callback_query.answer("Categorizando...")
+            db2 = next(get_db())
+            lancamentos2 = db2.query(Lancamento).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.id_categoria == None
+            ).all()
+            categorizados = 0
+            for l in lancamentos2:
+                texto_busca = (l.descricao or "")
+                cat_id, subcat_id = _categorizar_com_mapa_inteligente(texto_busca, l.tipo, db2)
+                if cat_id:
+                    l.id_categoria = cat_id
+                    l.id_subcategoria = subcat_id
+                    categorizados += 1
+            db2.commit()
+            db2.close()
+            await update.callback_query.edit_message_text(f"✨ {categorizados} lançamentos categorizados automaticamente! 🚀")
+
+        async def cancelar_callback(update, context):
+            await update.callback_query.answer("Cancelado.")
+            await update.callback_query.edit_message_text("❌ Categorização cancelada. Nenhum lançamento foi alterado.")
+
+        context.application.add_handler(
+            CallbackQueryHandler(confirmar_callback, pattern="^confirmar_categorizacao$")
+        )
+        context.application.add_handler(
+            CallbackQueryHandler(cancelar_callback, pattern="^cancelar_categorizacao$")
+        )
     
     async def debug_open_finance(self, update, context):
         """Handler para /debug_open_finance"""
