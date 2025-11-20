@@ -337,3 +337,67 @@ def get_open_finance_handlers():
         CommandHandler("sincronizar", sync_transactions),
         # O handler para /categorizar será adicionado aqui depois
     ]
+
+
+class OpenFinanceOAuthHandler:
+    """Classe wrapper para manter compatibilidade com o código existente no bot.py"""
+    
+    def __init__(self):
+        pass
+    
+    def get_conversation_handler(self):
+        """Retorna o conversation handler para conectar banco"""
+        return ConversationHandler(
+            entry_points=[CommandHandler("conectar_banco", start_flow)],
+            states={
+                SELECTING_BANK: [CallbackQueryHandler(bank_selected, pattern="^of_bank_")],
+                AWAITING_CPF: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_cpf)],
+                WAITING_AUTH: [CallbackQueryHandler(authorized_flow, pattern="^of_authorized_")]
+            },
+            fallbacks=[
+                CommandHandler("cancelar", cancel_flow),
+                CallbackQueryHandler(cancel_flow, pattern="^of_cancel$")
+            ],
+            per_user=True,
+        )
+    
+    async def minhas_contas(self, update, context):
+        """Handler para /minhas_contas"""
+        await list_accounts(update, context)
+    
+    async def sincronizar(self, update, context):
+        """Handler para /sincronizar"""
+        await sync_transactions(update, context)
+    
+    async def importar_transacoes(self, update, context):
+        """Handler para /importar_transacoes - redireciona para /importar"""
+        from gerente_financeiro.handlers import importar_of
+        await importar_of(update, context)
+    
+    async def categorizar_lancamentos(self, update, context):
+        """Handler para /categorizar - placeholder por enquanto"""
+        await update.message.reply_text("🔄 Função de categorização em desenvolvimento. Use /importar para importar transações primeiro.")
+    
+    async def debug_open_finance(self, update, context):
+        """Handler para /debug_open_finance"""
+        await update.message.reply_text("🔍 Debug Open Finance - Função em desenvolvimento.")
+    
+    async def handle_import_callback(self, update, context):
+        """Handler para callback de importação"""
+        # Placeholder
+        pass
+    
+    async def handle_action_callback(self, update, context):
+        """Handler para callback de ação"""
+        # Placeholder
+        pass
+    
+    async def handle_sync_now_callback(self, update, context):
+        """Handler para callback de sync now"""
+        # Placeholder
+        pass
+    
+    async def handle_view_accounts_callback(self, update, context):
+        """Handler para callback de view accounts"""
+        # Placeholder
+        pass

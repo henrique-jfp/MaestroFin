@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""
+Script para testar registro de handlers sem usar função privada
+"""
+import sys
+sys.path.append('.')
+
+# Carregar configurações
+from secret_loader import setup_environment
+setup_environment()
+
+import config
+from telegram.ext import ApplicationBuilder, CommandHandler
+from gerente_financeiro.handlers import (
+    create_gerente_conversation_handler,
+    create_cadastro_email_conversation_handler,
+    handle_analise_impacto_callback,
+    help_callback,
+    help_command,
+    cancel,
+    painel_notificacoes,
+    importar_of
+)
+from gerente_financeiro.agendamentos_handler import (
+    agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
+)
+from gerente_financeiro.wishlist_handler import (
+    wishlist_conv, listar_wishlist_command, deletar_meta_callback
+)
+from gerente_financeiro.onboarding_handler import configurar_conv
+from gerente_financeiro.editing_handler import edit_conv
+from gerente_financeiro.graficos import grafico_conv
+from gerente_financeiro.relatorio_handler import relatorio_handler
+from gerente_financeiro.manual_entry_handler import manual_entry_conv
+from gerente_financeiro.contact_handler import contact_conv
+from gerente_financeiro.delete_user_handler import delete_user_conv
+from gerente_financeiro.dashboard_handler import (
+    cmd_dashboard, cmd_dashstatus, dashboard_callback_handler
+)
+from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
+from gerente_financeiro.investment_handler import get_investment_handlers
+from gerente_financeiro.assistente_proativo_handler import teste_assistente_handler
+from gerente_financeiro.wrapped_anual_handler import meu_wrapped_handler
+
+# Open Finance
+try:
+    from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
+    OPEN_FINANCE_OAUTH_ENABLED = True
+except Exception as e:
+    OPEN_FINANCE_OAUTH_ENABLED = False
+    print(f"Open Finance disabled: {e}")
+
+def test_full_registration():
+    print("🔄 Testando registro completo de handlers...")
+
+    app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
+    print("✅ Aplicação criada")
+
+    # Simular _register_default_handlers
+    def add(handler, name: str):
+        try:
+            app.add_handler(handler)
+            print(f"✅ Handler {name} registrado")
+        except Exception as exc:
+            print(f"❌ Handler {name} falhou: {exc}")
+            raise
+
+    def build_and_add(name: str, builder):
+        try:
+            handler = builder()
+            add(handler, name)
+        except Exception as exc:
+            print(f"❌ Falha ao construir {name}: {exc}")
+            raise
+
+    print("🔧 Registrando conversation handlers...")
+
+    conversation_builders = [
+        ("configurar_conv", lambda: configurar_conv),
+        ("gerente_conv", create_gerente_conversation_handler),
+        ("cadastro_email_conv", create_cadastro_email_conversation_handler),
+        ("manual_entry_conv", lambda: manual_entry_conv),
+        ("delete_user_conv", lambda: delete_user_conv),
+        ("contact_conv", lambda: contact_conv),
+        ("grafico_conv", lambda: grafico_conv),
+        ("wishlist_conv", lambda: wishlist_conv),
+        ("agendamento_conv", lambda: agendamento_conv),
+        ("edit_conv", lambda: edit_conv),
+    ]
+
+    # Open Finance OAuth
+    of_oauth_handler = None
+    if OPEN_FINANCE_OAUTH_ENABLED:
+        try:
+            print("🔄 Instanciando OpenFinanceOAuthHandler...")
+            of_oauth_handler = OpenFinanceOAuthHandler()
+            print("🔄 Criando conversation handler...")
+            conversation_builders.append(
+                ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
+            )
+            print("✅ Open Finance OAuth handler registrado")
+        except Exception as e:
+            print(f"❌ Erro ao registrar Open Finance OAuth: {e}")
+
+    for name, builder in conversation_builders:
+        build_and_add(name, builder)
+
+    print("🔧 Registrando command handlers...")
+
+    command_builders = [
+        ("relatorio_handler", lambda: relatorio_handler),
+        ("/help", lambda: CommandHandler("help", help_command)),
+        ("/alerta", lambda: CommandHandler("alerta", lambda u, c: None)),  # Placeholder
+        ("/metas", lambda: CommandHandler("metas", listar_wishlist_command)),
+        ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
+        ("/notificacoes", lambda: CommandHandler("notificacoes", painel_notificacoes)),
+        ("/perfil", lambda: CommandHandler("perfil", show_profile)),
+        ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
+        ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
+        ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),
+        ("/dashboarddebug", lambda: CommandHandler("dashboarddebug", lambda u, c: None)),  # Placeholder
+        ("/debugocr", lambda: CommandHandler("debugocr", lambda u, c: None)),  # Placeholder
+        ("/debuglogs", lambda: CommandHandler("debuglogs", lambda u, c: None)),  # Placeholder
+        ("/teste_assistente", lambda: teste_assistente_handler),
+        ("/meu_wrapped", lambda: meu_wrapped_handler),
+        ("/importar", lambda: CommandHandler("importar", importar_of)),
+    ]
+
+    # Open Finance commands
+    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
+        command_builders.extend([
+            ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas)),
+            ("/sincronizar", lambda: CommandHandler("sincronizar", of_oauth_handler.sincronizar)),
+            ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
+            ("/categorizar", lambda: CommandHandler("categorizar", of_oauth_handler.categorizar_lancamentos)),
+            ("/debug_open_finance", lambda: CommandHandler("debug_open_finance", of_oauth_handler.debug_open_finance)),
+        ])
+        print("✅ Comandos Open Finance adicionados")
+
+    for name, builder in command_builders:
+        print(f"🔧 Tentando registrar comando: {name}")
+        build_and_add(name, builder)
+        print(f"✅ Comando {name} registrado com sucesso")
+
+    # Investment handlers
+    try:
+        print("🔧 Registrando handlers de investimentos...")
+        investment_handlers = get_investment_handlers()
+        for handler in investment_handlers:
+            app.add_handler(handler)
+        print(f"✅ {len(investment_handlers)} handlers de investimentos registrados")
+    except Exception as e:
+        print(f"❌ Erro ao registrar handlers de investimentos: {e}")
+
+    # Callback handlers
+    callback_builders = [
+        ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^help_")),
+        ("analise_callback", lambda: CallbackQueryHandler(handle_analise_impacto_callback, pattern="^analise_")),
+        ("deletar_meta_callback", lambda: CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_")),
+        ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
+        ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
+        ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
+        ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
+    ]
+
+    # Open Finance callbacks
+    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
+        callback_builders.extend([
+            ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_")),
+            ("action_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_action_callback, pattern="^action_")),
+            ("of_sync_now", lambda: CallbackQueryHandler(of_oauth_handler.handle_sync_now_callback, pattern="^of_sync_now_")),
+            ("of_view_accounts", lambda: CallbackQueryHandler(of_oauth_handler.handle_view_accounts_callback, pattern="^of_view_accounts$"))
+        ])
+        print("✅ Callback handlers Open Finance adicionados")
+
+    for name, builder in callback_builders:
+        build_and_add(name, builder)
+
+    # Verificar comandos registrados
+    commands_found = []
+    for i, handler_group in enumerate(app.handlers):
+        try:
+            if hasattr(handler_group, '__iter__'):
+                for handler in handler_group:
+                    if hasattr(handler, 'commands') and handler.commands:
+                        commands_found.extend(list(handler.commands))
+        except:
+            pass
+
+    print(f"📋 Comandos finais registrados: {sorted(set(commands_found))}")
+
+    if 'importar' in commands_found:
+        print("🎉 SUCESSO: Comando /importar está registrado!")
+    else:
+        print("💥 FALHA: Comando /importar NÃO está registrado!")
+
+if __name__ == "__main__":
+    test_full_registration()

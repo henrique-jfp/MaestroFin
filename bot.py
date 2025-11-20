@@ -28,7 +28,7 @@ from models import *
 from jobs import configurar_jobs
 
 # --- IMPORTS DOS HANDLERS ---
-from gerente_financeiro.handlers import create_gerente_conversation_handler, help_command, help_callback, cancel
+from gerente_financeiro.handlers import create_gerente_conversation_handler, help_command, help_callback, cancel, importar_of
 # ... (outros handlers que você precisa)
 
 # 🏦 OPEN FINANCE OAUTH (Nova Arquitetura)
@@ -47,6 +47,8 @@ def register_handlers(application: Application):
     # Handlers principais
     application.add_handler(CommandHandler("start", help_command)) # /start agora mostra a ajuda
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("importar", importar_of))
+    print("DEBUG: Comando /importar registrado!")
     application.add_handler(CallbackQueryHandler(help_callback, pattern="^help_"))
     
     # Conversation Handlers
