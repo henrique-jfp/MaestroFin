@@ -1,3 +1,13 @@
+# --- PAINEL DE NOTIFICAÇÕES (STUB) ---
+def painel_notificacoes(update=None, context=None):
+    """
+    Painel de notificações centralizado. (Stub: retorna mensagem padrão)
+    """
+    if update and hasattr(update, 'message'):
+        return update.message.reply_text(
+            "🔔 Painel de notificações em construção! Em breve você verá todos os alertas, lembretes e novidades aqui."
+        )
+    return "Painel de notificações em construção!"
 import json
 import logging
 import random
@@ -1479,5 +1489,6 @@ def create_cadastro_email_conversation_handler():
 __all__ = [
     "create_gerente_conversation_handler",
     "create_cadastro_email_conversation_handler",
+    "painel_notificacoes",
     # Adicione outros exports necessários aqui
 ]
